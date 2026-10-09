@@ -1,6 +1,11 @@
 # Attendee instructions
 
-<!-- IGNITE TEMPLATE PLACEHOLDER: remove this folder when the session has no attendee step-by-step guidance. -->
+Work through the labs in order.
 
-Use this folder for attendee step-by-step guidance, including self-paced
-instructions, for any session type.
+| Lab | Folder |
+| --- | --- |
+| Lab 0 - Setup | [lab-0-setup](lab-0-setup/README.md) |
+| Lab 1 - AgentOps | [lab-1-agentops](lab-1-agentops/README.md) |
+| Lab 2 - Security and trust | [lab-2-security-and-trust](lab-2-security-and-trust/README.md) |
+| Lab 3 - Governance | [lab-3-governance](lab-3-governance/README.md) |
+| Lab 4 - Solution Optimization | [lab-4-solution-optimization](lab-4-solution-optimization/README.md) |
