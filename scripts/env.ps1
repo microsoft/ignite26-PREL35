@@ -5,8 +5,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-$outputs = az deployment group show --resource-group $ResourceGroup --name main --query properties.outputs | ConvertFrom-Json
-if (-not $outputs) { throw "No 'main' deployment found in resource group $ResourceGroup." }
+# The latest deployment with outputs: Skillable names its deployment differently from scripts/deploy.ps1.
+$outputs = az deployment group list --resource-group $ResourceGroup --query "sort_by([?properties.outputs != null], &properties.timestamp)[-1].properties.outputs" | ConvertFrom-Json
+if (-not $outputs) { throw "No lab deployment found in resource group $ResourceGroup." }
 
 # ARM returns output names with changed casing (apiM_GATEWAY_URL), so restore them.
 $lines = $outputs.PSObject.Properties | ForEach-Object { "$($_.Name.ToUpper())=$($_.Value.value)" }

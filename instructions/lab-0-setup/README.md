@@ -36,7 +36,7 @@ investigate.py  ──(your Entra ID token)──►  API Management  ──(its
   through it. You also have direct access to Foundry, for the Foundry portal and the evaluations in Lab 1; in
   production, a private endpoint and no data-plane roles for people would close that path.
 - The infrastructure is [Bicep](../../infra/main.bicep), deployed for you before the lab started. The agents are
-  defined in [src/agents](../../src/agents) and created by [a script](../../scripts/create_agents.py).
+  defined in [src/agents](../../src/agents), and you publish them in step 2.
 
 ## Topics covered
 
@@ -54,7 +54,8 @@ Provided on the lab VM: Azure CLI, PowerShell 7, Python 3.12 with the packages i
 
 ### 1. Sign in and connect (3 min)
 
-Open a terminal in the repository folder and sign in with the lab credentials:
+Open a terminal in the repository folder and sign in. Use the username `<lab-username>` and the password
+`<lab-password>`:
 
 ```powershell
 az login
@@ -68,7 +69,18 @@ Write your environment's values to `.env`, using your resource group name:
 
 You see the project endpoint, the model deployment and the gateway URL.
 
-### 2. Tour the landing zone (6 min)
+### 2. Publish the agents (2 min)
+
+Each agent is a Markdown file of instructions in [src/agents](../../src/agents). Publishing creates a new version of
+each agent in Foundry:
+
+```powershell
+python scripts/create_agents.py
+```
+
+You see `reviewer version 1` and `triage version 1`. In Lab 1 you change an agent and publish version 2 the same way.
+
+### 3. Tour the landing zone (5 min)
 
 In the [Azure portal](https://portal.azure.com), open your resource group and find:
 
@@ -82,7 +94,7 @@ Then open the [Foundry portal](https://ai.azure.com), select the `fincrime` proj
 **triage** and **reviewer**. Open triage and read its instructions: they're the same text as
 [src/agents/triage.md](../../src/agents/triage.md).
 
-### 3. Run your first investigation (5 min)
+### 4. Run your first investigation (5 min)
 
 ```powershell
 python src/investigate.py ALT-1001
@@ -94,7 +106,7 @@ with the evidence IDs it relied on, then the reviewer's verdict.
 Run it a second time. The wording, and sometimes the recommendation, can change between runs. That variation is
 why Lab 1 measures agents with evaluations instead of trusting a single run.
 
-### 4. Get refused on purpose (4 min)
+### 5. Get refused on purpose (4 min)
 
 Call the gateway without a token:
 
@@ -114,7 +126,7 @@ curl.exe -s -o NUL -w "%{http_code}`n" -X POST "$gw/agents/unpublished/responses
 
 You get `404`: only agents published as gateway operations can be reached.
 
-### 5. Check your understanding (2 min)
+### 6. Check your understanding (1 min)
 
 - Your token reaches API Management. What identity does API Management use to reach Foundry?
 - Where would you change the triage agent's behaviour, and how would that change reach Foundry?
