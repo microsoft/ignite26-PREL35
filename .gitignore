@@ -427,3 +427,8 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Lab environment values written by scripts/env.ps1
+.env
+.venv/
+__pycache__/

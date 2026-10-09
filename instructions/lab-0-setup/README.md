@@ -1,22 +1,124 @@
 # Lab 0 - Setup
 
-<!-- TODO: fill in this lab's content. -->
+**Time:** about 20 minutes
 
 ## What this lab covers
 
-_TBD: one or two sentences on what attendees build or do in this lab, and why it matters._
+You connect to your lab environment, tour it as a small AI landing zone, and run your first alert through two
+agents. Everything you deploy, measure and protect in Labs 1 to 4 builds on this.
+
+### The use case
+
+A bank's transaction monitoring system raises **alerts**: activity that might be money laundering, sanctions
+evasion or fraud. An analyst investigates every alert, and most turn out to be false positives. Two agents help:
+
+| Agent | What it does |
+|---|---|
+| **Triage** | Reads the case file and recommends a disposition (escalate, close as a false positive, or request more information), citing the evidence |
+| **Reviewer** | Checks the triage recommendation before a human sees it, and disagrees if the evidence doesn't support it |
+
+**The agents recommend. A named analyst decides.** No agent can close a case.
+
+The data is synthetic: 14 alerts for a fictional bank, in [data/cases.json](../../data/cases.json).
+
+### What's deployed in your resource group
+
+```text
+investigate.py  ──(your Entra ID token)──►  API Management  ──(its managed identity)──►  Foundry project
+                                            checks token,                                triage + reviewer agents
+                                            rate limit per caller                        gpt-5-mini
+                                                                                              │
+                                                                         Application Insights ◄┘ traces
+```
+
+- **Foundry** accepts Entra ID only: no API keys exist.
+- **API Management** is the way apps reach the agents. Only agents published as gateway operations can be called
+  through it. You also have direct access to Foundry, for the Foundry portal and the evaluations in Lab 1; in
+  production, a private endpoint and no data-plane roles for people would close that path.
+- The infrastructure is [Bicep](../../infra/main.bicep), deployed for you before the lab started. The agents are
+  defined in [src/agents](../../src/agents) and created by [a script](../../scripts/create_agents.py).
 
 ## Topics covered
 
-- _TBD_
+- Landing zone building blocks: identity, gateway, monitoring
+- Infrastructure as code for the platform, and agents as versioned definitions
+- Calling agents through a gateway, with no keys
 
 ## Prerequisites
 
-- _TBD_
+Provided on the lab VM: Azure CLI, PowerShell 7, Python 3.12 with the packages in
+[requirements.txt](../../requirements.txt), and this repository. Your resource group and sign-in details are on the
+**Resources** tab of the lab instructions.
 
 ## Steps
 
-1. _TBD_
+### 1. Sign in and connect (3 min)
+
+Open a terminal in the repository folder and sign in with the lab credentials:
+
+```powershell
+az login
+```
+
+Write your environment's values to `.env`, using your resource group name:
+
+```powershell
+.\scripts\env.ps1 -ResourceGroup <your-resource-group>
+```
+
+You see the project endpoint, the model deployment and the gateway URL.
+
+### 2. Tour the landing zone (6 min)
+
+In the [Azure portal](https://portal.azure.com), open your resource group and find:
+
+| Resource | Look for |
+|---|---|
+| Foundry (`aif-…`) | **Resource Management > Keys and Endpoint**: local (key) authentication is disabled |
+| API Management (`apim-…`) | **APIs > Published agents**: one operation per agent. Open the policy: token check, rate limit, managed identity |
+| Application Insights (`appi-…`) | Where agent traces land. You use it in Lab 1 |
+
+Then open the [Foundry portal](https://ai.azure.com), select the `fincrime` project, and open **Agents**. You see
+**triage** and **reviewer**. Open triage and read its instructions: they're the same text as
+[src/agents/triage.md](../../src/agents/triage.md).
+
+### 3. Run your first investigation (5 min)
+
+```powershell
+python src/investigate.py ALT-1001
+```
+
+ALT-1001 is a bakery making cash deposits just under the reporting threshold. You see the triage recommendation,
+with the evidence IDs it relied on, then the reviewer's verdict.
+
+Run it a second time. The wording, and sometimes the recommendation, can change between runs. That variation is
+why Lab 1 measures agents with evaluations instead of trusting a single run.
+
+### 4. Get refused on purpose (4 min)
+
+Call the gateway without a token:
+
+```powershell
+$gw = (Get-Content .env | Select-String '^APIM_GATEWAY_URL=').Line.Split('=', 2)[1]
+curl.exe -s -o NUL -w "%{http_code}`n" -X POST "$gw/agents/triage/responses"
+```
+
+You get `401`: the gateway rejects the request before it reaches Foundry.
+
+Now call an agent that isn't published, with a valid token:
+
+```powershell
+$token = az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv
+curl.exe -s -o NUL -w "%{http_code}`n" -X POST "$gw/agents/unpublished/responses" -H "Authorization: Bearer $token"
+```
+
+You get `404`: only agents published as gateway operations can be reached.
+
+### 5. Check your understanding (2 min)
+
+- Your token reaches API Management. What identity does API Management use to reach Foundry?
+- Where would you change the triage agent's behaviour, and how would that change reach Foundry?
+- Who decides the outcome of an alert?
 
 ## Next
 

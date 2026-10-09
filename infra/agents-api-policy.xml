@@ -1,0 +1,31 @@
+<!--
+  Published agents API. Callers send their own Entra ID token; the gateway checks it, limits the caller,
+  then calls Foundry with its own managed identity. The operation name is the agent name.
+-->
+<policies>
+  <inbound>
+    <base />
+    <validate-azure-ad-token tenant-id="{{tenant-id}}" output-token-variable-name="jwt">
+      <audiences>
+        <audience>https://ai.azure.com</audience>
+      </audiences>
+    </validate-azure-ad-token>
+    <rate-limit-by-key calls="20" renewal-period="60"
+                       counter-key="@(((Jwt)context.Variables[&quot;jwt&quot;]).Claims.GetValueOrDefault(&quot;oid&quot;, &quot;unknown&quot;))" />
+    <authentication-managed-identity resource="https://ai.azure.com" />
+    <set-backend-service backend-id="foundry-project" />
+    <rewrite-uri template="@(&quot;/agents/&quot; + context.Operation.Id + &quot;/endpoint/protocols/openai/responses&quot;)" copy-unmatched-params="false" />
+    <set-query-parameter name="api-version" exists-action="override">
+      <value>v1</value>
+    </set-query-parameter>
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>
