@@ -46,7 +46,7 @@ investigate.py  ──(your Entra ID token)──►  API Management  ──(its
 
 ## Prerequisites
 
-Provided on the lab VM: Azure CLI, PowerShell 7, Python 3.12 with the packages in
+Provided on the lab VM: Azure CLI, PowerShell 7, uv with a Python 3.12 environment holding the packages in
 [requirements.txt](../../requirements.txt), and this repository. Your resource group and sign-in details are on the
 **Resources** tab of the lab instructions.
 
@@ -75,7 +75,7 @@ Each agent is a Markdown file of instructions in [src/agents](../../src/agents).
 each agent in Foundry:
 
 ```powershell
-python scripts/create_agents.py
+uv run scripts/create_agents.py
 ```
 
 You see `reviewer version 1 (gpt-5-mini)` and `triage version 1 (gpt-5-mini)`. In Lab 1 you change an agent and publish version 2 the same way.
@@ -97,7 +97,7 @@ Then open the [Foundry portal](https://ai.azure.com), select the `fincrime` proj
 ### 4. Run your first investigation (5 min)
 
 ```powershell
-python src/investigate.py ALT-1001
+uv run src/investigate.py ALT-1001
 ```
 
 ALT-1001 is a bakery making cash deposits just under the reporting threshold. You see the triage recommendation,

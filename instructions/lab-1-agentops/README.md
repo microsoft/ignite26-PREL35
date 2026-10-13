@@ -50,7 +50,7 @@ The gate checks four things:
 ### 1. Run the release gate on the current agents (7 min)
 
 ```powershell
-python src/evaluate.py --foundry
+uv run src/evaluate.py --foundry
 ```
 
 It runs all 14 golden alerts through triage and reviewer, through the gateway, and takes about a minute.
@@ -77,8 +77,8 @@ Apply it, publish it as a new version of the agent, and run the gate:
 
 ```powershell
 Copy-Item src/agents/variants/triage.concise.md src/agents/triage.md
-python scripts/create_agents.py
-python src/evaluate.py
+uv run scripts/create_agents.py
+uv run src/evaluate.py
 ```
 
 You see `Release gate: FAIL`. Open the new `report.md`:
@@ -96,8 +96,8 @@ Restore the prompt from source control, publish, and run the gate again:
 
 ```powershell
 git checkout src/agents/triage.md
-python scripts/create_agents.py
-python src/evaluate.py
+uv run scripts/create_agents.py
+uv run src/evaluate.py
 ```
 
 You see `Release gate: PASS`. Foundry kept every version: the failed one is still there, and the agents now run a
@@ -109,15 +109,15 @@ Model versions are retired on a schedule, so sooner or later the agents must mov
 answers whether a replacement is good enough. Publish both agents on `gpt-5-nano` and run it:
 
 ```powershell
-python scripts/create_agents.py gpt-5-nano
-python src/evaluate.py
+uv run scripts/create_agents.py gpt-5-nano
+uv run src/evaluate.py
 ```
 
 Read the result. The smaller model is close to the accuracy threshold, so you may see a pass or a fail: either
 way, the decision is made by the scores, not by opinion. Then go back to the approved model:
 
 ```powershell
-python scripts/create_agents.py
+uv run scripts/create_agents.py
 ```
 
 ### 5. Open the Evidence Pack (4 min)

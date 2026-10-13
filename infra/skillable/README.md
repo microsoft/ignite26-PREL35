@@ -10,7 +10,7 @@ Each learner gets one Windows VM and one Azure resource group (Cloud Slice) wher
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, on Tearing Down, blocking | [teardown.ps1](teardown.ps1): deletes and purges the Foundry account, which Skillable requires for `Microsoft.CognitiveServices/accounts` |
 | **Access control policy** | [acp-v3.json](acp-v3.json) |
 | **Instructions** | [instructions/skillable/content.md](../../instructions/skillable/content.md), linked from GitHub |
-| **Lab VM** | Azure CLI, PowerShell 7, Python 3.12, `pip install -r requirements.txt`, this repository cloned |
+| **Lab VM** | Azure CLI, PowerShell 7, [uv](https://docs.astral.sh/uv/), this repository cloned, and in it `uv venv --python 3.12; uv pip install -r requirements.txt` |
 
 ## Resource template
 
@@ -25,7 +25,7 @@ az bicep build --file infra/main.bicep --stdout | Set-Clipboard
 Skillable reads one Markdown file. After changing any lab README, rebuild it and commit:
 
 ```powershell
-python scripts/build_skillable.py
+uv run scripts/build_skillable.py
 ```
 
 Linking needs a GitHub account that is a full admin of the repository.

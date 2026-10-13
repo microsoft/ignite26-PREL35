@@ -10,8 +10,6 @@ param learnerPrincipalId string = ''
 
 @description('Object ID of the identity that runs scripts/create_agents.py. Empty to skip.')
 param operatorPrincipalId string = ''
-@allowed(['User', 'ServicePrincipal'])
-param operatorPrincipalType string = 'ServicePrincipal'
 
 @description('Agents published through the gateway. Each must exist in src/agents/<name>.md.')
 param agentNames array = ['triage', 'reviewer']
@@ -175,18 +173,15 @@ resource apimFoundryUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
   }
 }
 
-var foundryUsers = concat(
-  empty(learnerPrincipalId) || learnerPrincipalId == operatorPrincipalId ? [] : [{ id: learnerPrincipalId, type: 'User' }],
-  empty(operatorPrincipalId) ? [] : [{ id: operatorPrincipalId, type: operatorPrincipalType }]
-)
+// No principalType: Azure looks it up, so a user or a service principal can be the operator.
+var foundryUsers = filter(union([learnerPrincipalId], [operatorPrincipalId]), id => !empty(id))
 
-resource foundryUserAssignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for p in foundryUsers: {
+resource foundryUserAssignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for id in foundryUsers: {
   scope: foundry
-  name: guid(foundry.id, p.id, foundryUserRole)
+  name: guid(foundry.id, id, foundryUserRole)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', foundryUserRole)
-    principalId: p.id
-    principalType: p.type
+    principalId: id
   }
 }]
 

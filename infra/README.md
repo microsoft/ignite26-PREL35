@@ -13,7 +13,7 @@ The Skillable lifecycle action runs this for each learner. To test in your own s
 
 ```powershell
 az group create --name rg-prel35-lab --location eastus2
-pip install -r requirements.txt
+uv venv --python 3.12; uv pip install -r requirements.txt
 .\scripts\deploy.ps1 -ResourceGroup rg-prel35-lab -LearnerPrincipalId <learner-object-id>
 ```
 
