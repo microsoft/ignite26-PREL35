@@ -7,7 +7,7 @@
             {
               "field": "type",
               "in": [
-                "Microsoft.OperationalInsights/workspaces",
+                "Microsoft.Resources/deployments",
                 "Microsoft.Insights/components",
                 "microsoft.alertsmanagement/smartDetectorAlertRules",
                 "microsoft.insights/actiongroups",
@@ -18,7 +18,20 @@
             },
             {
               "allOf": [
+                { "field": "type", "equals": "Microsoft.OperationalInsights/workspaces" },
+                { "field": "name", "like": "log-*" },
+                {
+                  "anyOf": [
+                    { "field": "Microsoft.OperationalInsights/workspaces/sku.name", "exists": false },
+                    { "field": "Microsoft.OperationalInsights/workspaces/sku.name", "equals": "PerGB2018" }
+                  ]
+                }
+              ]
+            },
+            {
+              "allOf": [
                 { "field": "type", "equals": "Microsoft.CognitiveServices/accounts" },
+                { "field": "name", "like": "aif-*" },
                 { "field": "kind", "equals": "AIServices" },
                 { "field": "Microsoft.CognitiveServices/accounts/sku.name", "equals": "S0" }
               ]
@@ -34,6 +47,7 @@
             {
               "allOf": [
                 { "field": "type", "equals": "Microsoft.ApiManagement/service" },
+                { "field": "name", "like": "apim-*" },
                 { "field": "Microsoft.ApiManagement/service/sku.name", "equals": "BasicV2" },
                 { "field": "Microsoft.ApiManagement/service/sku.capacity", "lessOrEquals": 1 }
               ]
@@ -42,6 +56,7 @@
           ]
         }
       },
+      { "field": "id", "notContains": "[concat('/resourceGroups/', resourceGroup().name, '/')]" },
       {
         "allOf": [
           { "field": "location", "exists": true },
