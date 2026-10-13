@@ -27,5 +27,4 @@ az deployment group create `
 if ($LASTEXITCODE) { throw 'Bicep deployment failed.' }
 
 & (Join-Path $PSScriptRoot 'env.ps1') -ResourceGroup $ResourceGroup
-python (Join-Path $PSScriptRoot 'create_agents.py')
-if ($LASTEXITCODE) { throw 'Agent creation failed.' }
+& (Join-Path $PSScriptRoot 'create_agents.ps1')

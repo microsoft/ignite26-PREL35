@@ -8,15 +8,18 @@ param location string = resourceGroup().location
 @description('Object ID of the learner. Gets Foundry User so they can see and evaluate the agents. Empty to skip.')
 param learnerPrincipalId string = ''
 
-@description('Object ID of the identity that runs scripts/create_agents.py. Empty to skip.')
+@description('Object ID of the identity that runs scripts/create_agents.ps1. Empty to skip.')
 param operatorPrincipalId string = ''
 @allowed(['User', 'ServicePrincipal'])
 param operatorPrincipalType string = 'ServicePrincipal'
 
-@description('Agents published through the gateway. Each must exist in src/agents/<name>.md.')
+@description('Agents published through the gateway. Each must exist in scripts/agents/<name>.md.')
 param agentNames array = ['triage', 'reviewer']
 
 param model object = { name: 'gpt-5-mini', version: '2025-08-07', capacity: 60 }
+
+@description('Replacement candidate for the Lab 1 model retirement drill. The agents only use it when the drill publishes them on it.')
+param candidateModel object = { name: 'gpt-4.1-mini', version: '2025-04-14', capacity: 30 }
 
 var token = toLower(uniqueString(resourceGroup().id))
 var tags = { workload: 'fincrime-triage' }
@@ -97,6 +100,17 @@ resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01
     raiPolicyName: 'Microsoft.DefaultV2'
   }
   dependsOn: [project, appInsightsConnection]
+}
+
+resource candidateDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = {
+  parent: foundry
+  name: candidateModel.name
+  sku: { name: 'GlobalStandard', capacity: candidateModel.capacity }
+  properties: {
+    model: { format: 'OpenAI', name: candidateModel.name, version: candidateModel.version }
+    raiPolicyName: 'Microsoft.DefaultV2'
+  }
+  dependsOn: [deployment]
 }
 
 // ---------------------------------------------------------------- API Management: the only way in for apps
@@ -187,5 +201,6 @@ resource foundryUserAssignments 'Microsoft.Authorization/roleAssignments@2022-04
 
 output FOUNDRY_PROJECT_ENDPOINT string = 'https://${foundry.name}.services.ai.azure.com/api/projects/${project.name}'
 output MODEL_DEPLOYMENT string = deployment.name
+output CANDIDATE_MODEL_DEPLOYMENT string = candidateDeployment.name
 output APIM_GATEWAY_URL string = apim.properties.gatewayUrl
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = appInsights.properties.ConnectionString

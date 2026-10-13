@@ -1,11 +1,12 @@
 # Infrastructure
 
 [main.bicep](main.bicep) deploys the lab landing zone into one resource group: Foundry (account, project, a
-gpt-5-mini deployment), API Management (Basic v2) as the gateway in front of the agents, Log Analytics and
-Application Insights. [agents-api-policy.xml](agents-api-policy.xml) is the gateway policy.
+gpt-5-mini deployment the agents use, and a gpt-4.1-mini deployment for the Lab 1 model retirement drill), API
+Management (Basic v2) as the gateway in front of the agents, Log Analytics and Application Insights.
+[agents-api-policy.xml](agents-api-policy.xml) is the gateway policy.
 
-Foundry agents aren't Azure resources, so Bicep can't create them. [scripts/create_agents.py](../scripts/create_agents.py)
-creates them from [src/agents](../src/agents) after the deployment.
+Foundry agents aren't Azure resources, so Bicep can't create them. [scripts/create_agents.ps1](../scripts/create_agents.ps1)
+creates them from [scripts/agents](../scripts/agents) after the deployment.
 
 ## Deploy
 

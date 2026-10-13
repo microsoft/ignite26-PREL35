@@ -1,6 +1,6 @@
-"""Run one alert through the triage and reviewer agents, through the API Management gateway.
+r"""Run one alert through the triage and reviewer agents, through the API Management gateway.
 
-Usage: python src/investigate.py [ALERT_ID]
+Usage: python .\src\lab0\python\investigate.py [ALERT_ID]
 """
 import json
 import sys
@@ -9,7 +9,7 @@ from pathlib import Path
 from azure.identity import DefaultAzureCredential
 from openai import OpenAI
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 if not (ROOT / ".env").exists():
     sys.exit("No .env yet. Run: .\\scripts\\env.ps1 -ResourceGroup <your-resource-group>")
 env = dict(line.split("=", 1) for line in (ROOT / ".env").read_text(encoding="utf-8-sig").splitlines() if "=" in line)
@@ -26,8 +26,11 @@ token = DefaultAzureCredential().get_token("https://ai.azure.com/.default").toke
 
 
 def ask(agent: str, text: str) -> str:
-    client = OpenAI(base_url=f"{env['APIM_GATEWAY_URL']}/agents/{agent}", api_key=token)
-    return client.responses.create(input=text).output_text
+    with OpenAI(base_url=f"{env['APIM_GATEWAY_URL'].rstrip('/')}/agents/{agent}", api_key=token) as client:
+        output = client.responses.create(input=text).output_text
+    if not output.strip():
+        sys.exit(f"Agent {agent} returned no text. No recommendation is available; try the investigation again.")
+    return output
 
 
 print(f"{alert_id}: {case['alert']['title']} ({case['customer']['name']})\n")

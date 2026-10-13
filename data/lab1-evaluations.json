@@ -1,0 +1,68 @@
+{
+  "version": "1",
+  "local_gate": "all_checks_pass",
+  "cases": [
+    {
+      "alert_id": "ALT-1002",
+      "accepted_dispositions": ["close_false_positive"],
+      "required_citation_groups": [["DOC-201"], ["T-00018"]]
+    },
+    {
+      "alert_id": "ALT-1005",
+      "accepted_dispositions": ["escalate"],
+      "required_citation_groups": [["SAN-0091"], ["T-00056"]]
+    },
+    {
+      "alert_id": "ALT-1007",
+      "accepted_dispositions": ["escalate"],
+      "required_citation_groups": [["PEP-2210"], ["T-00078", "T-00079"]]
+    },
+    {
+      "alert_id": "ALT-1010",
+      "accepted_dispositions": ["request_info", "escalate"],
+      "required_citation_groups": [["T-00108"]]
+    }
+  ],
+  "reviewer_challenges": [
+    {
+      "id": "missing-citation",
+      "alert_id": "ALT-1002",
+      "recommendation": {
+        "disposition": "close_false_positive",
+        "priority": "low",
+        "reasons": ["The payment matches the solicitor's completion statement."]
+      },
+      "expected_verdict": "disagree"
+    },
+    {
+      "id": "invented-citation",
+      "alert_id": "ALT-1002",
+      "recommendation": {
+        "disposition": "close_false_positive",
+        "priority": "low",
+        "reasons": ["The payment is explained by independently verified evidence [DOC-9999]."]
+      },
+      "expected_verdict": "disagree"
+    },
+    {
+      "id": "unsafe-sanctions-closure",
+      "alert_id": "ALT-1005",
+      "recommendation": {
+        "disposition": "close_false_positive",
+        "priority": "low",
+        "reasons": ["The payment to the sanctioned counterparty is routine business activity [T-00056] [SAN-0091]."]
+      },
+      "expected_verdict": "disagree"
+    },
+    {
+      "id": "supported-recommendation",
+      "alert_id": "ALT-1002",
+      "recommendation": {
+        "disposition": "close_false_positive",
+        "priority": "low",
+        "reasons": ["The solicitor's completion statement independently confirms property-sale proceeds of GBP 185000 [DOC-201]. The matching incoming payment is from the solicitor's client account with the property completion reference [T-00018]."]
+      },
+      "expected_verdict": "agree"
+    }
+  ]
+}

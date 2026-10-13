@@ -36,7 +36,7 @@ investigate.py  ──(your Entra ID token)──►  API Management  ──(its
   through it. You also have direct access to Foundry, for the Foundry portal and the evaluations in Lab 1; in
   production, a private endpoint and no data-plane roles for people would close that path.
 - The infrastructure is [Bicep](../../infra/main.bicep), deployed for you before the lab started. The agents are
-  defined in [src/agents](../../src/agents), and you publish them in step 2.
+  defined in [scripts/agents](../../scripts/agents), and you publish them in step 2.
 
 ## Topics covered
 
@@ -49,6 +49,9 @@ investigate.py  ──(your Entra ID token)──►  API Management  ──(its
 Provided on the lab VM: Azure CLI, PowerShell 7, Python 3.12 with the packages in
 [requirements.txt](../../requirements.txt), and this repository. Your resource group and sign-in details are on the
 **Resources** tab of the lab instructions.
+
+The Python client uses the provided environment. To use the alternative .NET client, you also need the .NET 10
+SDK. Both clients run the same investigation.
 
 ## Steps
 
@@ -67,18 +70,20 @@ Write your environment's values to `.env`, using your resource group name:
 .\scripts\env.ps1 -ResourceGroup <your-resource-group>
 ```
 
-You see the project endpoint, the model deployment and the gateway URL.
+You see the project endpoint, the model deployments and the gateway URL.
 
 ### 2. Publish the agents (2 min)
 
-Each agent is a Markdown file of instructions in [src/agents](../../src/agents). Publishing creates a new version of
+Each agent is a Markdown file of instructions in [scripts/agents](../../scripts/agents). Publishing creates a new version of
 each agent in Foundry:
 
 ```powershell
-python scripts/create_agents.py
+.\scripts\create_agents.ps1
 ```
 
-You see `reviewer version 1` and `triage version 1`. In Lab 1 you change an agent and publish version 2 the same way.
+On the first publication, you see `reviewer version 1` and `triage version 1`. If an agent already exists, the command
+adds a new version instead of recreating the agent; earlier versions are preserved. Use the version numbers printed
+by the command. In Lab 1 you change an agent and publish another version the same way.
 
 ### 3. Tour the landing zone (5 min)
 
@@ -92,13 +97,24 @@ In the [Azure portal](https://portal.azure.com), open your resource group and fi
 
 Then open the [Foundry portal](https://ai.azure.com), select the `fincrime` project, and open **Agents**. You see
 **triage** and **reviewer**. Open triage and read its instructions: they're the same text as
-[src/agents/triage.md](../../src/agents/triage.md).
+[scripts/agents/triage.md](../../scripts/agents/triage.md).
 
 ### 4. Run your first investigation (5 min)
 
+From the repository folder, run the [Python client](../../src/lab0/python/investigate.py):
+
 ```powershell
-python src/investigate.py ALT-1001
+python .\src\lab0\python\investigate.py ALT-1001
 ```
+
+Alternatively, with the .NET 10 SDK available, run the [.NET client](../../src/lab0/dotnet/Program.cs):
+
+```powershell
+dotnet run --project .\src\lab0\dotnet -- ALT-1001
+```
+
+Both clients read the repository's `.env`, obtain your Entra ID token, and call triage followed by reviewer through
+API Management. They display recommendations only; neither client closes a case.
 
 ALT-1001 is a bakery making cash deposits just under the reporting threshold. You see the triage recommendation,
 with the evidence IDs it relied on, then the reviewer's verdict.

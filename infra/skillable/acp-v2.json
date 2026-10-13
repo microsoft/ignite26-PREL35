@@ -1,0 +1,54 @@
+{
+  "if": {
+    "anyOf": [
+      {
+        "not": {
+          "anyOf": [
+            {
+              "field": "type",
+              "in": [
+                "Microsoft.OperationalInsights/workspaces",
+                "Microsoft.Insights/components",
+                "microsoft.alertsmanagement/smartDetectorAlertRules",
+                "microsoft.insights/actiongroups",
+                "Microsoft.CognitiveServices/accounts/projects",
+                "Microsoft.CognitiveServices/accounts/projects/connections",
+                "Microsoft.Authorization/roleAssignments"
+              ]
+            },
+            {
+              "allOf": [
+                { "field": "type", "equals": "Microsoft.CognitiveServices/accounts" },
+                { "field": "kind", "equals": "AIServices" },
+                { "field": "Microsoft.CognitiveServices/accounts/sku.name", "equals": "S0" }
+              ]
+            },
+            {
+              "allOf": [
+                { "field": "type", "equals": "Microsoft.CognitiveServices/accounts/deployments" },
+                { "field": "Microsoft.CognitiveServices/accounts/deployments/sku.name", "equals": "GlobalStandard" },
+                { "field": "Microsoft.CognitiveServices/accounts/deployments/sku.capacity", "lessOrEquals": 60 },
+                { "field": "Microsoft.CognitiveServices/accounts/deployments/model.name", "in": ["gpt-5-mini", "gpt-4.1-mini"] }
+              ]
+            },
+            {
+              "allOf": [
+                { "field": "type", "equals": "Microsoft.ApiManagement/service" },
+                { "field": "Microsoft.ApiManagement/service/sku.name", "equals": "BasicV2" },
+                { "field": "Microsoft.ApiManagement/service/sku.capacity", "lessOrEquals": 1 }
+              ]
+            },
+            { "field": "type", "like": "Microsoft.ApiManagement/service/*" }
+          ]
+        }
+      },
+      {
+        "allOf": [
+          { "field": "location", "exists": true },
+          { "field": "location", "notIn": ["[resourceGroup().location]", "global"] }
+        ]
+      }
+    ]
+  },
+  "then": { "effect": "deny" }
+}
