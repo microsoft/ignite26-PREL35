@@ -1,0 +1,51 @@
+# The release gate from Lab 1, as a pipeline. Walked through in the lab, not run there.
+# It starts by hand (workflow_dispatch). In your own repository, run it on pull requests that touch src/agents.
+#
+# It needs a service principal or managed identity with a federated credential for this repository,
+# Foundry User on the Foundry resource, and Reader on the resource group. Set its IDs as repository variables.
+name: Release gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      resource_group:
+        description: Resource group of the environment to test
+        required: true
+
+permissions:
+  id-token: write # sign in to Azure without a stored secret
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Connect to the environment
+        shell: pwsh
+        run: ./scripts/env.ps1 -ResourceGroup ${{ inputs.resource_group }}
+
+      - name: Publish the agents from this commit
+        run: python scripts/create_agents.py
+
+      # Exits with 1 when a blocking threshold fails, which fails the job and blocks the release.
+      - name: Release gate
+        run: python src/evaluate.py --foundry
+
+      - name: Keep the Evidence Pack
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-pack
+          path: evidence/

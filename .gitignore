@@ -432,3 +432,6 @@ FodyWeavers.xsd
 .env
 .venv/
 __pycache__/
+
+# Evidence Packs written by src/evaluate.py
+evidence/

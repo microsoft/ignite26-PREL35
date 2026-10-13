@@ -10,7 +10,7 @@
         <audience>https://ai.azure.com</audience>
       </audiences>
     </validate-azure-ad-token>
-    <rate-limit-by-key calls="20" renewal-period="60"
+    <rate-limit-by-key calls="120" renewal-period="60"
                        counter-key="@(((Jwt)context.Variables[&quot;jwt&quot;]).Claims.GetValueOrDefault(&quot;oid&quot;, &quot;unknown&quot;))" />
     <authentication-managed-identity resource="https://ai.azure.com" />
     <set-backend-service backend-id="foundry-project" />

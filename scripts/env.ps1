@@ -11,7 +11,7 @@ if (-not $outputs) { throw "No lab deployment found in resource group $ResourceG
 
 # ARM returns output names with changed casing (apiM_GATEWAY_URL), so restore them.
 $lines = $outputs.PSObject.Properties | ForEach-Object { "$($_.Name.ToUpper())=$($_.Value.value)" }
-$envFile = Join-Path $PSScriptRoot '..' '.env'
+$envFile = Join-Path $PSScriptRoot '../.env'
 Set-Content -Path $envFile -Value $lines -Encoding utf8
 $lines | Where-Object { $_ -notmatch '^APPLICATIONINSIGHTS' } | ForEach-Object { Write-Host $_ }
 Write-Host "Wrote $(Resolve-Path $envFile)"

@@ -14,25 +14,38 @@ if not (ROOT / ".env").exists():
     sys.exit("No .env yet. Run: .\\scripts\\env.ps1 -ResourceGroup <your-resource-group>")
 env = dict(line.split("=", 1) for line in (ROOT / ".env").read_text(encoding="utf-8-sig").splitlines() if "=" in line)
 data = json.loads((ROOT / "data" / "cases.json").read_text(encoding="utf-8"))
-
-alert_id = sys.argv[1] if len(sys.argv) > 1 else "ALT-1001"
-case = next((c for c in data["cases"] if c["alert"]["id"] == alert_id), None)
-if case is None:
-    sys.exit(f"Unknown alert {alert_id}. Alerts: {', '.join(c['alert']['id'] for c in data['cases'])}")
-case_file = json.dumps({**case, "screening_lists": data["screening_lists"]})
+cases = {c["alert"]["id"]: c for c in data["cases"]}
 
 # Your own Entra ID token: the gateway checks it, then calls Foundry with its managed identity.
-token = DefaultAzureCredential().get_token("https://ai.azure.com/.default").token
+credential = DefaultAzureCredential()
 
 
-def ask(agent: str, text: str) -> str:
-    client = OpenAI(base_url=f"{env['APIM_GATEWAY_URL']}/agents/{agent}", api_key=token)
-    return client.responses.create(input=text).output_text
+def ask(agent: str, text: str):
+    token = credential.get_token("https://ai.azure.com/.default").token
+    # The gateway limits calls per minute; retries wait for the limit to reset.
+    client = OpenAI(base_url=f"{env['APIM_GATEWAY_URL']}/agents/{agent}", api_key=token, max_retries=8)
+    return client.responses.create(input=text)
 
 
-print(f"{alert_id}: {case['alert']['title']} ({case['customer']['name']})\n")
-triage = ask("triage", case_file)
-print(f"Triage recommendation:\n{triage}\n")
-review = ask("reviewer", f"Case file:\n{case_file}\n\nTriage recommendation:\n{triage}")
-print(f"Reviewer:\n{review}\n")
-print("The agents recommend. A named analyst decides.")
+def investigate(alert_id: str) -> dict:
+    """Returns the triage and reviewer answers as text, plus the tokens the two calls used."""
+    case_file = json.dumps({**cases[alert_id], "screening_lists": data["screening_lists"]})
+    triage = ask("triage", case_file)
+    review = ask("reviewer", f"Case file:\n{case_file}\n\nTriage recommendation:\n{triage.output_text}")
+    return {
+        "triage": triage.output_text,
+        "review": review.output_text,
+        "tokens": triage.usage.total_tokens + review.usage.total_tokens,
+    }
+
+
+if __name__ == "__main__":
+    alert_id = sys.argv[1] if len(sys.argv) > 1 else "ALT-1001"
+    if alert_id not in cases:
+        sys.exit(f"Unknown alert {alert_id}. Alerts: {', '.join(cases)}")
+    case = cases[alert_id]
+    print(f"{alert_id}: {case['alert']['title']} ({case['customer']['name']})\n")
+    result = investigate(alert_id)
+    print(f"Triage recommendation:\n{result['triage']}\n")
+    print(f"Reviewer:\n{result['review']}\n")
+    print("The agents recommend. A named analyst decides.")

@@ -1,0 +1,6 @@
+{
+  "disposition_accuracy": { "min": 0.85, "blocking": true, "owner": "Head of Financial Crime Operations", "why": "The recommendation matches the known outcome" },
+  "escalation_recall": { "min": 1.0, "blocking": true, "owner": "Money Laundering Reporting Officer", "why": "A missed escalation is a regulatory failure" },
+  "citation_validity": { "min": 1.0, "blocking": true, "owner": "Money Laundering Reporting Officer", "why": "Every cited ID must exist in the case file" },
+  "reviewer_agreement": { "min": 0.7, "blocking": false, "owner": "Platform Engineering", "why": "How often the reviewer accepts the triage recommendation" }
+}

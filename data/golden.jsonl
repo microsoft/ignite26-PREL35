@@ -1,0 +1,14 @@
+{"alert_id": "ALT-1001", "expected_disposition": "escalate", "expected_priority": "high", "rule": "structuring"}
+{"alert_id": "ALT-1002", "expected_disposition": "close_false_positive", "expected_priority": "low", "rule": "large_inbound"}
+{"alert_id": "ALT-1003", "expected_disposition": "close_false_positive", "expected_priority": "low", "rule": "high_value_outbound"}
+{"alert_id": "ALT-1004", "expected_disposition": "escalate", "expected_priority": "high", "rule": "rapid_movement"}
+{"alert_id": "ALT-1005", "expected_disposition": "escalate", "expected_priority": "critical", "rule": "sanctions_hit"}
+{"alert_id": "ALT-1006", "expected_disposition": "close_false_positive", "expected_priority": "critical", "rule": "sanctions_hit"}
+{"alert_id": "ALT-1007", "expected_disposition": "escalate", "expected_priority": "high", "rule": "pep_activity"}
+{"alert_id": "ALT-1008", "expected_disposition": "escalate", "expected_priority": "high", "rule": "mule_pattern"}
+{"alert_id": "ALT-1009", "expected_disposition": "close_false_positive", "expected_priority": "low", "rule": "large_inbound"}
+{"alert_id": "ALT-1010", "expected_disposition": "request_info", "expected_priority": "medium", "rule": "new_relationship"}
+{"alert_id": "ALT-1011", "expected_disposition": "escalate", "expected_priority": "high", "rule": "high_risk_geo"}
+{"alert_id": "ALT-1012", "expected_disposition": "close_false_positive", "expected_priority": "low", "rule": "high_turnover"}
+{"alert_id": "ALT-1013", "expected_disposition": "request_info", "expected_priority": "medium", "rule": "cash_withdrawal"}
+{"alert_id": "ALT-1014", "expected_disposition": "escalate", "expected_priority": "high", "rule": "structuring"}

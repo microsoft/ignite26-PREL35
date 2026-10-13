@@ -41,7 +41,7 @@
                 { "field": "type", "equals": "Microsoft.CognitiveServices/accounts/deployments" },
                 { "field": "Microsoft.CognitiveServices/accounts/deployments/sku.name", "equals": "GlobalStandard" },
                 { "field": "Microsoft.CognitiveServices/accounts/deployments/sku.capacity", "lessOrEquals": 60 },
-                { "field": "Microsoft.CognitiveServices/accounts/deployments/model.name", "in": ["gpt-5-mini"] }
+                { "field": "Microsoft.CognitiveServices/accounts/deployments/model.name", "in": ["gpt-5-mini", "gpt-5-nano"] }
               ]
             },
             {

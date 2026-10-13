@@ -78,7 +78,7 @@ each agent in Foundry:
 python scripts/create_agents.py
 ```
 
-You see `reviewer version 1` and `triage version 1`. In Lab 1 you change an agent and publish version 2 the same way.
+You see `reviewer version 1 (gpt-5-mini)` and `triage version 1 (gpt-5-mini)`. In Lab 1 you change an agent and publish version 2 the same way.
 
 ### 3. Tour the landing zone (5 min)
 

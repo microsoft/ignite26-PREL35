@@ -21,7 +21,7 @@ if ($account.user.type -eq 'user') {
 az deployment group create `
     --resource-group $ResourceGroup `
     --name main `
-    --template-file (Join-Path $root 'infra' 'main.bicep') `
+    --template-file (Join-Path $root 'infra/main.bicep') `
     --parameters learnerPrincipalId=$LearnerPrincipalId operatorPrincipalId=$operatorId operatorPrincipalType=$operatorType `
     --output none
 if ($LASTEXITCODE) { throw 'Bicep deployment failed.' }

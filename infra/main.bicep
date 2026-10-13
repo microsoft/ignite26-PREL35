@@ -16,7 +16,11 @@ param operatorPrincipalType string = 'ServicePrincipal'
 @description('Agents published through the gateway. Each must exist in src/agents/<name>.md.')
 param agentNames array = ['triage', 'reviewer']
 
-param model object = { name: 'gpt-5-mini', version: '2025-08-07', capacity: 60 }
+@description('Model deployments (capacity in 1K tokens per minute). The agents start on the first one.')
+param models array = [
+  { name: 'gpt-5-mini', version: '2025-08-07', capacity: 60 }
+  { name: 'gpt-5-nano', version: '2025-08-07', capacity: 30 } // Lab 1: the replacement in the model swap
+]
 
 var token = toLower(uniqueString(resourceGroup().id))
 var tags = { workload: 'fincrime-triage' }
@@ -87,17 +91,18 @@ resource appInsightsConnection 'Microsoft.CognitiveServices/accounts/projects/co
   }
 }
 
-// The account accepts one change at a time, so the deployment waits for the project and its connection.
-resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = {
+// The account accepts one change at a time, so deployments wait for the project and its connection, and run one by one.
+@batchSize(1)
+resource deployments 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = [for m in models: {
   parent: foundry
-  name: model.name
-  sku: { name: 'GlobalStandard', capacity: model.capacity }
+  name: m.name
+  sku: { name: 'GlobalStandard', capacity: m.capacity }
   properties: {
-    model: { format: 'OpenAI', name: model.name, version: model.version }
+    model: { format: 'OpenAI', name: m.name, version: m.version }
     raiPolicyName: 'Microsoft.DefaultV2'
   }
   dependsOn: [project, appInsightsConnection]
-}
+}]
 
 // ---------------------------------------------------------------- API Management: the only way in for apps
 resource apim 'Microsoft.ApiManagement/service@2024-05-01' = {
@@ -186,6 +191,6 @@ resource foundryUserAssignments 'Microsoft.Authorization/roleAssignments@2022-04
 }]
 
 output FOUNDRY_PROJECT_ENDPOINT string = 'https://${foundry.name}.services.ai.azure.com/api/projects/${project.name}'
-output MODEL_DEPLOYMENT string = deployment.name
+output MODEL_DEPLOYMENT string = deployments[0].name
 output APIM_GATEWAY_URL string = apim.properties.gatewayUrl
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = appInsights.properties.ConnectionString
