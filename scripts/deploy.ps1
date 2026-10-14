@@ -1,6 +1,7 @@
 # Deploys the Lab 0 landing zone into an existing resource group and creates the agents.
 # Run by the Skillable lifecycle action (or by you, to test in your own subscription).
 # Needs Owner or Role Based Access Control Administrator on the resource group, because it assigns roles.
+# The owner must separately run setup-entra-apps.ps1 on the learner VM before Lab 0 gateway calls.
 param(
     [Parameter(Mandatory)][string]$ResourceGroup,
     [string]$LearnerPrincipalId = ''
@@ -28,3 +29,4 @@ if ($LASTEXITCODE) { throw 'Bicep deployment failed.' }
 
 & (Join-Path $PSScriptRoot 'env.ps1') -ResourceGroup $ResourceGroup
 & (Join-Path $PSScriptRoot 'create_agents.ps1')
+Write-Host 'Resources and agents deployed. The owner must run scripts\setup-entra-apps.ps1 on the learner VM to configure Lab 0 gateway authentication; rerun it after every Bicep redeployment.'

@@ -1,5 +1,5 @@
 <!--
-  Published agents API. Callers send their own Entra ID token; the gateway checks it, limits the caller,
+  Published agents API. The Lab service client sends an Entra ID token; the gateway checks it, limits the client,
   then calls Foundry with its own managed identity. The operation name is the agent name.
 -->
 <policies>
@@ -7,8 +7,13 @@
     <base />
     <validate-azure-ad-token tenant-id="{{tenant-id}}" output-token-variable-name="jwt">
       <audiences>
-        <audience>https://ai.azure.com</audience>
+        <audience>{{apim-api-audience}}</audience>
       </audiences>
+      <required-claims>
+        <claim name="roles" match="any">
+          <value>{{apim-api-app-role}}</value>
+        </claim>
+      </required-claims>
     </validate-azure-ad-token>
     <rate-limit-by-key calls="20" renewal-period="60"
                        counter-key="@(((Jwt)context.Variables[&quot;jwt&quot;]).Claims.GetValueOrDefault(&quot;oid&quot;, &quot;unknown&quot;))" />

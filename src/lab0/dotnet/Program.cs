@@ -8,6 +8,16 @@ using Azure.Identity;
 
 var root = Path.GetFullPath(@"..\..\..\..\..\..", AppContext.BaseDirectory);
 var env = LoadEnv(Path.Combine(root, ".env"));
+string[] required = ["APIM_GATEWAY_URL", "ENTRA_TENANT_ID",
+    "LAB_CLIENT_ID", "LAB_CLIENT_SECRET", "APIM_API_AUDIENCE"];
+var missing = required.Where(name => !env.TryGetValue(name, out var value) ||
+    string.IsNullOrWhiteSpace(value) || value.Contains('<')).ToArray();
+if (missing.Length > 0)
+{
+    return Fail($"Lab 0 setup is incomplete: {string.Join(", ", missing)}. " +
+        "Run scripts\\env.ps1 for deployment outputs; ask the deployment owner to provision " +
+        "the gateway client with scripts\\setup-entra-apps.ps1 on this VM.");
+}
 var data = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(root, "data", "cases.json")))!.AsObject();
 
 var alertId = args.FirstOrDefault() ?? "ALT-1001";
@@ -24,14 +34,15 @@ var caseFile = selectedCase.DeepClone().AsObject();
 caseFile["screening_lists"] = data["screening_lists"]!.DeepClone();
 var caseJson = caseFile.ToJsonString();
 
-var token = await new DefaultAzureCredential().GetTokenAsync(
-    new TokenRequestContext(["https://ai.azure.com/.default"]));
-
+// Authenticate as the confidential Lab 0 service client.
+var credential = new ClientSecretCredential(
+    env["ENTRA_TENANT_ID"],
+    env["LAB_CLIENT_ID"],
+    env["LAB_CLIENT_SECRET"]);
 using var client = new HttpClient
 {
     BaseAddress = new Uri($"{env["APIM_GATEWAY_URL"].TrimEnd('/')}/")
 };
-client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
 
 Console.WriteLine($"{alertId}: {selectedCase["alert"]!["title"]} ({selectedCase["customer"]!["name"]})\n");
 
@@ -46,7 +57,14 @@ return 0;
 
 async Task<string> Ask(string agent, string input)
 {
-    using var response = await client.PostAsJsonAsync($"agents/{agent}/responses", new { input });
+    var token = await credential.GetTokenAsync(
+        new TokenRequestContext([$"{env["APIM_API_AUDIENCE"]}/.default"]));
+    using var request = new HttpRequestMessage(HttpMethod.Post, $"agents/{agent}/responses")
+    {
+        Content = JsonContent.Create(new { input })
+    };
+    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
+    using var response = await client.SendAsync(request);
     response.EnsureSuccessStatusCode();
 
     var body = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;

@@ -3,6 +3,13 @@
 How the dev lab profile ([224908](https://labondemand.com/LabProfile/224908)) uses this repository.
 Each learner gets one Windows VM and one Azure resource group (Cloud Slice) where they are Contributor.
 
+The resource template alone is not sufficient for the current Lab 0 client. Before handing over each VM, an
+authorized deployment owner must complete the [Lab 0 Entra setup](../../instructions/lab-0-setup/README.md#deployment-owner-configure-microsoft-entra-authentication-for-the-gateway)
+and provision the ignored `.env` on that VM. This requires tenant permissions beyond Cloud Slice Contributor;
+the lifecycle actions listed below do not automate the app registrations, application-role assignment, or local
+client-secret provisioning. Do not bake real client credentials into the shared VM image or commit them.
+Sign out the owner identity before the learner signs in.
+
 | In Skillable Studio | From this repository |
 |---|---|
 | **Resource template** on the resource group | [infra/main.bicep](../main.bicep), compiled to ARM JSON (below). No parameters needed |

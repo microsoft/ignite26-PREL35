@@ -132,6 +132,26 @@ resource tenantIdValue 'Microsoft.ApiManagement/service/namedValues@2024-05-01' 
   properties: { displayName: 'tenant-id', value: tenant().tenantId }
 }
 
+// scripts/setup-entra-apps.ps1 replaces this bootstrap value with the dedicated API application ID URI.
+resource apimApiAudienceValue 'Microsoft.ApiManagement/service/namedValues@2024-05-01' = {
+  parent: apim
+  name: 'apim-api-audience'
+  properties: {
+    displayName: 'apim-api-audience'
+    value: 'api://configure-with-scripts-setup-entra-apps'
+  }
+}
+
+// scripts/setup-entra-apps.ps1 creates and assigns this application role on the dedicated API registration.
+resource apimApiAppRoleValue 'Microsoft.ApiManagement/service/namedValues@2024-05-01' = {
+  parent: apim
+  name: 'apim-api-app-role'
+  properties: {
+    displayName: 'apim-api-app-role'
+    value: 'Agents.Invoke'
+  }
+}
+
 resource projectBackend 'Microsoft.ApiManagement/service/backends@2024-05-01' = {
   parent: apim
   name: 'foundry-project'
@@ -170,7 +190,7 @@ resource agentsApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2024-05-
     format: 'rawxml'
     value: loadTextContent('agents-api-policy.xml')
   }
-  dependsOn: [tenantIdValue, projectBackend]
+  dependsOn: [tenantIdValue, apimApiAudienceValue, apimApiAppRoleValue, projectBackend]
 }
 
 // ---------------------------------------------------------------- roles
