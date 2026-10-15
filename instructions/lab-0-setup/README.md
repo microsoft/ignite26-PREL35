@@ -69,6 +69,12 @@ Write your environment's values to `.env`, using your resource group name:
 
 You see the project endpoint, the model deployment and the gateway URL.
 
+Install python dependencies:
+
+```powershell
+uv sync
+```
+
 ### 2. Publish the agents (2 min)
 
 Each agent is a Markdown file of instructions in [src/agents](../../src/agents). Publishing creates a new version of
