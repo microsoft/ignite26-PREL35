@@ -55,14 +55,17 @@ When a lab adds a resource, change the policy and save it in Studio as a **new n
 caches policies by name, so an edit under the same name may not apply. Then retest the whole lab end to end with
 the new policy before asking to publish.
 
-## App registration (Lab 2, On-Behalf-Of)
+## App registration: not used
 
-In Lab 2 the learner runs [scripts/setup_obo.ps1](../../scripts/setup_obo.ps1), which creates one Entra ID app
-registration. Skillable needs these details to tear it down:
+**No lab creates an app registration**, so Skillable has nothing to tear down here. On-Behalf-Of is described in Lab 2
+under "Consider when moving to production", and isn't hands-on.
+
+The repository keeps [scripts/setup_obo.ps1](../../scripts/setup_obo.ps1) for a future version. If a lab ever runs it,
+it creates one Entra ID app registration, and Skillable would need these details to tear it down:
 
 | | |
 |---|---|
-| Created by | The learner, with the Azure CLI, during Lab 2 |
+| Created by | The learner, with the Azure CLI |
 | Name | `prel35-agents-api-<learner resource group name>`, single tenant |
 | Exposes | One delegated scope, `api://<app id>/access_as_user`, pre-authorised for the Azure CLI |
 | Permission | Delegated `user_impersonation` on Azure Machine Learning Services (`18a66f5f-dbdf-4c17-9dd7-1634712a9cbe`), which is the resource Foundry accepts tokens for |

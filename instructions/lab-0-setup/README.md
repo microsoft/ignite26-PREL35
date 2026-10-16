@@ -84,7 +84,16 @@ each agent in Foundry:
 uv run scripts/create_agents.py
 ```
 
-You see `reviewer version 1 (gpt-5-mini)` and `triage version 1 (gpt-5-mini)`. In Lab 1 you change an agent and publish version 2 the same way.
+You see three agents:
+
+```text
+reviewer version 1 (gpt-5-mini)
+triage version 1 (gpt-5-mini)
+triage-lite version 1 (gpt-5-nano)
+```
+
+`triage-lite` has the same instructions as triage on a smaller model; you use it in Lab 4. In Lab 1 you change an
+agent and publish version 2 the same way.
 
 ### 3. Tour the landing zone (5 min)
 

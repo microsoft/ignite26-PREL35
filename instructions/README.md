@@ -1,9 +1,10 @@
 # Attendee instructions
 
-Work through the labs in order.
+Start with the introduction, then work through the labs in order.
 
-| Lab | Folder |
+| Part | Folder |
 | --- | --- |
+| Introduction and agenda | [introduction.md](introduction.md) |
 | Lab 0 - Setup | [lab-0-setup](lab-0-setup/README.md) |
 | Lab 1 - AgentOps | [lab-1-agentops](lab-1-agentops/README.md) |
 | Lab 2 - Security and trust | [lab-2-security-and-trust](lab-2-security-and-trust/README.md) |

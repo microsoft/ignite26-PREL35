@@ -1,6 +1,6 @@
 """Build the Skillable instructions file from the lab READMEs.
 
-Skillable reads one Markdown file per lab profile. This joins the labs in order, one Skillable page each,
+Skillable reads one Markdown file per lab profile. This joins the introduction and the labs in order, one Skillable page each,
 turns repository links into plain text (learners have the repository on the VM, not on GitHub) and swaps the
 placeholders for Skillable replacement tokens. Run it after changing any lab README, and commit the result.
 
@@ -10,7 +10,8 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-LABS = sorted((ROOT / "instructions").glob("lab-*/README.md"))
+# The introduction and agenda first, then the labs in order.
+LABS = [ROOT / "instructions" / "introduction.md", *sorted((ROOT / "instructions").glob("lab-*/README.md"))]
 OUT = ROOT / "instructions" / "skillable" / "content.md"
 
 TOKENS = {
@@ -35,4 +36,4 @@ if __name__ == "__main__":
     OUT.parent.mkdir(exist_ok=True)
     pages = [convert(lab.read_text(encoding="utf-8")) for lab in LABS]
     OUT.write_text("\n\n===\n\n".join(pages) + "\n", encoding="utf-8", newline="\n")
-    print(f"Wrote {OUT.relative_to(ROOT)} from {len(pages)} labs")
+    print(f"Wrote {OUT.relative_to(ROOT)} from {len(pages)} pages")
