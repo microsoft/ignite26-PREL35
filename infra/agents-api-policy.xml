@@ -8,11 +8,96 @@
     <validate-azure-ad-token tenant-id="{{tenant-id}}" output-token-variable-name="jwt">
       <audiences>
         <audience>https://ai.azure.com</audience>
+        <!-- On-Behalf-Of (Lab 2): tokens issued for the gateway's own app registration -->
+        <audience>api://{{obo-client-id}}</audience>
+        <audience>{{obo-client-id}}</audience>
       </audiences>
     </validate-azure-ad-token>
     <rate-limit-by-key calls="120" renewal-period="60"
                        counter-key="@(((Jwt)context.Variables[&quot;jwt&quot;]).Claims.GetValueOrDefault(&quot;oid&quot;, &quot;unknown&quot;))" />
-    <authentication-managed-identity resource="https://ai.azure.com" />
+    <!-- Prompt Shields (Lab 2): when the prompt-shields named value is "on", scan the request for injected
+         instructions before it reaches Foundry. If the scan can't run, the request is refused. -->
+    <choose>
+      <when condition="@("{{prompt-shields}}" == "on")">
+        <send-request mode="new" response-variable-name="shield" timeout="10" ignore-error="true">
+          <set-url>{{content-safety-endpoint}}contentsafety/text:shieldPrompt?api-version=2024-09-01</set-url>
+          <set-method>POST</set-method>
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/json</value>
+          </set-header>
+          <set-body>@(new JObject(
+              new JProperty("userPrompt", ""),
+              new JProperty("documents", new JArray((context.Request.Body.As<JObject>(preserveContent: true)["input"] ?? "").ToString()))
+            ).ToString())</set-body>
+          <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+        </send-request>
+        <choose>
+          <when condition="@(context.Variables["shield"] == null || ((IResponse)context.Variables["shield"]).StatusCode != 200)">
+            <return-response>
+              <set-status code="503" reason="Attack detection unavailable" />
+              <set-header name="Content-Type" exists-action="override">
+                <value>application/json</value>
+              </set-header>
+              <set-body>{"error": {"code": "prompt_shields_unavailable", "message": "The gateway could not scan this request, so it was refused."}}</set-body>
+            </return-response>
+          </when>
+          <when condition="@(((IResponse)context.Variables["shield"]).Body.As<JObject>()["documentsAnalysis"].Any(d => (bool)d["attackDetected"]))">
+            <return-response>
+              <set-status code="400" reason="Blocked by gateway" />
+              <set-header name="Content-Type" exists-action="override">
+                <value>application/json</value>
+              </set-header>
+              <set-body>{"error": {"code": "prompt_attack_detected", "message": "The gateway blocked this request: Prompt Shields detected an injected instruction."}}</set-body>
+            </return-response>
+          </when>
+        </choose>
+      </when>
+    </choose>
+    <!-- Whose identity reaches Foundry, set by the caller-identity named value.
+         "gateway": the gateway's managed identity, so every caller gets the gateway's rights.
+         "obo" (Lab 2): the caller's token is exchanged for one that acts on behalf of the caller,
+         so Foundry applies that person's own permissions. -->
+    <choose>
+      <when condition="@("{{caller-identity}}" == "obo")">
+        <send-request mode="new" response-variable-name="obo" timeout="10" ignore-error="true">
+          <set-url>https://login.microsoftonline.com/{{tenant-id}}/oauth2/v2.0/token</set-url>
+          <set-method>POST</set-method>
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/x-www-form-urlencoded</value>
+          </set-header>
+          <set-body>@("grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&requested_token_use=on_behalf_of"
+              + "&scope=" + System.Net.WebUtility.UrlEncode("https://ml.azure.com/.default")
+              + "&client_id={{obo-client-id}}"
+              + "&client_secret=" + System.Net.WebUtility.UrlEncode("{{obo-client-secret}}")
+              + "&assertion=" + context.Request.Headers.GetValueOrDefault("Authorization", "").Replace("Bearer ", ""))</set-body>
+        </send-request>
+        <choose>
+          <when condition="@(context.Variables["obo"] == null || ((IResponse)context.Variables["obo"]).StatusCode != 200)">
+            <return-response>
+              <set-status code="401" reason="On-Behalf-Of failed" />
+              <set-header name="Content-Type" exists-action="override">
+                <value>application/json</value>
+              </set-header>
+              <set-body>@(new JObject(new JProperty("error", new JObject(
+                  new JProperty("code", "on_behalf_of_failed"),
+                  new JProperty("message", context.Variables["obo"] == null
+                      ? "The gateway could not reach Entra ID."
+                      : (string)((IResponse)context.Variables["obo"]).Body.As<JObject>()["error_description"])))).ToString())</set-body>
+            </return-response>
+          </when>
+          <otherwise>
+            <set-header name="Authorization" exists-action="override">
+              <value>@("Bearer " + (string)((IResponse)context.Variables["obo"]).Body.As<JObject>()["access_token"])</value>
+            </set-header>
+            <set-variable name="foundryCaller" value="@("on behalf of " + ((Jwt)context.Variables["jwt"]).Claims.GetValueOrDefault("name", "the caller"))" />
+          </otherwise>
+        </choose>
+      </when>
+      <otherwise>
+        <authentication-managed-identity resource="https://ai.azure.com" />
+        <set-variable name="foundryCaller" value="gateway managed identity" />
+      </otherwise>
+    </choose>
     <set-backend-service backend-id="foundry-project" />
     <rewrite-uri template="@(&quot;/agents/&quot; + context.Operation.Id + &quot;/endpoint/protocols/openai/responses&quot;)" copy-unmatched-params="false" />
     <set-query-parameter name="api-version" exists-action="override">
@@ -24,6 +109,10 @@
   </backend>
   <outbound>
     <base />
+    <!-- Shows which identity Foundry saw. -->
+    <set-header name="x-foundry-caller" exists-action="override">
+      <value>@((string)context.Variables["foundryCaller"])</value>
+    </set-header>
   </outbound>
   <on-error>
     <base />

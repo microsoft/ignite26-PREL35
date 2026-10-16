@@ -58,8 +58,9 @@ It runs all 14 golden alerts through triage and reviewer, through the gateway, a
 You look at that in step 6.
 
 You see `Release gate: PASS` and a score for each metric. Open the Evidence Pack folder it names, and open
-`report.md`. One alert, ALT-1006, is usually wrong: triage asks for more information where the expected outcome is
-to close. The gate still passes, because 13 of 14 is above the 85% that the accuracy owner requires.
+`report.md`: each metric against its threshold, and the outcome for each alert. Often all 14 are right. When one is
+wrong it's usually ALT-1006, where triage asks for more information instead of closing, and the gate still passes:
+13 of 14 is above the 85% that the accuracy owner requires.
 
 > Your scores can differ slightly from run to run. That's why the thresholds leave room on accuracy, and none on
 > missed escalations.
@@ -160,9 +161,23 @@ job, so the change can't be merged or released.
 
 ### If you have time
 
-ALT-1006 is a sanctions name match where the date of birth doesn't match, so it should be closed. Edit
-[src/agents/triage.md](../../src/agents/triage.md) to get it right, publish, and run the gate. Did you fix it
-without breaking another alert?
+Make the smaller model good enough. Open the `report.md` of the `gpt-5-nano` run from step 4 and pick an alert it
+got wrong. If it got all of them right, take ALT-1006: a sanctions name match where the date of birth doesn't
+match, so it should be closed. Edit [src/agents/triage.md](../../src/agents/triage.md), then publish on
+`gpt-5-nano` and run the gate:
+
+```powershell
+uv run scripts/create_agents.py gpt-5-nano
+uv run src/evaluate.py
+```
+
+Did you fix it without breaking another alert? Run the gate twice: one correct run can be luck. When you're done,
+restore the prompt and the approved model, as Lab 2 starts from them:
+
+```powershell
+git checkout src/agents/triage.md
+uv run scripts/create_agents.py
+```
 
 ## Next
 

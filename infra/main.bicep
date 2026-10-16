@@ -115,11 +115,22 @@ resource apim 'Microsoft.ApiManagement/service@2024-05-01' = {
   }
 }
 
-resource tenantIdValue 'Microsoft.ApiManagement/service/namedValues@2024-05-01' = {
+var namedValues = [
+  { name: 'tenant-id', value: tenant().tenantId }
+  { name: 'content-safety-endpoint', value: 'https://${foundry.name}.cognitiveservices.azure.com/' }
+  { name: 'prompt-shields', value: 'off' } // Lab 2: learners switch this to "on"
+  { name: 'caller-identity', value: 'gateway' } // Lab 2: learners switch this to "obo"
+  // Lab 2: scripts/setup_obo.ps1 replaces these with the app registration it creates.
+  { name: 'obo-client-id', value: '00000000-0000-0000-0000-000000000000' }
+  { name: 'obo-client-secret', value: 'not-set' }
+]
+
+@batchSize(1)
+resource apimNamedValues 'Microsoft.ApiManagement/service/namedValues@2024-05-01' = [for nv in namedValues: {
   parent: apim
-  name: 'tenant-id'
-  properties: { displayName: 'tenant-id', value: tenant().tenantId }
-}
+  name: nv.name
+  properties: { displayName: nv.name, value: nv.value }
+}]
 
 resource projectBackend 'Microsoft.ApiManagement/service/backends@2024-05-01' = {
   parent: apim
@@ -159,7 +170,7 @@ resource agentsApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2024-05-
     format: 'rawxml'
     value: loadTextContent('agents-api-policy.xml')
   }
-  dependsOn: [tenantIdValue, projectBackend]
+  dependsOn: [apimNamedValues, projectBackend]
 }
 
 // ---------------------------------------------------------------- roles
@@ -188,4 +199,6 @@ resource foundryUserAssignments 'Microsoft.Authorization/roleAssignments@2022-04
 output FOUNDRY_PROJECT_ENDPOINT string = 'https://${foundry.name}.services.ai.azure.com/api/projects/${project.name}'
 output MODEL_DEPLOYMENT string = deployments[0].name
 output APIM_GATEWAY_URL string = apim.properties.gatewayUrl
+output APIM_NAME string = apim.name
+output AZURE_RESOURCE_GROUP string = resourceGroup().name
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = appInsights.properties.ConnectionString

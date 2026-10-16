@@ -8,3 +8,7 @@ foreach ($account in Get-AzCognitiveServicesAccount -ResourceGroupName $resource
     Remove-AzCognitiveServicesAccount -ResourceGroupName $resourceGroup -Name $account.AccountName -Force
     Remove-AzCognitiveServicesAccount -ResourceGroupName $resourceGroup -Name $account.AccountName -Location $account.Location -InRemovedState -Force
 }
+
+# Lab 2 creates an app registration for On-Behalf-Of (scripts/setup_obo.ps1). Deleting it removes its secret,
+# service principal and consent too.
+Get-AzADApplication -DisplayName "prel35-agents-api-$resourceGroup" | Remove-AzADApplication

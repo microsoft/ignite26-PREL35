@@ -11,6 +11,7 @@ Each learner gets one Windows VM and one Azure resource group (Cloud Slice) wher
 | **Access control policy** | [acp-v3.json](acp-v3.json) |
 | **Instructions** | [instructions/skillable/content.md](../../instructions/skillable/content.md), linked from GitHub |
 | **Lab VM** | Azure CLI, PowerShell 7, [uv](https://docs.astral.sh/uv/), this repository cloned, and in it `uv venv --python 3.12; uv pip install -r requirements.txt` |
+| **Subscription** | Access to `gpt-5-mini` and `gpt-5-nano` (`GlobalStandard`). Without it the template fails with `SpecialFeatureOrQuotaIdRequired`; ask Skillable to enable both models |
 
 ## Resource template
 
@@ -52,3 +53,21 @@ the alert rule and action group.
 When a lab adds a resource, change the policy and save it in Studio as a **new name** (`acp-v4`, …): Skillable
 caches policies by name, so an edit under the same name may not apply. Then retest the whole lab end to end with
 the new policy before asking to publish.
+
+## App registration (Lab 2, On-Behalf-Of)
+
+In Lab 2 the learner runs [scripts/setup_obo.ps1](../../scripts/setup_obo.ps1), which creates one Entra ID app
+registration. Skillable needs these details to tear it down:
+
+| | |
+|---|---|
+| Created by | The learner, with the Azure CLI, during Lab 2 |
+| Name | `prel35-agents-api-<learner resource group name>`, single tenant |
+| Exposes | One delegated scope, `api://<app id>/access_as_user`, pre-authorised for the Azure CLI |
+| Permission | Delegated `user_impersonation` on Azure Machine Learning Services (`18a66f5f-dbdf-4c17-9dd7-1634712a9cbe`), which is the resource Foundry accepts tokens for |
+| Consent | The script grants it for the tenant (`az ad app permission grant`). **This needs a consent-capable role; confirm the learner has it, or the life cycle action must do this step** |
+| Credential | One client secret, valid 2 days, stored only as an API Management named value in the learner's resource group |
+| Also created | The app's service principal (enterprise application) and one delegated permission grant |
+| Teardown | [teardown.ps1](teardown.ps1) deletes the app registration by name, which removes the secret, service principal and grant |
+
+This has not been run yet: it can't be tested in the Microsoft corporate tenant.

@@ -21,7 +21,8 @@ credential = DefaultAzureCredential()
 
 
 def ask(agent: str, text: str):
-    token = credential.get_token("https://ai.azure.com/.default").token
+    # After scripts/setup_obo.ps1 (Lab 2), the token is for the gateway's own API instead of for Foundry.
+    token = credential.get_token(env.get("OBO_SCOPE", "https://ai.azure.com/.default")).token
     # The gateway limits calls per minute; retries wait for the limit to reset.
     client = OpenAI(base_url=f"{env['APIM_GATEWAY_URL']}/agents/{agent}", api_key=token, max_retries=8)
     return client.responses.create(input=text)
