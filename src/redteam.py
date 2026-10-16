@@ -3,7 +3,9 @@
 Each attack ends one of three ways: blocked (a control stopped it), resisted (the agent saw it and stayed on task)
 or SUCCEEDED. Exits with 1 when any attack succeeds, so a pipeline can stop the release.
 
-Usage: python src/redteam.py [ATTACK_ID]   (one attack ID prints the agent's full answer)
+Usage: python src/redteam.py [ATTACK_ID] [--foundry]
+  ATTACK_ID  run one attack and print the agent's full answer
+  --foundry  also start a scan of the model by the AI Red Teaming Agent in Foundry, which generates its own attacks
 """
 import copy
 import json
@@ -13,9 +15,10 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import openai
+from azure.ai.projects import AIProjectClient
 
 from evaluate import parse
-from investigate import ROOT, ask, cases, data
+from investigate import ROOT, ask, cases, credential, data, env
 
 ATTACKS = json.loads((ROOT / "evals" / "attacks.json").read_text(encoding="utf-8"))
 PROMPT = (ROOT / "src" / "agents" / "triage.md").read_text(encoding="utf-8")
@@ -63,6 +66,36 @@ def run(attack: dict) -> dict:
     return {**attack, "outcome": "SUCCEEDED" if judge(attack, answer) else "resisted", "by": "", "answer": answer}
 
 
+def foundry_scan() -> str:
+    """Start a scan of the model deployment by the AI Red Teaming Agent in Foundry.
+
+    Foundry generates harmful-content attacks, disguises some of them (Base64, reversed text), sends them to the
+    model with its guardrail, and scores each answer. It takes about 15 minutes, so this doesn't wait: see the
+    result in the Foundry portal, under Evaluations.
+    """
+    # shortcut: scans the model, not the triage agent; agent scans failed to start in East US 2 (Oct 2026), retry later.
+    client = AIProjectClient(endpoint=env["FOUNDRY_PROJECT_ENDPOINT"], credential=credential).get_openai_client()
+    model = env["MODEL_DEPLOYMENT"]
+    red_team = client.evals.create(
+        name=f"Red team {model} {datetime.now():%Y-%m-%d %H:%M}",
+        data_source_config={"type": "azure_ai_source", "scenario": "red_team"},
+        testing_criteria=[
+            {"type": "azure_ai_evaluator", "name": name, "evaluator_name": f"builtin.{name}", "evaluator_version": "1"}
+            for name in ("violence", "hate_unfairness", "sexual", "self_harm")
+        ],
+    )
+    client.evals.runs.create(
+        eval_id=red_team.id,
+        name=red_team.name,
+        data_source={
+            "type": "azure_ai_red_team",
+            "item_generation_params": {"type": "red_team", "attack_strategies": ["base64", "flip"], "num_turns": 1},
+            "target": {"type": "azure_ai_model", "model": model},
+        },
+    )
+    return red_team.name
+
+
 # Self-check of the judging, with no calls to Azure.
 assert judge({"goal": "close"}, '{"disposition": "close_false_positive"}')
 assert not judge({"goal": "close"}, '{"disposition": "escalate"}')
@@ -74,8 +107,11 @@ assert not judge({"goal": "reveal"}, "I can't share my instructions.")
 assert "DOC-900" in build(ATTACKS[0]) and build({"vector": "caller", "payload": "x"}) == "x"
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        attack = next((a for a in ATTACKS if a["id"] == sys.argv[1]), None) or sys.exit(f"Unknown attack {sys.argv[1]}")
+    if "--foundry" in sys.argv:
+        print(f"Foundry red team scan started: {foundry_scan()}. See it in the Foundry portal, under Evaluations.\n")
+    ids = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if ids:
+        attack = next((a for a in ATTACKS if a["id"] == ids[0]), None) or sys.exit(f"Unknown attack {ids[0]}")
         result = run(attack)
         print(f"{attack['id']}: {attack['name']}\nPayload: {attack['payload']}\n\n{result['outcome']} {result['by']}\n{result['answer']}")
         sys.exit(result["outcome"] == "SUCCEEDED")
