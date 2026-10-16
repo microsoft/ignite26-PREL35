@@ -13,7 +13,8 @@
                 "microsoft.insights/actiongroups",
                 "Microsoft.CognitiveServices/accounts/projects",
                 "Microsoft.CognitiveServices/accounts/projects/connections",
-                "Microsoft.Authorization/roleAssignments"
+                "Microsoft.Authorization/roleAssignments",
+                "Microsoft.Authorization/policyAssignments"
               ]
             },
             {

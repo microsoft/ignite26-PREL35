@@ -102,6 +102,22 @@ resource deployments 'Microsoft.CognitiveServices/accounts/deployments@2025-06-0
   dependsOn: [project, appInsightsConnection]
 }]
 
+// Lab 3: the models the bank has approved. Any other model deployment in this resource group is denied.
+resource approvedModels 'Microsoft.Authorization/policyAssignments@2024-04-01' = {
+  name: 'approved-ai-models'
+  properties: {
+    displayName: 'Only approved AI models can be deployed'
+    description: 'Lab 3: the bank approves gpt-5-mini and gpt-5-nano. Deployments of any other model are denied.'
+    // Built-in: Foundry model deployments should only use approved models
+    policyDefinitionId: tenantResourceId('Microsoft.Authorization/policyDefinitions', 'aafe3651-cb78-4f68-9f81-e7e41509110f')
+    parameters: {
+      effect: { value: 'Deny' }
+      allowedAssetIds: { value: [for m in models: 'azureml://registries/azure-openai/models/${m.name}/'] }
+    }
+  }
+  dependsOn: [deployments] // assigned after the approved deployments exist
+}
+
 // ---------------------------------------------------------------- API Management: the only way in for apps
 resource apim 'Microsoft.ApiManagement/service@2024-05-01' = {
   name: 'apim-${token}'

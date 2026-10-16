@@ -2,6 +2,8 @@
 
 Usage: python src/investigate.py [ALERT_ID]
 """
+import copy
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -15,6 +17,32 @@ if not (ROOT / ".env").exists():
 env = dict(line.split("=", 1) for line in (ROOT / ".env").read_text(encoding="utf-8-sig").splitlines() if "=" in line)
 data = json.loads((ROOT / "data" / "cases.json").read_text(encoding="utf-8"))
 cases = {c["alert"]["id"]: c for c in data["cases"]}
+DATA_POLICY = ROOT / "governance" / "data-policy.json"
+
+
+def data_policy() -> dict:
+    return json.loads(DATA_POLICY.read_text(encoding="utf-8"))
+
+
+def policy_hash() -> str:
+    """Evidence records the data policy it was produced under, so a policy change invalidates it."""
+    return hashlib.sha256(DATA_POLICY.read_bytes()).hexdigest()
+
+
+def case_file(case: dict, agent: str) -> str:
+    """What an agent receives: the case and the screening lists, minus the fields the data policy withholds from it."""
+    content = copy.deepcopy({**case, "screening_lists": data["screening_lists"]})
+    policy = data_policy()
+    for path, rule in policy["fields"].items() if policy["enforce"] else []:
+        if agent in rule["agents"]:
+            continue
+        *parents, key = path.split(".")
+        node = content
+        for parent in parents:
+            node = node.get(parent) or {}
+        if key in node:
+            node[key] = f"[withheld: {rule['class']}]"
+    return json.dumps(content)
 
 # Your own Entra ID token: the gateway checks it, then calls Foundry with its managed identity.
 credential = DefaultAzureCredential()
@@ -30,9 +58,8 @@ def ask(agent: str, text: str):
 
 def investigate(alert_id: str) -> dict:
     """Returns the triage and reviewer answers as text, plus the tokens the two calls used."""
-    case_file = json.dumps({**cases[alert_id], "screening_lists": data["screening_lists"]})
-    triage = ask("triage", case_file)
-    review = ask("reviewer", f"Case file:\n{case_file}\n\nTriage recommendation:\n{triage.output_text}")
+    triage = ask("triage", case_file(cases[alert_id], "triage"))
+    review = ask("reviewer", f"Case file:\n{case_file(cases[alert_id], 'reviewer')}\n\nTriage recommendation:\n{triage.output_text}")
     return {
         "triage": triage.output_text,
         "review": review.output_text,

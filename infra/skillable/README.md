@@ -8,7 +8,7 @@ Each learner gets one Windows VM and one Azure resource group (Cloud Slice) wher
 | **Resource template** on the resource group | [infra/main.bicep](../main.bicep), compiled to ARM JSON (below). No parameters needed |
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, after the template deploys, blocking | [assign-learner.ps1](assign-learner.ps1): gives the learner **Foundry User** on their resource group |
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, on Tearing Down, blocking | [teardown.ps1](teardown.ps1): deletes and purges the Foundry account, which Skillable requires for `Microsoft.CognitiveServices/accounts` |
-| **Access control policy** | [acp-v3.json](acp-v3.json) |
+| **Access control policy** | [acp-v4.json](acp-v4.json) |
 | **Instructions** | [instructions/skillable/content.md](../../instructions/skillable/content.md), linked from GitHub |
 | **Lab VM** | Azure CLI, PowerShell 7, [uv](https://docs.astral.sh/uv/), this repository cloned, and in it `uv venv --python 3.12; uv pip install -r requirements.txt` |
 | **Subscription** | Access to `gpt-5-mini` and `gpt-5-nano` (`GlobalStandard`). Without it the template fails with `SpecialFeatureOrQuotaIdRequired`; ask Skillable to enable both models |
@@ -33,7 +33,7 @@ Linking needs a GitHub account that is a full admin of the repository.
 
 ## Access control policy
 
-[acp-v3.json](acp-v3.json) denies every resource type, name, SKU and location the lab doesn't deploy, following the
+[acp-v4.json](acp-v4.json) denies every resource type, name, SKU and location the lab doesn't deploy, following the
 restrictions Skillable requires for each resource type. It allows:
 
 | Resource | Limit |
@@ -46,11 +46,12 @@ restrictions Skillable requires for each resource type. It allows:
 | Application Insights, and the smart detection alert rule and action group it creates | |
 | Template deployments (`Microsoft.Resources/deployments`) | So the learner can run the Bicep |
 | Role assignments | Made by the template and the life cycle action. The learner is Contributor, so can't make them |
+| Policy assignment `approved-ai-models` | Lab 3: made by the template. Built-in "Foundry model deployments should only use approved models", Deny, allowing `gpt-5-mini` and `gpt-5-nano`. Deleted with the resource group |
 
 Every resource must be in the learner's resource group. Locations: the resource group's region, plus `global` for
 the alert rule and action group.
 
-When a lab adds a resource, change the policy and save it in Studio as a **new name** (`acp-v4`, …): Skillable
+When a lab adds a resource, change the policy and save it in Studio as a **new name** (`acp-v5`, …): Skillable
 caches policies by name, so an edit under the same name may not apply. Then retest the whole lab end to end with
 the new policy before asking to publish.
 

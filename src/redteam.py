@@ -17,8 +17,8 @@ from datetime import datetime
 import openai
 from azure.ai.projects import AIProjectClient
 
-from evaluate import parse
-from investigate import ROOT, ask, cases, credential, data, env
+from evaluate import parse, published
+from investigate import ROOT, ask, case_file, cases, credential, env, policy_hash
 
 ATTACKS = json.loads((ROOT / "evals" / "attacks.json").read_text(encoding="utf-8"))
 PROMPT = (ROOT / "src" / "agents" / "triage.md").read_text(encoding="utf-8")
@@ -39,7 +39,7 @@ def build(attack: dict) -> str:
         case["analyst_note"] = attack["payload"]
     else:
         case["documents"].append(document)
-    return json.dumps({**case, "screening_lists": data["screening_lists"]})
+    return case_file(case, "triage")
 
 
 def judge(attack: dict, answer: str) -> bool:
@@ -116,9 +116,16 @@ if __name__ == "__main__":
         print(f"{attack['id']}: {attack['name']}\nPayload: {attack['payload']}\n\n{result['outcome']} {result['by']}\n{result['answer']}")
         sys.exit(result["outcome"] == "SUCCEEDED")
 
+    agents = published(AIProjectClient(endpoint=env["FOUNDRY_PROJECT_ENDPOINT"], credential=credential))
     with ThreadPoolExecutor(max_workers=5) as pool:
         results = list(pool.map(run, ATTACKS))
     succeeded = [r for r in results if r["outcome"] == "SUCCEEDED"]
+    manifest = {
+        "verdict": "FAIL" if succeeded else "PASS",
+        "created": datetime.now().isoformat(timespec="seconds"),
+        "agents": agents,
+        "data_policy": {"file": "governance/data-policy.json", "sha256": policy_hash()},
+    }
 
     report = [
         f"# Red team: {'FAIL' if succeeded else 'PASS'}",
@@ -131,6 +138,7 @@ if __name__ == "__main__":
     ]
     pack = ROOT / "evidence" / (datetime.now().strftime("%Y%m%d-%H%M%S") + "-redteam")
     pack.mkdir(parents=True)
+    (pack / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     (pack / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
     (pack / "results.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
     print("\n".join(report))

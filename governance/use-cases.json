@@ -1,0 +1,11 @@
+[
+  {
+    "id": "UC-001",
+    "name": "Transaction monitoring alert triage",
+    "owner": "Head of Financial Crime Operations",
+    "risk_tier": "high",
+    "agents": ["triage", "reviewer"],
+    "decision": "Agents recommend; a named analyst decides every alert and the decision is recorded",
+    "approval": null
+  }
+]

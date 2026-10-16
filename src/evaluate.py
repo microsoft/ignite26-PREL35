@@ -17,7 +17,7 @@ from pathlib import Path
 
 from azure.ai.projects import AIProjectClient
 
-from investigate import ROOT, cases, credential, data, env, investigate
+from investigate import ROOT, case_file, cases, credential, data, env, investigate, policy_hash
 
 GOLDEN = ROOT / "data" / "golden.jsonl"
 THRESHOLDS = ROOT / "evals" / "thresholds.json"
@@ -77,6 +77,15 @@ def run_one(row: dict) -> dict:
     return score(row, {**result, "seconds": round(time.time() - start, 1)})
 
 
+def published(project: AIProjectClient) -> dict:
+    """The agent versions that callers get now: what an Evidence Pack must have tested."""
+    agents = {}
+    for name in ("triage", "reviewer"):
+        latest = project.agents.get(agent_name=name).versions.latest
+        agents[name] = {"version": latest.version, "model": latest.definition.model}
+    return agents
+
+
 def foundry_evaluation(project: AIProjectClient, golden: list) -> dict:
     """Start a Foundry evaluation: an AI judge scores whether triage followed its instructions.
 
@@ -101,7 +110,7 @@ def foundry_evaluation(project: AIProjectClient, golden: list) -> dict:
         }],
     )
     content = [
-        {"item": {"query": json.dumps({**cases[r["alert_id"]], "screening_lists": data["screening_lists"]})}}
+        {"item": {"query": case_file(cases[r["alert_id"]], "triage")}}
         for r in golden
     ]
     run = client.evals.runs.create(
@@ -132,10 +141,7 @@ if __name__ == "__main__":
     golden = [json.loads(line) for line in GOLDEN.read_text(encoding="utf-8").splitlines() if line.strip()]
     thresholds = json.loads(THRESHOLDS.read_text(encoding="utf-8"))
     project = AIProjectClient(endpoint=env["FOUNDRY_PROJECT_ENDPOINT"], credential=credential)
-    agents = {}
-    for name in ("triage", "reviewer"):
-        latest = project.agents.get(agent_name=name).versions.latest
-        agents[name] = {"version": latest.version, "model": latest.definition.model}
+    agents = published(project)
 
     print(f"Evaluating {len(golden)} alerts: " + ", ".join(f"{n} v{a['version']} ({a['model']})" for n, a in agents.items()))
     foundry = foundry_evaluation(project, golden) if "--foundry" in sys.argv else None
@@ -159,6 +165,7 @@ if __name__ == "__main__":
         "agents": agents,
         "dataset": {"file": "data/golden.jsonl", "alerts": len(golden), "sha256": hashlib.sha256(GOLDEN.read_bytes()).hexdigest()},
         "thresholds": {"file": "evals/thresholds.json", "sha256": hashlib.sha256(THRESHOLDS.read_bytes()).hexdigest()},
+        "data_policy": {"file": "governance/data-policy.json", "sha256": policy_hash()},
         "git_commit": commit,
         "checks": checks,
         "tokens": sum(r["tokens"] for r in rows),
