@@ -18,6 +18,7 @@ import openai
 from azure.ai.projects import AIProjectClient
 
 from evaluate import parse, published
+import investigate as platform
 from investigate import ROOT, ask, case_file, cases, credential, env, policy_hash
 
 ATTACKS = json.loads((ROOT / "evals" / "attacks.json").read_text(encoding="utf-8"))
@@ -107,6 +108,7 @@ assert not judge({"goal": "reveal"}, "I can't share my instructions.")
 assert "DOC-900" in build(ATTACKS[0]) and build({"vector": "caller", "payload": "x"}) == "x"
 
 if __name__ == "__main__":
+    platform.COST_CENTER = "security-testing"
     if "--foundry" in sys.argv:
         print(f"Foundry red team scan started: {foundry_scan()}. See it in the Foundry portal, under Evaluations.\n")
     ids = [a for a in sys.argv[1:] if not a.startswith("--")]

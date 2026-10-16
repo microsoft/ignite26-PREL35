@@ -673,29 +673,149 @@ Continue to Lab 4 - Solution Optimization.
 
 # Lab 4 - Solution Optimization
 
+**Time:** about 40 minutes
+
 **Objective:** Optimize performance, capacity, and cost.
+
+## What this lab covers
+
+The agents are approved and running. Now someone asks what they cost, who is paying, and whether it could be
+cheaper without being worse. In this lab you answer with numbers: the cost of every release-gate run, a cheaper
+model for part of the work and what it does to quality, a limit on what any caller can consume, and the bill split
+by the teams that ran up the tokens.
+
+| Piece | What it is |
+|---|---|
+| **Prices** | evals/prices.json: the price per million tokens of each model, including cached input |
+| **Model routing** | A gateway switch that sends low-risk alerts to `triage-lite`: the triage instructions on `gpt-5-nano` |
+| **Token limit** | A gateway policy that caps the tokens each caller can use per minute |
+| **Cost attribution** | The gateway records the tokens of every call by cost center, caller and agent, in Application Insights |
 
 ## Topics
 
 ### Covered in this lab
 
 - **Model selection and routing:** route requests across models and compare cost against quality.
-- **Gateway policies and semantic caching:** token limits and semantic caching as gateway policies.
-- **Chargeback and financial analytics:** attribute token usage to teams and view cost.
+- **Gateway policies:** token limits per caller as a gateway policy.
+- **FinOps and cost attribution:** cost per run and per alert, and token cost attributed to cost centers and callers.
 
 ### Consider when moving to production
 
+- **Semantic caching:** the gateway answers a request from a cache when a similar one was answered before. It needs an embeddings model and a Redis cache, and pays off when requests repeat. Every case file here is different, so it would rarely hit.
 - **PTU and capacity planning:** size provisioned throughput (PTU) against measured demand. Not available in this lab environment.
-- **Prompt and KV caching:** reduce repeated-prefix cost and latency at the model layer.
+- **Budgets and alerts:** Azure Cost Management budgets per subscription or resource group, and alerts on the token metrics before a team overspends.
 - **Cost optimization:** the wider set of levers, from model choice to batching and quotas.
 
 ## Prerequisites
 
-- _TBD_
+Lab 3 completed.
 
 ## Steps
 
-1. _TBD_
+### 1. What a release costs (5 min)
+
+Run the release gate:
+
+```powershell
+uv run src/evaluate.py
+```
+
+Under the scores you see the cost of the run and the cost per alert: about 3 cents for 14 alerts. Open the
+`report.md` it names: the last column shows which model triaged each alert, and the last line the total.
+
+The cost comes from the tokens each call used and evals/prices.json. Output tokens cost
+eight times as much as input tokens, and input the model saw recently, such as the same instructions and screening
+lists, is cached and costs a tenth. Prompt caching happens on its own; nothing in this lab sets it up.
+
+### 2. Route low-risk alerts to a smaller model (12 min)
+
+`gpt-5-nano` costs a fifth of `gpt-5-mini`. The gateway can send alerts with a low risk score to `triage-lite`, which
+has the same instructions on the smaller model. Turn it on, wait a minute, and run the gate:
+
+```powershell
+.\scripts\set_gateway.ps1 model-routing on
+uv run src/evaluate.py
+```
+
+Compare the result with step 1:
+
+- **Cost:** about a tenth lower. Only the four alerts scored 65 or less go to `triage-lite`, and the reviewer still
+  runs on `gpt-5-mini` for every alert.
+- **Quality:** the blocking metrics usually still pass, sometimes right at the threshold, when the smaller model gets
+  one of its four alerts wrong. Look at the alerts on `gpt-5-nano` in the report: they include ALT-1005, a sanctions
+  hit. A risk score measures how unusual the activity is, not how serious a mistake would be.
+- **Reviewer agreement:** usually lower. The reviewer disagrees more often with the smaller model's reasons, and
+  every disagreement is work for an analyst, which costs far more than the tokens saved.
+
+The gate turns "is the cheaper model good enough?" into numbers anyone can check. Turn routing off again:
+
+```powershell
+.\scripts\set_gateway.ps1 model-routing off
+```
+
+### 3. Limit tokens per caller (8 min)
+
+A single runaway script can use the capacity every team shares. The gateway limits the tokens each caller can use
+per minute; the default is high. Set it below what one alert needs:
+
+```powershell
+.\scripts\set_gateway.ps1 token-limit 3000
+```
+
+Wait a minute, then run one alert with the client's retries shown:
+
+```powershell
+$env:OPENAI_LOG = 'info'
+uv run src/investigate.py ALT-1001
+Remove-Item Env:OPENAI_LOG
+```
+
+The triage call uses most of the 3,000 tokens. The reviewer call gets HTTP 429 from the gateway, with a
+`Retry-After` header, and the client waits and retries until the minute resets. The work still finishes, slowly:
+the limit protects everyone else's capacity, not the caller's deadline. Restore the default:
+
+```powershell
+.\scripts\set_gateway.ps1 token-limit 200000
+```
+
+### 4. Attribute the cost (12 min)
+
+Every call through the gateway carries a cost center (`x-cost-center`): the release gate charges model validation,
+the red team security testing, and an analyst's investigation financial crime operations. The gateway records the
+tokens of each call by cost center, caller and agent.
+
+In the [Azure portal](https://portal.azure.com), open the Application Insights resource (`appi-…`) in your resource
+group, select **Logs**, and run:
+
+```kusto
+let prices = datatable(Agent: string, input: real, cached: real, output: real) [
+    "triage", 0.25, 0.025, 2.0,
+    "reviewer", 0.25, 0.025, 2.0,
+    "triage-lite", 0.05, 0.005, 0.4
+];
+customMetrics
+| where name in ("Prompt Tokens", "Prompt Cached Tokens", "Completion Tokens")
+| extend CostCenter = tostring(customDimensions["Cost center"]), Agent = tostring(customDimensions["Agent"])
+| summarize tokens = sum(valueSum) by CostCenter, Agent, name
+| evaluate pivot(name, sum(tokens))
+| lookup prices on Agent
+| extend usd = ((['Prompt Tokens'] - ['Prompt Cached Tokens']) * input + ['Prompt Cached Tokens'] * cached + ['Completion Tokens'] * output) / 1000000
+| summarize tokens = sum(['Prompt Tokens'] + ['Completion Tokens']), usd = round(sum(usd), 4) by CostCenter
+| order by usd desc
+```
+
+Model validation is most of the bill: you ran the gate more often today than anyone triaged an alert. Then change
+`by CostCenter` to `by tostring(customDimensions["Caller"])` to see the cost per person.
+
+A call that sends no cost center is recorded as `unassigned`: it still counts, but nobody can be charged for it. The
+lab's scripts always send one. In production, the gateway would refuse calls without one, or derive it from the
+caller's identity, because a header alone is whatever the caller says it is.
+
+### 5. Wrap up (3 min)
+
+You can now answer the three questions a FinOps review asks about an AI workload: what each unit of work costs (per
+alert, from the gate), who consumed it (per cost center and caller, from the gateway), and what a cheaper option
+would do to quality (from the gate, with routing on).
 
 ## Next
 

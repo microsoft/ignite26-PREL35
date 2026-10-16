@@ -15,6 +15,29 @@
     </validate-azure-ad-token>
     <rate-limit-by-key calls="120" renewal-period="60"
                        counter-key="@(((Jwt)context.Variables[&quot;jwt&quot;]).Claims.GetValueOrDefault(&quot;oid&quot;, &quot;unknown&quot;))" />
+    <!-- Token limit (Lab 4): tokens per minute for each caller, set by the token-limit named value. -->
+    <llm-token-limit counter-key="@(((Jwt)context.Variables[&quot;jwt&quot;]).Claims.GetValueOrDefault(&quot;oid&quot;, &quot;unknown&quot;))"
+                     tokens-per-minute="{{token-limit}}" estimate-prompt-tokens="false"
+                     remaining-tokens-header-name="x-remaining-tokens" />
+    <!-- Model routing (Lab 4): when model-routing is "on", alerts with a risk score up to routing-max-score go to
+         triage-lite, the same instructions on a smaller model. -->
+    <set-variable name="agent" value="@(context.Operation.Id)" />
+    <choose>
+      <when condition="@(&quot;{{model-routing}}&quot; == &quot;on&quot; &amp;&amp; context.Operation.Id == &quot;triage&quot;)">
+        <set-variable name="agent" value="@{
+            try {
+                var input = JObject.Parse((string)context.Request.Body.As<JObject>(preserveContent: true)[&quot;input&quot;]);
+                return (int)input[&quot;alert&quot;][&quot;score&quot;] <= int.Parse(&quot;{{routing-max-score}}&quot;) ? &quot;triage-lite&quot; : &quot;triage&quot;;
+            } catch { return &quot;triage&quot;; }
+        }" />
+      </when>
+    </choose>
+    <!-- Cost attribution (Lab 4): token use per cost center, caller and agent, sent to Application Insights. -->
+    <llm-emit-token-metric namespace="fincrime">
+      <dimension name="Cost center" value="@(context.Request.Headers.GetValueOrDefault(&quot;x-cost-center&quot;, &quot;unassigned&quot;))" />
+      <dimension name="Caller" value="@(((Jwt)context.Variables[&quot;jwt&quot;]).Claims.GetValueOrDefault(&quot;upn&quot;, ((Jwt)context.Variables[&quot;jwt&quot;]).Claims.GetValueOrDefault(&quot;unique_name&quot;, ((Jwt)context.Variables[&quot;jwt&quot;]).Claims.GetValueOrDefault(&quot;appid&quot;, &quot;unknown&quot;))))" />
+      <dimension name="Agent" value="@((string)context.Variables[&quot;agent&quot;])" />
+    </llm-emit-token-metric>
     <!-- Prompt Shields (Lab 2): when the prompt-shields named value is "on", scan the request for injected
          instructions before it reaches Foundry. If the scan can't run, the request is refused. -->
     <choose>
@@ -99,7 +122,7 @@
       </otherwise>
     </choose>
     <set-backend-service backend-id="foundry-project" />
-    <rewrite-uri template="@(&quot;/agents/&quot; + context.Operation.Id + &quot;/endpoint/protocols/openai/responses&quot;)" copy-unmatched-params="false" />
+    <rewrite-uri template="@(&quot;/agents/&quot; + (string)context.Variables[&quot;agent&quot;] + &quot;/endpoint/protocols/openai/responses&quot;)" copy-unmatched-params="false" />
     <set-query-parameter name="api-version" exists-action="override">
       <value>v1</value>
     </set-query-parameter>
@@ -109,7 +132,10 @@
   </backend>
   <outbound>
     <base />
-    <!-- Shows which identity Foundry saw. -->
+    <!-- Shows which agent answered and which identity Foundry saw. -->
+    <set-header name="x-agent" exists-action="override">
+      <value>@((string)context.Variables["agent"])</value>
+    </set-header>
     <set-header name="x-foundry-caller" exists-action="override">
       <value>@((string)context.Variables["foundryCaller"])</value>
     </set-header>

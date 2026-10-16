@@ -17,6 +17,7 @@ from pathlib import Path
 
 from azure.ai.projects import AIProjectClient
 
+import investigate as platform
 from investigate import ROOT, case_file, cases, credential, data, env, investigate, policy_hash
 
 GOLDEN = ROOT / "data" / "golden.jsonl"
@@ -55,6 +56,8 @@ def score(row: dict, result: dict) -> dict:
         "cited": bool(cited),
         "reviewer": review.get("verdict"),
         "tokens": result["tokens"],
+        "cost": result.get("cost", 0.0),
+        "model": result.get("triage_model"),
         "seconds": result["seconds"],
         "triage": result["triage"],
         "review": result["review"],
@@ -80,7 +83,7 @@ def run_one(row: dict) -> dict:
 def published(project: AIProjectClient) -> dict:
     """The agent versions that callers get now: what an Evidence Pack must have tested."""
     agents = {}
-    for name in ("triage", "reviewer"):
+    for name in ("triage", "reviewer", "triage-lite"):
         latest = project.agents.get(agent_name=name).versions.latest
         agents[name] = {"version": latest.version, "model": latest.definition.model}
     return agents
@@ -138,6 +141,7 @@ assert not score(_row, _bad)["correct"] and score(_row, _bad)["invalid_citations
 assert metrics([score(_row, _good), score(_row, _bad)])["escalation_recall"] == 0.5
 
 if __name__ == "__main__":
+    platform.COST_CENTER = "model-validation"  # the release gate's tokens are charged to model validation
     golden = [json.loads(line) for line in GOLDEN.read_text(encoding="utf-8").splitlines() if line.strip()]
     thresholds = json.loads(THRESHOLDS.read_text(encoding="utf-8"))
     project = AIProjectClient(endpoint=env["FOUNDRY_PROJECT_ENDPOINT"], credential=credential)
@@ -169,6 +173,7 @@ if __name__ == "__main__":
         "git_commit": commit,
         "checks": checks,
         "tokens": sum(r["tokens"] for r in rows),
+        "cost_usd": round(sum(r["cost"] for r in rows), 4),
         "foundry_evaluation": foundry,
     }
     (pack / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -183,16 +188,17 @@ if __name__ == "__main__":
         "|---|---|---|---|---|---|",
         *[f"| {c['metric']} | {c['value']} | >= {c['min']} | {'yes' if c['blocking'] else 'no'} | {'PASS' if c['passed'] else 'FAIL'} | {c['owner']} |" for c in checks],
         "",
-        "| Alert | Expected | Recommended | Reviewer | Invalid citations |",
-        "|---|---|---|---|---|",
-        *[f"| {r['alert_id']} | {r['expected']} | {r['disposition']}{'' if r['correct'] else ' ✗'} | {r['reviewer']} | {', '.join(r['invalid_citations']) or '-'} |" for r in rows],
+        "| Alert | Expected | Recommended | Reviewer | Invalid citations | Triage model |",
+        "|---|---|---|---|---|---|",
+        *[f"| {r['alert_id']} | {r['expected']} | {r['disposition']}{'' if r['correct'] else ' ✗'} | {r['reviewer']} | {', '.join(r['invalid_citations']) or '-'} | {r['model']} |" for r in rows],
         "",
-        f"Tokens used: {manifest['tokens']}",
+        f"Tokens used: {manifest['tokens']}. Cost: ${manifest['cost_usd']:.4f}, ${manifest['cost_usd'] / len(rows):.4f} per alert.",
         *([f"Foundry evaluation (AI judge): {foundry['evaluation']}, run {foundry['run']}"] if foundry else []),
     ]
     (pack / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
 
     print("\n".join(report[:4 + 2 + len(checks)]))
+    print(f"\nCost: ${manifest['cost_usd']:.4f}, ${manifest['cost_usd'] / len(rows):.4f} per alert ({manifest['tokens']} tokens)")
     print(f"\nEvidence Pack: {pack.relative_to(ROOT)}")
     if foundry:
         print(f"Foundry evaluation started: {foundry['run']}. See it in the Foundry portal, under Evaluations.")

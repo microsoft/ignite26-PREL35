@@ -1,0 +1,9 @@
+{
+  "currency": "USD",
+  "unit": "per 1M tokens",
+  "source": "Azure OpenAI Global Standard list prices, October 2026. Check the Azure pricing page before relying on them.",
+  "models": {
+    "gpt-5-mini": { "input": 0.25, "cached_input": 0.025, "output": 2.0 },
+    "gpt-5-nano": { "input": 0.05, "cached_input": 0.005, "output": 0.4 }
+  }
+}

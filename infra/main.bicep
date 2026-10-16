@@ -11,8 +11,8 @@ param learnerPrincipalId string = ''
 @description('Object ID of the identity that runs scripts/create_agents.py. Empty to skip.')
 param operatorPrincipalId string = ''
 
-@description('Agents published through the gateway. Each must exist in src/agents/<name>.md.')
-param agentNames array = ['triage', 'reviewer']
+@description('Agents published through the gateway. triage-lite is triage on a smaller model (Lab 4).')
+param agentNames array = ['triage', 'reviewer', 'triage-lite']
 
 @description('Model deployments (capacity in 1K tokens per minute). The agents start on the first one.')
 param models array = [
@@ -136,6 +136,9 @@ var namedValues = [
   { name: 'content-safety-endpoint', value: 'https://${foundry.name}.cognitiveservices.azure.com/' }
   { name: 'prompt-shields', value: 'off' } // Lab 2: learners switch this to "on"
   { name: 'caller-identity', value: 'gateway' } // Lab 2: learners switch this to "obo"
+  { name: 'token-limit', value: '200000' } // Lab 4: tokens per minute per caller
+  { name: 'model-routing', value: 'off' } // Lab 4: learners switch this to "on"
+  { name: 'routing-max-score', value: '65' } // Lab 4: alerts scored up to this go to triage-lite
   // Lab 2: scripts/setup_obo.ps1 replaces these with the app registration it creates.
   { name: 'obo-client-id', value: '00000000-0000-0000-0000-000000000000' }
   { name: 'obo-client-secret', value: 'not-set' }
@@ -187,6 +190,29 @@ resource agentsApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2024-05-
     value: loadTextContent('agents-api-policy.xml')
   }
   dependsOn: [apimNamedValues, projectBackend]
+}
+
+// Lab 4: the gateway sends request logs and token metrics (llm-emit-token-metric) to Application Insights.
+resource apimLogger 'Microsoft.ApiManagement/service/loggers@2024-05-01' = {
+  parent: apim
+  name: 'appinsights'
+  properties: {
+    loggerType: 'applicationInsights'
+    resourceId: appInsights.id
+    credentials: { connectionString: appInsights.properties.ConnectionString }
+  }
+}
+
+resource agentsApiDiagnostics 'Microsoft.ApiManagement/service/apis/diagnostics@2024-05-01' = {
+  parent: agentsApi
+  name: 'applicationinsights'
+  properties: {
+    loggerId: apimLogger.id
+    alwaysLog: 'allErrors'
+    metrics: true // required for custom metrics such as the token metrics
+    sampling: { samplingType: 'fixed', percentage: 100 }
+    verbosity: 'information'
+  }
 }
 
 // ---------------------------------------------------------------- roles

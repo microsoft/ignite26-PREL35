@@ -1,9 +1,11 @@
 # Sets a gateway switch (an API Management named value) in your environment.
 # Usage: .\scripts\set_gateway.ps1 prompt-shields on
 #        .\scripts\set_gateway.ps1 caller-identity obo
+#        .\scripts\set_gateway.ps1 model-routing on
+#        .\scripts\set_gateway.ps1 token-limit 2000
 param(
-    [Parameter(Mandatory)][ValidateSet('prompt-shields', 'caller-identity')][string]$Name,
-    [Parameter(Mandatory)][ValidateSet('on', 'off', 'gateway', 'obo')][string]$Value
+    [Parameter(Mandatory)][ValidateSet('prompt-shields', 'caller-identity', 'model-routing', 'routing-max-score', 'token-limit')][string]$Name,
+    [Parameter(Mandatory)][ValidatePattern('^(on|off|gateway|obo|\d+)$')][string]$Value
 )
 $ErrorActionPreference = 'Stop'
 

@@ -19,20 +19,22 @@ env = dict(line.split("=", 1) for line in (ROOT / ".env").read_text(encoding="ut
 project = AIProjectClient(endpoint=env["FOUNDRY_PROJECT_ENDPOINT"], credential=DefaultAzureCredential())
 model = sys.argv[1] if len(sys.argv) > 1 else env["MODEL_DEPLOYMENT"]
 AGENTS = ROOT / "src" / "agents"
+# Lab 4: triage-lite is triage on the smaller model, for the gateway to route low-risk alerts to.
+agents = [(path.stem, path, model) for path in sorted(AGENTS.glob("*.md"))] + [("triage-lite", AGENTS / "triage.md", "gpt-5-nano")]
 
-for path in sorted(AGENTS.glob("*.md")):
+for name, path, agent_model in agents:
     # Low reasoning effort keeps each call to a few seconds; the release gate checks it's still accurate enough.
     definition = PromptAgentDefinition(
-        model=model, instructions=path.read_text(encoding="utf-8"), reasoning=Reasoning(effort="low")
+        model=agent_model, instructions=path.read_text(encoding="utf-8"), reasoning=Reasoning(effort="low")
     )
     # New role assignments take a few minutes to reach the Foundry data plane, so the first calls can get 403.
     for attempt in range(10):
         try:
-            agent = project.agents.create_version(agent_name=path.stem, definition=definition)
+            agent = project.agents.create_version(agent_name=name, definition=definition)
             break
         except HttpResponseError as e:
             if e.status_code != 403 or attempt == 9:
                 raise
             print(f"Waiting for role assignment to apply ({e.status_code})...", file=sys.stderr)
             time.sleep(30)
-    print(f"{agent.name} version {agent.version} ({model})")
+    print(f"{agent.name} version {agent.version} ({agent_model})")
