@@ -244,3 +244,6 @@ output APIM_GATEWAY_URL string = apim.properties.gatewayUrl
 output APIM_NAME string = apim.name
 output AZURE_RESOURCE_GROUP string = resourceGroup().name
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = appInsights.properties.ConnectionString
+output APPLICATIONINSIGHTS_NAME string = appInsights.name
+output FOUNDRY_NAME string = foundry.name
+output FOUNDRY_PROJECT_NAME string = project.name

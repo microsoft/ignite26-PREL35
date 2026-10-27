@@ -18,6 +18,7 @@ from pathlib import Path
 from azure.ai.projects import AIProjectClient
 
 import investigate as platform
+from console_output import color
 from investigate import ROOT, case_file, cases, credential, data, env, investigate, policy_hash
 
 GOLDEN = ROOT / "data" / "golden.jsonl"
@@ -72,6 +73,15 @@ def metrics(rows: list) -> dict:
         "citation_validity": sum(r["cited"] and not r["invalid_citations"] for r in rows) / len(rows),
         "reviewer_agreement": sum(r["reviewer"] == "agree" for r in rows) / len(rows),
     }
+
+
+def markdown_table(headers: list[str], rows: list[list]) -> list[str]:
+    """Align Markdown columns for both terminal output and the saved report."""
+    cells = [headers, *[[str(value) for value in row] for row in rows]]
+    widths = [max(3, *(len(cell) for cell in column)) for column in zip(*cells)]
+    lines = ["| " + " | ".join(cell.ljust(width) for cell, width in zip(row, widths)) + " |" for row in cells]
+    lines.insert(1, "| " + " | ".join("-" * width for width in widths) + " |")
+    return lines
 
 
 def run_one(row: dict) -> dict:
@@ -147,7 +157,8 @@ if __name__ == "__main__":
     project = AIProjectClient(endpoint=env["FOUNDRY_PROJECT_ENDPOINT"], credential=credential)
     agents = published(project)
 
-    print(f"Evaluating {len(golden)} alerts: " + ", ".join(f"{n} v{a['version']} ({a['model']})" for n, a in agents.items()))
+    print(color(f"Evaluating {len(golden)} alerts:", "cyan") + " "
+          + ", ".join(f"{n} v{a['version']} ({a['model']})" for n, a in agents.items()))
     foundry = foundry_evaluation(project, golden) if "--foundry" in sys.argv else None
     with ThreadPoolExecutor(max_workers=7) as pool:
         rows = list(pool.map(run_one, golden))
@@ -184,22 +195,31 @@ if __name__ == "__main__":
         "",
         "Agents tested: " + ", ".join(f"{n} version {a['version']} on {a['model']}" for n, a in agents.items()),
         "",
-        "| Metric | Value | Required | Blocking | Result | Owner |",
-        "|---|---|---|---|---|---|",
-        *[f"| {c['metric']} | {c['value']} | >= {c['min']} | {'yes' if c['blocking'] else 'no'} | {'PASS' if c['passed'] else 'FAIL'} | {c['owner']} |" for c in checks],
+        *markdown_table(
+            ["Metric", "Value", "Required", "Blocking", "Result", "Owner"],
+            [[c["metric"], c["value"], f">= {c['min']}", "yes" if c["blocking"] else "no",
+              "PASS" if c["passed"] else "FAIL", c["owner"]] for c in checks],
+        ),
         "",
-        "| Alert | Expected | Recommended | Reviewer | Invalid citations | Triage model |",
-        "|---|---|---|---|---|---|",
-        *[f"| {r['alert_id']} | {r['expected']} | {r['disposition']}{'' if r['correct'] else ' ✗'} | {r['reviewer']} | {', '.join(r['invalid_citations']) or '-'} | {r['model']} |" for r in rows],
+        *markdown_table(
+            ["Alert", "Expected", "Recommended", "Reviewer", "Invalid citations", "Triage model"],
+            [[r["alert_id"], r["expected"], f"{r['disposition']}{'' if r['correct'] else ' ✗'}",
+              r["reviewer"], ", ".join(r["invalid_citations"]) or "-", r["model"]] for r in rows],
+        ),
         "",
         f"Tokens used: {manifest['tokens']}. Cost: ${manifest['cost_usd']:.4f}, ${manifest['cost_usd'] / len(rows):.4f} per alert.",
         *([f"Foundry evaluation (AI judge): {foundry['evaluation']}, run {foundry['run']}"] if foundry else []),
     ]
     (pack / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
 
-    print("\n".join(report[:4 + 2 + len(checks)]))
-    print(f"\nCost: ${manifest['cost_usd']:.4f}, ${manifest['cost_usd'] / len(rows):.4f} per alert ({manifest['tokens']} tokens)")
-    print(f"\nEvidence Pack: {pack.relative_to(ROOT)}")
+    for line in report[:4 + 2 + len(checks)]:
+        if line.startswith("# "):
+            print(color("# Release gate:", "cyan"), color(manifest["verdict"], "green" if passed else "red"))
+        else:
+            print(re.sub(r"(?<=\| )(PASS|FAIL)(?= +\|)",
+                         lambda match: color(match[0], "green" if match[0] == "PASS" else "red"), line))
+    print(f"\n{color('Cost:', 'cyan')} ${manifest['cost_usd']:.4f}, ${manifest['cost_usd'] / len(rows):.4f} per alert ({manifest['tokens']} tokens)")
+    print(f"\n{color('Evidence Pack:', 'cyan')} {pack.relative_to(ROOT)}")
     if foundry:
-        print(f"Foundry evaluation started: {foundry['run']}. See it in the Foundry portal, under Evaluations.")
+        print(f"{color('Foundry evaluation started:', 'cyan')} {foundry['run']}. See it in the Foundry portal, under Evaluations.")
     sys.exit(0 if passed else 1)

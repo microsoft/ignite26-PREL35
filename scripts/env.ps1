@@ -10,7 +10,11 @@ $outputs = az deployment group list --resource-group $ResourceGroup --query "sor
 if (-not $outputs) { throw "No lab deployment found in resource group $ResourceGroup." }
 
 # ARM returns output names with changed casing (apiM_GATEWAY_URL), so restore them.
-$lines = $outputs.PSObject.Properties | ForEach-Object { "$($_.Name.ToUpper())=$($_.Value.value)" }
+$lines = @("AZURE_RESOURCE_GROUP=$ResourceGroup") + @(
+    $outputs.PSObject.Properties |
+        Where-Object { $_.Name -ine 'AZURE_RESOURCE_GROUP' } |
+        ForEach-Object { "$($_.Name.ToUpper())=$($_.Value.value)" }
+)
 $envFile = Join-Path $PSScriptRoot '../.env'
 Set-Content -Path $envFile -Value $lines -Encoding utf8
 $lines | Where-Object { $_ -notmatch '^APPLICATIONINSIGHTS' } | ForEach-Object { Write-Host $_ }

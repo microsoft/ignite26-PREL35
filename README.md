@@ -57,6 +57,27 @@ If you're learning at your own pace:
 3. Follow the session guidance in [`instructions/`](instructions/README.md), or
    use the linked docs-site entry point when this repository uses that pattern
 
+#### Console colors
+
+`scripts/create_agents.py`, `src/investigate.py`, and `src/evaluate.py` use colors in interactive terminals. Redirected output and saved reports stay plain.
+
+Set the `NO_COLOR` environment variable to disable colors, regardless of its value (even an empty value).
+
+**Bash (for one command):**
+
+```bash
+NO_COLOR=1 uv run src/evaluate.py
+```
+
+**PowerShell (for the current session):**
+
+```powershell
+$env:NO_COLOR = "1"
+uv run src/evaluate.py
+```
+
+Remove the variable to restore automatic colors: `unset NO_COLOR` in Bash or `Remove-Item Env:NO_COLOR` in PowerShell.
+
 ### 🎯 Learning outcomes
 
 By the end of this session, you will be able to:

@@ -1,10 +1,28 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
 
 name: ignite26-prel35
-metadata:
-    template: azd-init@1.35.1
+resourceGroup: ${AZURE_RESOURCE_GROUP}
 
 infra:
   provider: bicep
   path: infra
   module: main
+
+hooks:
+  postprovision:
+    shell: pwsh
+    run: |
+      $outputNames = @(
+        "FOUNDRY_PROJECT_ENDPOINT"
+        "MODEL_DEPLOYMENT"
+        "APIM_GATEWAY_URL"
+        "APPLICATIONINSIGHTS_CONNECTION_STRING"
+      )
+      $lines = foreach ($name in $outputNames) {
+        $value = azd env get-value $name
+        if ($LASTEXITCODE) { throw "Could not read azd environment value $name." }
+        "$name=$value"
+      }
+      Set-Content -Path .env -Value $lines -Encoding utf8
+      $lines | Where-Object { $_ -notmatch "^APPLICATIONINSIGHTS" } | ForEach-Object { Write-Host $_ }
+      python ./scripts/create_agents.py

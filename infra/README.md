@@ -17,6 +17,19 @@ uv venv --python 3.12; uv pip install -r requirements.txt
 .\scripts\deploy.ps1 -ResourceGroup rg-prel35-lab -LearnerPrincipalId <learner-object-id>
 ```
 
+To deploy with Azure Developer CLI into an existing resource group:
+
+```powershell
+uv sync
+azd auth login
+azd env new
+azd env set AZURE_RESOURCE_GROUP rg-prel35-lab
+azd up
+```
+
+The `postprovision` hook writes the deployment outputs from the `azd` environment to `.env` and creates the Foundry
+agents.
+
 The identity running it needs Owner or Role Based Access Control Administrator on the resource group, because the
 template assigns **Foundry User** to API Management's managed identity, the learner and itself. The learner only
 needs Contributor. The deployment takes about 15 to 20 minutes, mostly API Management.

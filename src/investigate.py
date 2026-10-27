@@ -1,7 +1,9 @@
 """Run one alert through the triage and reviewer agents, through the API Management gateway.
 
-Usage: python src/investigate.py [ALERT_ID]
+Usage: python src/investigate.py [ALERT_ID] [--debug]
+  --debug  show each agent's full API response on stderr (may contain sensitive case data)
 """
+import argparse
 import copy
 import hashlib
 import json
@@ -11,9 +13,12 @@ from pathlib import Path
 from azure.identity import DefaultAzureCredential
 from openai import OpenAI
 
+from console_output import color
+
 ROOT = Path(__file__).resolve().parent.parent
 if not (ROOT / ".env").exists():
-    sys.exit("No .env yet. Run: .\\scripts\\env.ps1 -ResourceGroup <your-resource-group>")
+    sys.exit(color("No .env yet. Run: .\\scripts\\env.ps1 -ResourceGroup <your-resource-group>",
+                   "red", stream=sys.stderr))
 env = dict(line.split("=", 1) for line in (ROOT / ".env").read_text(encoding="utf-8-sig").splitlines() if "=" in line)
 data = json.loads((ROOT / "data" / "cases.json").read_text(encoding="utf-8"))
 cases = {c["alert"]["id"]: c for c in data["cases"]}
@@ -74,10 +79,16 @@ def cost(response) -> float:
             + usage.output_tokens * price["output"]) / 1_000_000
 
 
-def investigate(alert_id: str) -> dict:
+def investigate(alert_id: str, *, debug: bool = False) -> dict:
     """Returns the triage and reviewer answers as text, plus the tokens, models and cost of the two calls."""
     triage = ask("triage", case_file(cases[alert_id], "triage"))
+    if debug:
+        print(f"{color('Triage response:', 'yellow', stream=sys.stderr)}\n{triage.model_dump_json(indent=2)}\n",
+              file=sys.stderr, flush=True)
     review = ask("reviewer", f"Case file:\n{case_file(cases[alert_id], 'reviewer')}\n\nTriage recommendation:\n{triage.output_text}")
+    if debug:
+        print(f"{color('Reviewer response:', 'yellow', stream=sys.stderr)}\n{review.model_dump_json(indent=2)}\n",
+              file=sys.stderr, flush=True)
     return {
         "triage": triage.output_text,
         "review": review.output_text,
@@ -85,6 +96,14 @@ def investigate(alert_id: str) -> dict:
         "triage_model": triage.model,
         "cost": cost(triage) + cost(review),
     }
+
+
+def format_answer(text: str) -> str:
+    """Indent JSON answers without changing non-JSON responses."""
+    try:
+        return json.dumps(json.loads(text), indent=2, ensure_ascii=False)
+    except json.JSONDecodeError:
+        return text
 
 
 # Self-check of the pricing, with no calls to Azure.
@@ -98,12 +117,17 @@ assert round(cost(type("R", (), {"model": "gpt-5-mini-2025-08-07", "usage": _Usa
 
 
 if __name__ == "__main__":
-    alert_id = sys.argv[1] if len(sys.argv) > 1 else "ALT-1001"
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("alert_id", nargs="?", default="ALT-1001", help="alert to investigate (default: %(default)s)")
+    parser.add_argument("--debug", action="store_true",
+                        help="show full agent API responses on stderr (may contain sensitive case data)")
+    args = parser.parse_args()
+    alert_id = args.alert_id
     if alert_id not in cases:
-        sys.exit(f"Unknown alert {alert_id}. Alerts: {', '.join(cases)}")
+        sys.exit(color(f"Unknown alert {alert_id}. Alerts: {', '.join(cases)}", "red", stream=sys.stderr))
     case = cases[alert_id]
-    print(f"{alert_id}: {case['alert']['title']} ({case['customer']['name']})\n")
-    result = investigate(alert_id)
-    print(f"Triage recommendation:\n{result['triage']}\n")
-    print(f"Reviewer:\n{result['review']}\n")
+    print(color(f"{alert_id}: {case['alert']['title']} ({case['customer']['name']})", "cyan") + "\n")
+    result = investigate(alert_id, debug=args.debug)
+    print(f"{color('Triage recommendation:', 'cyan')}\n{format_answer(result['triage'])}\n")
+    print(f"{color('Reviewer:', 'cyan')}\n{format_answer(result['review'])}\n")
     print("The agents recommend. A named analyst decides.")

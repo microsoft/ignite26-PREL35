@@ -14,6 +14,9 @@ from azure.core.exceptions import HttpResponseError
 from azure.identity import DefaultAzureCredential
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "src"))
+from console_output import color
+
 env = dict(line.split("=", 1) for line in (ROOT / ".env").read_text(encoding="utf-8-sig").splitlines() if "=" in line)
 
 project = AIProjectClient(endpoint=env["FOUNDRY_PROJECT_ENDPOINT"], credential=DefaultAzureCredential())
@@ -35,6 +38,7 @@ for name, path, agent_model in agents:
         except HttpResponseError as e:
             if e.status_code != 403 or attempt == 9:
                 raise
-            print(f"Waiting for role assignment to apply ({e.status_code})...", file=sys.stderr)
+            print(color(f"Waiting for role assignment to apply ({e.status_code})...", "yellow", stream=sys.stderr),
+                  file=sys.stderr)
             time.sleep(30)
-    print(f"{agent.name} version {agent.version} ({agent_model})")
+    print(f"{color(agent.name, 'green')} version {agent.version} ({color(agent_model, 'cyan')})")

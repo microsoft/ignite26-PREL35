@@ -17,9 +17,10 @@ from datetime import datetime
 import openai
 from azure.ai.projects import AIProjectClient
 
-from evaluate import parse, published
+from console_output import color
+from evaluate import markdown_table, parse, published
 import investigate as platform
-from investigate import ROOT, ask, case_file, cases, credential, env, policy_hash
+from investigate import ROOT, ask, case_file, cases, credential, env, format_answer, policy_hash
 
 ATTACKS = json.loads((ROOT / "evals" / "attacks.json").read_text(encoding="utf-8"))
 PROMPT = (ROOT / "src" / "agents" / "triage.md").read_text(encoding="utf-8")
@@ -110,12 +111,18 @@ assert "DOC-900" in build(ATTACKS[0]) and build({"vector": "caller", "payload": 
 if __name__ == "__main__":
     platform.COST_CENTER = "security-testing"
     if "--foundry" in sys.argv:
-        print(f"Foundry red team scan started: {foundry_scan()}. See it in the Foundry portal, under Evaluations.\n")
+        print(f"{color('Foundry red team scan started:', 'cyan')} {foundry_scan()}. See it in the Foundry portal, under Evaluations.\n")
     ids = [a for a in sys.argv[1:] if not a.startswith("--")]
     if ids:
-        attack = next((a for a in ATTACKS if a["id"] == ids[0]), None) or sys.exit(f"Unknown attack {ids[0]}")
+        attack = next((a for a in ATTACKS if a["id"] == ids[0]), None) or sys.exit(
+            color(f"Unknown attack {ids[0]}", "red", stream=sys.stderr)
+        )
         result = run(attack)
-        print(f"{attack['id']}: {attack['name']}\nPayload: {attack['payload']}\n\n{result['outcome']} {result['by']}\n{result['answer']}")
+        print(color(f"{attack['id']}: {attack['name']}", "cyan"))
+        print(f"{color('Payload:', 'cyan')} {attack['payload']}\n")
+        print(color(result["outcome"], "red" if result["outcome"] == "SUCCEEDED" else "green")
+              + (f" ({result['by']})" if result["by"] else ""))
+        print(f"{color('Agent answer:', 'cyan')}\n{format_answer(result['answer'])}")
         sys.exit(result["outcome"] == "SUCCEEDED")
 
     agents = published(AIProjectClient(endpoint=env["FOUNDRY_PROJECT_ENDPOINT"], credential=credential))
@@ -134,15 +141,21 @@ if __name__ == "__main__":
         "",
         f"{len(succeeded)} of {len(results)} attacks succeeded.",
         "",
-        "| Attack | Category | Outcome | Stopped by |",
-        "|---|---|---|---|",
-        *[f"| {r['id']} {r['name']} | {r['category']} | {r['outcome']} | {r['by'] or '-'} |" for r in results],
+        *markdown_table(
+            ["Attack", "Category", "Outcome", "Stopped by"],
+            [[f"{r['id']} {r['name']}", r["category"], r["outcome"], r["by"] or "-"] for r in results],
+        ),
     ]
     pack = ROOT / "evidence" / (datetime.now().strftime("%Y%m%d-%H%M%S") + "-redteam")
     pack.mkdir(parents=True)
     (pack / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     (pack / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
     (pack / "results.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
-    print("\n".join(report))
-    print(f"\nEvidence Pack: {pack.relative_to(ROOT)}")
+    for line in report:
+        if line.startswith("# "):
+            print(color("# Red team:", "cyan"), color(manifest["verdict"], "red" if succeeded else "green"))
+        else:
+            print(re.sub(r"(?<=\| )(blocked|resisted|SUCCEEDED)(?= +\|)",
+                         lambda match: color(match[0], "red" if match[0] == "SUCCEEDED" else "green"), line))
+    print(f"\n{color('Evidence Pack:', 'cyan')} {pack.relative_to(ROOT)}")
     sys.exit(1 if succeeded else 0)
