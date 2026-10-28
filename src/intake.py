@@ -11,6 +11,7 @@ from datetime import datetime
 
 from azure.ai.projects import AIProjectClient
 
+from console_output import color
 from decide import DECISIONS, whoami
 from evaluate import published
 from investigate import ROOT, credential, data_policy, env, policy_hash
@@ -46,9 +47,13 @@ def check_pack(name: str, pack, agents: dict) -> list:
 assert check_pack("release gate", None, {}) == ["No release gate Evidence Pack. Run it."]
 
 if __name__ == "__main__":
-    use_case_id = sys.argv[1] if len(sys.argv) > 1 else sys.exit("Usage: python src/intake.py USE_CASE_ID")
+    use_case_id = sys.argv[1] if len(sys.argv) > 1 else sys.exit(
+        color("Usage: python src/intake.py USE_CASE_ID", "red", stream=sys.stderr)
+    )
     register = json.loads(REGISTER.read_text(encoding="utf-8"))
-    use_case = next((u for u in register if u["id"] == use_case_id), None) or sys.exit(f"Unknown use case {use_case_id}")
+    use_case = next((u for u in register if u["id"] == use_case_id), None) or sys.exit(
+        color(f"Unknown use case {use_case_id}", "red", stream=sys.stderr)
+    )
     agents = published(AIProjectClient(endpoint=env["FOUNDRY_PROJECT_ENDPOINT"], credential=credential))
     gate, redteam = latest_pack(""), latest_pack("-redteam")
 
@@ -62,14 +67,14 @@ if __name__ == "__main__":
         ) else ["No decision recorded with src/decide.py on the published agents."],
     }
 
-    print(f"{use_case['id']}: {use_case['name']} (risk tier {use_case['risk_tier']}, owner {use_case['owner']})")
-    print("Published: " + ", ".join(f"{n} v{a['version']} ({a['model']})" for n, a in agents.items()) + "\n")
+    print(color(f"{use_case['id']}: {use_case['name']} (risk tier {use_case['risk_tier']}, owner {use_case['owner']})", "cyan"))
+    print(color("Published:", "cyan") + " " + ", ".join(f"{n} v{a['version']} ({a['model']})" for n, a in agents.items()) + "\n")
     for check, problems in checks.items():
-        print(f"{'PASS' if not problems else 'FAIL'}  {check}")
+        print(color("FAIL" if problems else "PASS", "red" if problems else "green") + f"  {check}")
         for problem in problems:
             print(f"      {problem}")
     if any(checks.values()):
-        sys.exit("\nNot approved. Fix the failures and run intake again.")
+        sys.exit("\n" + color("Not approved. Fix the failures and run intake again.", "red", stream=sys.stderr))
 
     use_case["approval"] = {
         "approved_by": whoami(),
@@ -79,4 +84,4 @@ if __name__ == "__main__":
         "evidence": [gate.relative_to(ROOT).as_posix(), redteam.relative_to(ROOT).as_posix()],
     }
     REGISTER.write_text(json.dumps(register, indent=2) + "\n", encoding="utf-8")
-    print(f"\nApproved. Recorded in {REGISTER.relative_to(ROOT)}.")
+    print("\n" + color(f"Approved. Recorded in {REGISTER.relative_to(ROOT)}.", "green"))

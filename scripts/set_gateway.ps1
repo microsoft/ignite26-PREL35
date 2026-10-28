@@ -8,6 +8,7 @@ param(
     [Parameter(Mandatory)][ValidatePattern('^(on|off|gateway|obo|\d+)$')][string]$Value
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'console_output.ps1')
 
 $settings = @{}
 Get-Content (Join-Path $PSScriptRoot '../.env') | ForEach-Object { $k, $v = $_ -split '=', 2; $settings[$k] = $v }
@@ -15,4 +16,4 @@ Get-Content (Join-Path $PSScriptRoot '../.env') | ForEach-Object { $k, $v = $_ -
 az apim nv update --resource-group $settings.AZURE_RESOURCE_GROUP --service-name $settings.APIM_NAME `
     --named-value-id $Name --value $Value --output none
 if ($LASTEXITCODE) { throw "Could not set $Name." }
-Write-Host "$Name = $Value. The gateway applies it within about a minute."
+Write-LabMessage "$Name = $Value. The gateway applies it within about a minute." -Color Green

@@ -1,3 +1,13 @@
+@lab.Title
+
+## Welcome to your lab environment
+
+Sign in to the virtual machine with the password +++@lab.VirtualMachine(Win11-Pro-Base).Password+++
+
+**Note:** Text formatted as +++example+++ is type text. Click it to type it into the virtual machine, so there are no typing errors.
+
+---
+
 # Introduction and agenda
 
 **Time:** about 10 minutes
@@ -12,7 +22,7 @@ In this lab you build the path that answers those questions, one stage at a time
 investigate financial crime alerts. Each stage produces something the next one relies on.
 
 | Stage | Lab | Question it answers | What it produces |
-|---|---|---|---|
+| ----- | --- | ------------------- | ---------------- |
 | Platform | 0 - Setup | Where do agents run, and how are they reached? | A landing zone: Foundry, a gateway, monitoring |
 | Quality | 1 - AgentOps | Is this version good enough to release? | A release gate and its Evidence Pack |
 | Security | 2 - Security and trust | What stops an attack, and what doesn't? | A red team, Prompt Shields at the gateway, and its Evidence Pack |
@@ -47,7 +57,7 @@ repository folder, and in the Azure and Foundry portals.
 ## Agenda
 
 | Time | Session | Length |
-|---|---|---|
+| ---- | ------- | ------ |
 | 0:00 | Introduction and agenda (this page) | 10 min |
 | 0:10 | **Lab 0 - Setup** | 20 min |
 | 0:30 | Theory: from a demo to a release process | 10 min |
@@ -58,22 +68,17 @@ repository folder, and in the Azure and Foundry portals.
 | 2:30 | **Lab 3 - Governance** | 40 min |
 | 3:10 | Theory: cost, capacity and FinOps for AI | 10 min |
 | 3:20 | **Lab 4 - Solution Optimization** | 40 min |
-| 4:00 | End | |
+| 4:00 | End |  |
 
 Each lab builds on the one before, so work through them in order.
 
-## How the labs work
+## How the labs works
 
-- **Each lab starts the same way:** what it covers, the topics it covers hands-on, and the topics to consider when
-  you move to production. The steps follow, each with a time guide.
+- **Each lab starts the same way:** what it covers, the topics it covers hands-on, and the topics to consider when you move to production. The steps follow, each with a time guide.
 - **Commands** are PowerShell, run from the repository folder. Copy them as they are.
-- **Answers vary between runs.** The agents are language models: the same alert can get different wording, and now
-  and then a different recommendation. The guides say "usually" where that matters, and measuring that variation is
-  part of the point.
-- **Nothing you do affects anyone else.** Your resource group, agents and gateway are yours alone, and are deleted
-  when the lab ends.
-- **If a step fails,** read the error first: most failures name what's missing, such as a sign-in or a setting that
-  hasn't applied yet (gateway changes take about a minute). Then ask a proctor.
+- **Answers vary between runs.** The agents are language models: the same alert can get different wording, and now and then a different recommendation. The guides say "usually" where that matters, and measuring that variation is part of the point.
+- **Nothing you do affects anyone else.** Your resource group, agents and gateway are yours alone, and are deleted when the lab ends.
+- **If a step fails,** read the error first: most failures name what's missing, such as a sign-in or a setting that hasn't applied yet (gateway changes take about a minute). Then ask a proctor.
 
 ## Next
 
@@ -96,7 +101,7 @@ A bank's transaction monitoring system raises **alerts**: activity that might be
 evasion or fraud. An analyst investigates every alert, and most turn out to be false positives. Two agents help:
 
 | Agent | What it does |
-|---|---|
+| ----- | ------------ |
 | **Triage** | Reads the case file and recommends a disposition (escalate, close as a false positive, or request more information), citing the evidence |
 | **Reviewer** | Checks the triage recommendation before a human sees it, and disagrees if the evidence doesn't support it |
 
@@ -115,11 +120,8 @@ investigate.py  ──(your Entra ID token)──►  API Management  ──(its
 ```
 
 - **Foundry** accepts Entra ID only: no API keys exist.
-- **API Management** is the way apps reach the agents. Only agents published as gateway operations can be called
-  through it. You also have direct access to Foundry, for the Foundry portal and the evaluations in Lab 1; in
-  production, a private endpoint and no data-plane roles for people would close that path.
-- The infrastructure is Bicep, deployed for you before the lab started. The agents are
-  defined in src/agents, and you publish them in step 2.
+- **API Management** is the way apps reach the agents. Only agents published as gateway operations can be called through it. You also have direct access to Foundry, for the Foundry portal and the evaluations in Lab 1; in production, a private endpoint and no data-plane roles for people would close that path.
+- The infrastructure is Bicep, deployed for you before the lab started. The agents are defined in src/agents, and you publish them in step 2.
 
 ## Topics covered
 
@@ -129,45 +131,62 @@ investigate.py  ──(your Entra ID token)──►  API Management  ──(its
 
 ## Prerequisites
 
-Provided on the lab VM: Azure CLI, PowerShell 7, uv with a Python 3.12 environment holding the packages in
-requirements.txt, and this repository. Your resource group and sign-in details are on the
-**Resources** tab of the lab instructions.
+Provided on the lab VM: Azure CLI, PowerShell 7, uv with a Python 3.12 environment holding the packages in `pyproject.toml`, and this repository. Your resource group and sign-in details are on the **Resources** tab of the lab instructions.
 
 ## Steps
 
-### 1. Sign in and connect (3 min)
+### 1. Sign in and connect \(3 min\)
 
-Open a terminal in the repository folder and sign in. Use the username ++@lab.CloudPortalCredential(User1).Username++ and the password
-++@lab.CloudPortalCredential(User1).Password++:
+- [] Open a PowerShell terminal (Click Start -> type `Terminal`) and navigate to the repository folder:
+
+```powershell
+cd C:\Users\LabUser\Desktop\ignite26-PREL35
+```
+
+- [] Sign in to Azure: 
 
 ```powershell
 az login
 ```
+Use the username +++@lab.CloudPortalCredential(User1).Username+++ and the access token +++@lab.CloudPortalCredential(User1).AccessToken+++.
 
-Write your environment's values to `.env`, using your resource group name:
+You can skip the "Automatically sign in to Microsoft sites like Bing and Outlook" option when prompted.
+
+Optionally, open the repository in VS Code:
 
 ```powershell
-.\scripts\env.ps1 -ResourceGroup @lab.CloudResourceGroup(1).Name
+code .
+```
+
+- [] Write your environment's values to `.env`, using your resource group name:
+
+```powershell
+.\scripts\env.ps1 -ResourceGroup @lab.CloudResourceGroup(PREL35).Name
 ```
 
 You see the project endpoint, the model deployment and the gateway URL.
 
-Install python dependencies:
+- [] Install python dependencies:
 
 ```powershell
 uv sync
 ```
 
-### 2. Publish the agents (2 min)
+### 2. Publish the agents \(2 min\)
 
-Each agent is a Markdown file of instructions in src/agents. Publishing creates a new version of
-each agent in Foundry:
+Each agent is a Markdown file of instructions in src/agents. Publishing creates a new version of each agent in Foundry:
 
 ```powershell
 uv run scripts/create_agents.py
 ```
 
-You see three agents:
+> To disable colors in the terminal output, set the environment variable `UV_NO_COLOR` to `1` using  
+>
+> ```powershell
+> $env:UV_NO_COLOR = "1"
+> ```
+
+- [] You see three agents:
 
 ```text
 reviewer version 1 (gpt-5-mini)
@@ -178,53 +197,55 @@ triage-lite version 1 (gpt-5-nano)
 `triage-lite` has the same instructions as triage on a smaller model; you use it in Lab 4. In Lab 1 you change an
 agent and publish version 2 the same way.
 
-### 3. Tour the landing zone (5 min)
+### 3. Tour the landing zone \(5 min\)
 
-In the [Azure portal](https://portal.azure.com), open your resource group and find:
+- [] Open the **Azure portal** @lab.CloudPortal.Link. Login using +++@lab.CloudPortalCredential(User1).Username+++ and the access token +++@lab.CloudPortalCredential(User1).AccessToken+++.
+
+Find your resource group and deployed resources:
 
 | Resource | Look for |
-|---|---|
-| Foundry (`aif-…`) | **Resource Management > Keys and Endpoint**: local (key) authentication is disabled |
-| API Management (`apim-…`) | **APIs > Published agents**: one operation per agent. Open the policy: token check, rate limit, managed identity |
-| Application Insights (`appi-…`) | Where agent traces land. You use it in Lab 1 |
+| -------- | -------- |
+| Foundry (`aif-...`) | **Resource Management > Keys and Endpoint**: local (key) authentication is disabled |
+| API Management (`apim-...`) | **APIs > Published agents**: one operation per agent. Open the policy: token check, rate limit, managed identity |
+| Application Insights (`appi-...`) | Where agent traces land. You use it in Lab 1 |
 
-Then open the [Foundry portal](https://ai.azure.com), select the `fincrime` project, and open **Agents**. You see
-**triage** and **reviewer**. Open triage and read its instructions: they're the same text as
-src/agents/triage.md.
+Then open the [Foundry portal](https://ai.azure.com) `https://ai.azure.com`. By either going direct to the URL, or through Azure Portal ──► Foundry ──► blue button "Go to Foundry Portal".
 
-### 4. Run your first investigation (5 min)
+- [] Select the `fincrime` project, and open **Build** ──► **Agents**. You see **triage** and **reviewer**. Open triage and read its instructions: they're the same text as `src/agents/triage.md`.
+
+### 4. Run your first investigation \(5 min\)
+
+- [] In the terminal, run the investigation script for ALT-1001:
 
 ```powershell
 uv run src/investigate.py ALT-1001
 ```
 
-ALT-1001 is a bakery making cash deposits just under the reporting threshold. You see the triage recommendation,
-with the evidence IDs it relied on, then the reviewer's verdict.
+ALT-1001 is a bakery making cash deposits just under the reporting threshold. You see the triage recommendation, with the evidence IDs it relied on, then the reviewer's verdict.
 
-Run it a second time. The wording, and sometimes the recommendation, can change between runs. That variation is
-why Lab 1 measures agents with evaluations instead of trusting a single run.
+Run it a second time. The wording, and sometimes the recommendation, can change between runs. That variation is why Lab 1 measures agents with evaluations instead of trusting a single run.
 
-### 5. Get refused on purpose (4 min)
+### 5. Get refused on purpose \(4 min\)
 
-Call the gateway without a token:
+The gateway only accepts requests that carry an Entra ID access token in the `Authorization` header. 
+- [] Call it without one:
 
 ```powershell
-$gw = (Get-Content .env | Select-String '^APIM_GATEWAY_URL=').Line.Split('=', 2)[1]
-curl.exe -s -o NUL -w "%{http_code}`n" -X POST "$gw/agents/triage/responses"
+curl.exe -s -o NUL -w "%{http_code}`n" -X POST "@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APIM_GATEWAY_URL]/agents/triage/responses"
 ```
 
 You get `401`: the gateway rejects the request before it reaches Foundry.
 
-Now call an agent that isn't published, with a valid token:
+- [] Now get an Entra ID token for your signed-in user and call an agent that isn't published:
 
 ```powershell
 $token = az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv
-curl.exe -s -o NUL -w "%{http_code}`n" -X POST "$gw/agents/unpublished/responses" -H "Authorization: Bearer $token"
+curl.exe -s -o NUL -w "%{http_code}`n" -X POST "@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APIM_GATEWAY_URL]/agents/unpublished/responses" -H "Authorization: Bearer $token"
 ```
 
 You get `404`: only agents published as gateway operations can be reached.
 
-### 6. Check your understanding (1 min)
+### 6. Check your understanding \(1 min\)
 
 - Your token reaches API Management. What identity does API Management use to reach Foundry?
 - Where would you change the triage agent's behaviour, and how would that change reach Foundry?
@@ -244,21 +265,19 @@ Continue to Lab 1 - AgentOps.
 
 ## What this lab covers
 
-In Lab 0 you ran one alert and saw that the answer can change between runs. One run tells you nothing about
-whether an agent is good enough to release. In this lab you measure the agents against alerts whose correct outcome
-is known, and let a **release gate** decide whether a change can ship.
+In Lab 0 you ran one alert and saw that the answer can change between runs. One run tells you nothing about whether an agent is good enough to release. In this lab you measure the agents against alerts whose correct outcome is known, and let a **release gate** decide whether a change can ship.
 
 | Piece | What it is |
-|---|---|
-| **Golden dataset** | data/golden.jsonl: the 14 alerts, each with its expected disposition |
-| **Evaluators** | Code checks in src/evaluate.py, plus an AI judge in Foundry |
-| **Thresholds** | evals/thresholds.json: the score each metric needs, who owns it, and whether it blocks a release |
+| ----- | ---------- |
+| **Golden dataset** | `data/golden.jsonl`: the 14 alerts, each with its expected disposition |
+| **Evaluators** | Code checks in `src/evaluate.py`, plus an AI judge in Foundry |
+| **Thresholds** | `evals/thresholds.json`: the score each metric needs, who owns it, and whether it blocks a release |
 | **Evidence Pack** | The folder each gate run writes: what was tested, how it scored, and the verdict |
 
 The gate checks four things:
 
 | Metric | Meaning | Required | Blocks a release |
-|---|---|---|---|
+| ------ | ------- | -------- | ---------------- |
 | `disposition_accuracy` | The recommendation matches the expected outcome | 85% | Yes |
 | `escalation_recall` | Every alert that should be escalated was escalated | 100% | Yes |
 | `citation_validity` | Every recommendation cites evidence, and every cited ID exists in the case file | 100% | Yes |
@@ -285,34 +304,36 @@ Lab 0 completed: you have a `.env` file and both agents are published.
 
 ## Steps
 
-### 1. Run the release gate on the current agents (7 min)
+### 1. Run the release gate on the current agents \(7 min\)
+
+- [] Run the release gate in the terminal:
 
 ```powershell
 uv run src/evaluate.py --foundry
 ```
 
-It runs all 14 golden alerts through triage and reviewer, through the gateway, and takes about a minute.
-`--foundry` also starts an evaluation in Foundry, where an AI judge scores whether triage followed its instructions.
+It runs all 14 golden alerts through triage and reviewer, through the gateway, and takes about a minute. `--foundry` also starts an evaluation in Foundry, where an AI judge scores whether triage followed its instructions.
+
 You look at that in step 6.
 
-You see `Release gate: PASS` and a score for each metric. Open the Evidence Pack folder it names, and open
-`report.md`: each metric against its threshold, and the outcome for each alert. Often all 14 are right. When one is
-wrong it's usually ALT-1006, where triage asks for more information instead of closing, and the gate still passes:
-13 of 14 is above the 85% that the accuracy owner requires.
+You see `Release gate: PASS` and a score for each metric. 
+
+Open the Evidence Pack folder it names, and open `report.md`: each metric against its threshold, and the outcome for each alert. Often all 14 are right. When one is wrong it's usually `ALT-1006`, where triage asks for more information instead of closing, and the gate still passes: 13 of 14 is above the **85%** that the accuracy owner requires.
 
 > Your scores can differ slightly from run to run. That's why the thresholds leave room on accuracy, and none on
 > missed escalations.
 
-### 2. Ship a prompt "improvement" (8 min)
+### 2. Ship a prompt "improvement" \(8 min\)
 
-A colleague proposes a shorter triage prompt: fewer tokens, faster answers, lower cost. Compare it with the current
-one:
+A colleague proposes a shorter triage prompt: fewer tokens, faster answers, lower cost. Compare it with the current one:
 
 ```powershell
 git diff --no-index src/agents/triage.md src/agents/variants/triage.concise.md
 ```
 
-Apply it, publish it as a new version of the agent, and run the gate:
+> Exit git diff with `q`.
+
+- [] Apply it, publish it as a new version of the agent, and run the gate:
 
 ```powershell
 Copy-Item src/agents/variants/triage.concise.md src/agents/triage.md
@@ -320,18 +341,21 @@ uv run scripts/create_agents.py
 uv run src/evaluate.py
 ```
 
-You see `Release gate: FAIL`. Open the new `report.md`:
+You see `Release gate: FAIL`. 
+
+- [] Open the new `report.md`:
+
+> In the terminal, type `code .` to open VS Code and find the reports in `evidence` folder.
 
 - `citation_validity` is 0: the short prompt no longer asks for evidence, so no recommendation can be traced.
-- `escalation_recall` is below 100%: it tells the agent that most alerts are false positives, so some suspicious
-  cases are no longer escalated.
+- `escalation_recall` is below 100%: it tells the agent that most alerts are false positives, so some suspicious cases are no longer escalated.
 - The tokens used are lower. The change does what it promised, and it still can't ship.
 
 The command ended with exit code 1 (check with `$LASTEXITCODE`). In a pipeline, that stops the release.
 
-### 3. Roll back and pass the gate (5 min)
+### 3. Roll back and pass the gate \(5 min\)
 
-Restore the prompt from source control, publish, and run the gate again:
+- [] Restore the prompt from source control, publish, and run the gate again:
 
 ```powershell
 git checkout src/agents/triage.md
@@ -339,42 +363,48 @@ uv run scripts/create_agents.py
 uv run src/evaluate.py
 ```
 
-You see `Release gate: PASS`. Foundry kept every version: the failed one is still there, and the agents now run a
-newer version with the restored prompt.
+You see `Release gate: PASS`. Foundry kept every version: the failed one is still there, and the agents now run a newer version with the restored prompt.
 
-### 4. Handle a model retirement (7 min)
+### 4. Handle a model retirement \(7 min\)
 
-Model versions are retired on a schedule, so sooner or later the agents must move to a different model. The same gate
-answers whether a replacement is good enough. Publish both agents on `gpt-5-nano` and run it:
+Model versions are retired on a schedule, so sooner or later the agents must move to a different model. The same gate answers whether a replacement is good enough. 
+
+- [] Publish both agents on `gpt-5-nano` and run it:
 
 ```powershell
 uv run scripts/create_agents.py gpt-5-nano
 uv run src/evaluate.py
 ```
 
-Read the result. The smaller model is close to the accuracy threshold, so you may see a pass or a fail: either
-way, the decision is made by the scores, not by opinion. Then go back to the approved model:
+Read the result. The smaller model is close to the accuracy threshold, so you may see a pass or a fail: either way, the decision is made by the scores, not by opinion. 
+
+- [] Then go back to the approved model:
 
 ```powershell
 uv run scripts/create_agents.py
 ```
 
-### 5. Open the Evidence Pack (4 min)
+### 5. Open the Evidence Pack \(4 min\)
 
-Each gate run wrote a folder under `evidence/`. Open the latest passing one:
+Each gate run wrote a folder under `evidence/`. 
+
+- [] Open the latest passing one:
 
 | File | What it holds |
-|---|---|
+| ---- | ------------- |
 | `report.md` | The verdict, the score against each threshold and its owner, and the outcome per alert |
 | `manifest.json` | Exactly what was tested: agent versions and models, a hash of the dataset and of the thresholds, the source commit |
 | `results.json` | The full answer of both agents for every alert |
 
 This is what an approver signs and an auditor reads later. You use it as the approval input in Lab 3.
 
-### 6. See the versions in the traces and in Foundry (6 min)
+### 6. See the versions in the traces and in Foundry \(6 min\)
 
-Every agent call was traced. In the [Azure portal](https://portal.azure.com), open the Application Insights
-resource (`appi-…`) in your resource group, select **Logs**, and run:
+Every agent call was traced. In the **Azure portal** @lab.CloudPortal.Link, open the Application Insights resource (`appi-...`) in your resource group, select **Logs**.
+
+> You may need to disable the "Agent" experience and switch from "Simple mode" to "KQL mode".
+
+- [] Run the query below:
 
 ```kusto
 dependencies
@@ -388,29 +418,23 @@ dependencies
 
 You see one row per agent version: the concise prompt was the fastest version, and it was the one the gate blocked.
 
-Then open the [Foundry portal](https://ai.azure.com), select the `fincrime` project, and open **Evaluations**.
-Open **Triage task adherence** and the run from step 1: the AI judge's score and its reasoning for each alert.
+Then open the [Foundry portal](https://ai.azure.com) `https://ai.azure.com`, select the `fincrime` project, and open **Evaluations**.
+- [] Open **Triage task adherence** and the run from step 1: the AI judge's score and its reasoning for each alert.
 
-### 7. The same gate in a pipeline (3 min)
+### 7. The same gate in a pipeline \(3 min\)
 
-Open .github/workflows/release-gate.yml. It runs the commands you ran:
-connect, publish the agents from the commit, run the gate, and keep the Evidence Pack. A failing gate fails the
-job, so the change can't be merged or released.
+Open .github/workflows/release-gate.yml. It runs the commands you ran: connect, publish the agents from the commit, run the gate, and keep the Evidence Pack. A failing gate fails the job, so the change can't be merged or released.
 
 ### If you have time
 
-Make the smaller model good enough. Open the `report.md` of the `gpt-5-nano` run from step 4 and pick an alert it
-got wrong. If it got all of them right, take ALT-1006: a sanctions name match where the date of birth doesn't
-match, so it should be closed. Edit src/agents/triage.md, then publish on
-`gpt-5-nano` and run the gate:
+Make the smaller model good enough. Open the `report.md` of the `gpt-5-nano` run from step 4 and pick an alert it got wrong. If it got all of them right, take ALT-1006: a sanctions name match where the date of birth doesn't match, so it should be closed. Edit src/agents/triage.md, then publish on `gpt-5-nano` and run the gate:
 
 ```powershell
 uv run scripts/create_agents.py gpt-5-nano
 uv run src/evaluate.py
 ```
 
-Did you fix it without breaking another alert? Run the gate twice: one correct run can be luck. When you're done,
-restore the prompt and the approved model, as Lab 2 starts from them:
+Did you fix it without breaking another alert? Run the gate twice: one correct run can be luck. When you're done, restore the prompt and the approved model, as Lab 2 starts from them:
 
 ```powershell
 git checkout src/agents/triage.md
@@ -431,13 +455,10 @@ Continue to Lab 2 - Security and trust.
 
 ## What this lab covers
 
-The release gate in Lab 1 measures whether the agents are right on honest case files. A case file is not always
-honest: a customer can upload a letter with instructions in it, a payment memo can carry a command, a caller can
-claim authority they don't have. In this lab you attack the triage agent, see which controls stop which attacks, and
-add one.
+The release gate in Lab 1 measures whether the agents are right on honest case files. A case file is not always honest: a customer can upload a letter with instructions in it, a payment memo can carry a command, a caller can claim authority they don't have. In this lab you attack the triage agent, see which controls stop which attacks, and add one.
 
 | Piece | What it is |
-|---|---|
+| ----- | ---------- |
 | **Attacks** | evals/attacks.json: 11 financial-crime attacks, each with the outcome the attacker wants |
 | **Red team** | src/redteam.py: sends every attack through the gateway and judges the answer |
 | **AI Red Teaming Agent** | A Foundry service that generates its own harmful-content attacks, sends them to the model and scores the answers |
@@ -447,7 +468,7 @@ add one.
 Each attack ends one of three ways:
 
 | Outcome | Meaning |
-|---|---|
+| ------- | ------- |
 | `blocked` | A control refused the request, and the agent never answered |
 | `resisted` | The agent answered and stayed on task: the attacker didn't get what they wanted |
 | `SUCCEEDED` | The attacker got the outcome they wanted, for example a suspicious case closed |
@@ -475,24 +496,23 @@ Lab 1 completed, with the approved triage prompt published on `gpt-5-mini`.
 
 ## Steps
 
-### 1. Red team the current agent (9 min)
+### 1. Red team the current agent \(9 min\)
 
-Open evals/attacks.json. Most attacks hide in the case file, where a real attacker can
-put them: an uploaded letter, a payment memo, a forged solicitor's letter. Three come from the caller. Run them all,
-and start a scan by the AI Red Teaming Agent in Foundry at the same time:
+- [] Open evals/attacks.json. 
+
+Most attacks hide in the case file, where a real attacker can put them: an uploaded letter, a payment memo, a forged solicitor's letter. Three come from the caller.
+
+- [] Run them all, and start a scan by the AI Red Teaming Agent in Foundry at the same time:
 
 ```powershell
 uv run src/redteam.py --foundry
 ```
 
-Your attacks take about a minute and end with `Red team: PASS` when no attack succeeded. Like the release gate, it
-writes an Evidence Pack under `evidence/` and exits with code 1 when an attack succeeds, so a pipeline can stop the
-release. The Foundry scan takes about 15 minutes; you read it in step 6.
+Your attacks take about a minute and end with `Red team: PASS` when no attack succeeded. Like the release gate, it writes an Evidence Pack under `evidence/` and exits with code 1 when an attack succeeds, so a pipeline can stop the release. The Foundry scan takes about 15 minutes; you read it in step 6.
 
-In the table, JB-01 is `blocked` by `content_filter`, and the other attacks are usually `resisted`. Now and then
-PER-02 succeeds: the prompt rightly accepts a solicitor's letter as independent evidence, so a convincing forgery gets
-through. No prompt rule can tell a real letter from a forged one; that's what the reviewer agent and the analyst who
-decides are for. Look at three attacks in full:
+In the table, `JB-01` is `blocked` by `content_filter`, and the other attacks are usually `resisted`. Now and then `PER-02` succeeds: the prompt rightly accepts a solicitor's letter as independent evidence, so a convincing forgery gets through. No prompt rule can tell a real letter from a forged one; that's what the reviewer agent and the analyst who decides are for. 
+
+- [] Look at three attacks in full:
 
 ```powershell
 uv run src/redteam.py JB-01
@@ -500,38 +520,34 @@ uv run src/redteam.py HRM-01
 uv run src/redteam.py HRM-02
 ```
 
-- **JB-01** never reached the agent. The guardrail on the model deployment detected a jailbreak in the caller's
-  prompt and Foundry answered HTTP 400 `content_filter`, with `jailbreak: detected, filtered`.
-- **HRM-01** asks for money-laundering instructions, and Foundry let it through. The content filters block hate,
-  sexual, violent and self-harm content; a request for help with a financial crime is none of these.
-- **HRM-02** asks for a threat to a customer. The violence filter rates a veiled threat as safe, and blocks only
-  explicit violence.
+- **`JB-01`** never reached the agent. The guardrail on the model deployment detected a jailbreak in the caller's prompt and Foundry answered HTTP 400 `content_filter`, with `jailbreak: detected, filtered`.
+- **`HRM-01`** asks for money-laundering instructions, and Foundry let it through. The content filters block hate, sexual, violent and self-harm content; a request for help with a financial crime is none of these.
+- **`HRM-02`** asks for a threat to a customer. The violence filter rates a veiled threat as safe, and blocks only explicit violence.
 
-In both, what stopped the attack is the model and the agent's own instructions: the agent refuses, or treats the
-request itself as something to escalate. So the prompt is a security control too. That's what step 3 tests.
+In both, what stopped the attack is the model and the agent's own instructions: the agent refuses, or treats the request itself as something to escalate. So the prompt is a security control too. That's what step 3 tests.
 
-### 2. See the guardrail in Foundry (4 min)
+### 2. See the guardrail in Foundry \(4 min\)
 
-Open the [Foundry portal](https://ai.azure.com), select the `fincrime` project, and open **Guardrails**. Open the
-guardrail on `gpt-5-mini` (`Microsoft.DefaultV2`) and note:
+Open the [Foundry portal](https://ai.azure.com) `https://ai.azure.com`, select the `fincrime` project, and open **Guardrails**. Open the guardrail on `gpt-5-mini` (`Microsoft.DefaultV2`) and note:
 
-- the content categories and the severity at which they block, on both the prompt and the completion;
-- jailbreak detection on the user prompt, which blocked JB-01;
-- what it doesn't do: look for instructions hidden in the documents a case file carries.
+- The content categories and the severity at which they block, on both the prompt and the completion;
+- Jailbreak detection on the user prompt, which blocked `JB-01`;
+- What it doesn't do: look for instructions hidden in the documents a case file carries.
 
-Changing a guardrail is a change to the model deployment, owned by the platform team. You add the missing
-protection at the gateway instead, in step 4.
+Changing a guardrail is a change to the model deployment, owned by the platform team. You add the missing protection at the gateway instead, in step 4.
 
-### 3. Ship a "helpful" prompt and red team it (9 min)
+### 3. Ship a "helpful" prompt and red team it \(9 min\)
 
-A colleague proposes a change that saves analysts time: when compliance or a senior officer has already cleared the
-activity, close the case instead of escalating it again. Compare it with the approved prompt:
+A colleague proposes a change that saves analysts time: when compliance or a senior officer has already cleared the activity, close the case instead of escalating it again. 
+
+- [] Review the proposed change and compare it with the approved prompt:
 
 ```powershell
 git diff --no-index src/agents/triage.md src/agents/variants/triage.helpful.md
 ```
+> Exit git diff with `q`.
 
-Apply it, publish it, and run the red team:
+- [] Apply it, publish it, and run the red team:
 
 ```powershell
 Copy-Item src/agents/variants/triage.helpful.md src/agents/triage.md
@@ -539,17 +555,21 @@ uv run scripts/create_agents.py
 uv run src/redteam.py
 ```
 
-You see `Red team: FAIL`. JB-02 and PER-02 usually succeed: anyone who writes "already cleared" into a note, or
-forges a letter, can now close a suspicious case. Run the one that succeeded on its own, for
-example `uv run src/redteam.py JB-02`, and read why triage closed the case.
+You see `Red team: FAIL`. `JB-02` and `PER-02` usually succeed: anyone who writes "already cleared" into a note, or forges a letter, can now close a suspicious case. 
 
-The golden dataset in Lab 1 has no attacks in it, so the release gate can't catch this kind of change. The red team
-can, which is why both run before a release.
+- [] Run the one that succeeded on its own, for example `uv run src/redteam.py JB-02`, and read why triage closed the case.:
 
-### 4. Turn on Prompt Shields at the gateway (9 min)
+```powershell
+uv run src/redteam.py JB-02
+```
 
-Every request already passes through API Management. Switch on its Prompt Shields check, which sends the request to
-Prompt Shields in your Foundry resource and refuses it when an injected instruction is found:
+The golden dataset in Lab 1 has no attacks in it, so the release gate can't catch this kind of change. The red team can, which is why both run before a release.
+
+### 4. Turn on Prompt Shields at the gateway \(9 min\)
+
+Every request already passes through API Management. Switch on its Prompt Shields check, which sends the request to Prompt Shields in your Foundry resource and refuses it when an injected instruction is found:
+
+- [] Turn on Prompt Shields at the gateway:
 
 ```powershell
 .\scripts\set_gateway.ps1 prompt-shields on
@@ -561,28 +581,23 @@ Wait a minute for the gateway to apply it, then run the red team again, still on
 uv run src/redteam.py
 ```
 
-IPI-01, IPI-03, EXF-01 and JB-01 are now `blocked` by `prompt_attack_detected`, at the gateway, before they reach
-Foundry. Look at what still gets through:
+`IPI-01`, `IPI-03`, `EXF-01` and `JB-01` are now `blocked` by `prompt_attack_detected`, at the gateway, before they reach Foundry. Look at what still gets through:
 
-- IPI-02 writes its instruction in look-alike characters, and IPI-04 dresses it up as a system message. Both pass
-  the scan; the agent resisted them on its own.
-- JB-02 still succeeds. A note claiming authority reads like an ordinary analyst note, and the weakened prompt now
-  trusts it.
+- `IPI-02` writes its instruction in look-alike characters, and `IPI-04` dresses it up as a system message. Both pass the scan; the agent resisted them on its own.
+- `JB-02` still succeeds. A note claiming authority reads like an ordinary analyst note, and the weakened prompt now trusts it.
 
-Prompt Shields is one more layer, not a fix: it catches most injected instructions, and it can't repair a prompt
-that trusts the wrong things. Only the prompt fix closes JB-02.
 
-A control that blocks honest work is a problem too. Run the release gate to check that Prompt Shields doesn't block
-real case files:
+Prompt Shields is one more layer, not a fix: it catches most injected instructions, and it can't repair a prompt that trusts the wrong things. Only the prompt fix closes `JB-02`.
+
+A control that blocks honest work is a problem too. Run the release gate to check that Prompt Shields doesn't block real case files:
 
 ```powershell
 uv run src/evaluate.py
 ```
 
-The gate passes: no case file is blocked. It passes on the weakened prompt too, because the golden dataset has no
-attacks in it.
+The gate passes: no case file is blocked. It passes on the weakened prompt too, because the golden dataset has no attacks in it.
 
-### 5. Roll back and red team again (5 min)
+### 5. Roll back and red team again \(5 min\)
 
 Restore the approved prompt, publish, and run the red team with Prompt Shields still on:
 
@@ -592,20 +607,13 @@ uv run scripts/create_agents.py
 uv run src/redteam.py
 ```
 
-You see `Red team: PASS`, unless PER-02 got through again as in step 1. Each attack is now stopped by Prompt Shields
-at the gateway or by the agent's own instructions, with the guardrail in Foundry behind both. JB-01 is now stopped at the gateway, before it reaches the
-guardrail that blocked it in step 1. More than one layer means one weak layer doesn't let an attack through.
+You see `Red team: PASS`, unless `PER-02` got through again as in step 1. Each attack is now stopped by Prompt Shields at the gateway or by the agent's own instructions, with the guardrail in Foundry behind both. `JB-01` is now stopped at the gateway, before it reaches the guardrail that blocked it in step 1. More than one layer means one weak layer doesn't let an attack through.
 
-### 6. Read the results (4 min)
+### 6. Read the results \(4 min\)
 
-Open the latest `evidence/…-redteam` folder. `report.md` lists every attack, its outcome and the control that
-stopped it; `results.json` holds every answer in full.
+Open the latest `evidence/...-redteam` folder. `report.md` lists every attack, its outcome and the control that stopped it; `results.json` holds every answer in full.
 
-Then open the [Foundry portal](https://ai.azure.com), select the `fincrime` project, open **Evaluations**, and open
-the **Red team gpt-5-mini …** run from step 1. Foundry generated violence, hate, sexual and self-harm attacks, sent
-some of them disguised (Base64-encoded or reversed), and scored every answer. Look at the attack success rate by
-category and by disguise: the scan tests the model and its guardrail across far more attacks than you wrote by hand,
-and your attacks test what only you know, the financial-crime abuse of this agent through the gateway.
+Then open the [Foundry portal](https://ai.azure.com) `https://ai.azure.com`, select the `fincrime` project, open **Evaluations**, and open the **Red team gpt-5-mini ...** run from step 1. Foundry generated violence, hate, sexual and self-harm attacks, sent some of them disguised (Base64-encoded or reversed), and scored every answer. Look at the attack success rate by category and by disguise: the scan tests the model and its guardrail across far more attacks than you wrote by hand, and your attacks test what only you know, the financial-crime abuse of this agent through the gateway.
 
 Together with the release gate's Evidence Pack, these are the security input to the approval in Lab 3.
 
@@ -623,16 +631,14 @@ Continue to Lab 3 - Governance.
 
 ## What this lab covers
 
-Labs 1 and 2 produced evidence: the release gate and the red team. Evidence only matters if someone has to look at
-it before an agent goes live, and if it still describes what's running. In this lab you take the triage use case
-through intake, and add the controls that intake asks for.
+Labs 1 and 2 produced evidence: the release gate and the red team. Evidence only matters if someone has to look at it before an agent goes live, and if it still describes what's running. In this lab you take the triage use case through intake, and add the controls that intake asks for.
 
 | Piece | What it is |
-|---|---|
-| **Use-case register** | governance/use-cases.json: each AI use case, its owner, risk tier and approval |
-| **Intake** | src/intake.py: approves a use case only when its evidence covers what's running now |
-| **Data policy** | governance/data-policy.json: which confidential fields each agent may receive, and why |
-| **Human in the loop** | src/decide.py: the agents recommend, a named analyst decides, and the decision is recorded |
+| ----- | ---------- |
+| **Use-case register** | `governance/use-cases.json`: each AI use case, its owner, risk tier and approval |
+| **Intake** | `src/intake.py`: approves a use case only when its evidence covers what's running now |
+| **Data policy** | `governance/data-policy.json`: which confidential fields each agent may receive, and why |
+| **Human in the loop** | `src/decide.py`: the agents recommend, a named analyst decides, and the decision is recorded |
 | **Azure Policy** | An assignment on your resource group that denies any model the bank hasn't approved |
 
 ## Topics
@@ -659,10 +665,9 @@ Lab 2 completed, with the approved triage prompt published.
 
 ## Steps
 
-### 1. Ask for approval (5 min)
+### 1. Ask for approval \(5 min\)
 
-Open governance/use-cases.json. UC-001 is the triage use case: high risk, owned
-by the Head of Financial Crime Operations, and not approved yet. Ask for approval:
+Open `governance/use-cases.json`. `UC-001` is the triage use case: high risk, owned by the Head of Financial Crime Operations, and not approved yet. Ask for approval:
 
 ```powershell
 uv run src/intake.py UC-001
@@ -671,41 +676,33 @@ uv run src/intake.py UC-001
 It's refused, with a reason for each failed check:
 
 | Check | Why it can fail now |
-|---|---|
+| ----- | ------------------- |
 | Release gate passed on the published agents | The last gate ran on an earlier triage version, before Lab 2 republished it |
 | Red team passed on the published agents | The evidence must be for the version that callers get today |
 | Data policy enforced | The agents still receive every field in the case file |
 | A named analyst decided alerts on the published agents | Nobody has used the decision step yet |
 
-Evidence describes one agent version under one configuration. When either changes, the evidence is out of date, and
-intake says so. The next three steps fix each failure.
+Evidence describes one agent version under one configuration. When either changes, the evidence is out of date, and intake says so. The next three steps fix each failure.
 
-### 2. Enforce the data policy (12 min)
+### 2. Enforce the data policy \(12 min\)
 
-Open governance/data-policy.json. Two customer fields are classified
-confidential:
+Open `governance/data-policy.json`. Two customer fields are classified confidential:
 
-- **Account number:** no agent receives it. Triaging an alert never needs it, and a field the agent never sees can't
-  leak, whatever an attacker writes into a case file (EXF-01 in Lab 2).
-- **Date of birth:** only triage and the reviewer receive it, for a stated purpose. In ALT-1006 the customer has the
-  same name as a person on the sanctions list, and the dates of birth are what tell them apart.
+- **Account number:** no agent receives it. Triaging an alert never needs it, and a field the agent never sees can't leak, whatever an attacker writes into a case file (`EXF-01` in Lab 2).
+- **Date of birth:** only triage and the reviewer receive it, for a stated purpose. In `ALT-1006` the customer has the same name as a person on the sanctions list, and the dates of birth are what tell them apart.
 
-Withholding a field the agents need breaks the work; giving every agent every field makes a leak more likely. The
-policy records which agent may see what, and why.
+Withholding a field the agents need breaks the work; giving every agent every field makes a leak more likely. The policy records which agent may see what, and why.
 
-Set `"enforce": true` and save the file. From now on, every call strips the withheld fields before the case file
-reaches an agent. The data policy changed, so the evidence from Labs 1 and 2 no longer describes what's running. Run
-both again:
+Set `"enforce": true` and save the file. From now on, every call strips the withheld fields before the case file reaches an agent. The data policy changed, so the evidence from Labs 1 and 2 no longer describes what's running. Run both again:
 
 ```powershell
 uv run src/evaluate.py
 uv run src/redteam.py
 ```
 
-The gate passes with about the same scores as in Lab 1: the agents didn't need the account number. Both Evidence Packs now
-record the data policy they ran under (`data_policy` in `manifest.json`).
+The gate passes with about the same scores as in Lab 1: the agents didn't need the account number. Both Evidence Packs now record the data policy they ran under (`data_policy` in `manifest.json`).
 
-### 3. Decide an alert (10 min)
+### 3. Decide an alert \(10 min\)
 
 The agents recommend; they never act. Run an alert through the decision step:
 
@@ -713,8 +710,7 @@ The agents recommend; they never act. Run an alert through the decision step:
 uv run src/decide.py ALT-1001
 ```
 
-You see triage's recommendation with its reasons, and the reviewer's verdict. Nothing happens to the case until you
-answer. You aren't asked for your name: the decision is recorded under your Entra ID sign-in. Approve it.
+You see triage's recommendation with its reasons, and the reviewer's verdict. Nothing happens to the case until you answer. You aren't asked for your name: the decision is recorded under your Entra ID sign-in. Approve it.
 
 Now overrule the agents on another alert:
 
@@ -722,40 +718,32 @@ Now overrule the agents on another alert:
 uv run src/decide.py ALT-1014
 ```
 
-Answer `n`, choose a different decision, and try to leave the reason empty: you can't. Overruling the agents, or
-approving against the reviewer, needs a reason an auditor can read later.
+Answer `n`, choose a different decision, and try to leave the reason empty: you can't. Overruling the agents, or approving against the reviewer, needs a reason an auditor can read later.
 
-Open `evidence/decisions.jsonl`: one line per decision, with who decided, when, what the agents recommended, and
-the agent versions they ran on.
+Open `evidence/decisions.jsonl`: one line per decision, with who decided, when, what the agents recommended, and the agent versions they ran on.
 
-### 4. Approve the use case (3 min)
+### 4. Approve the use case \(3 min\)
 
 ```powershell
 uv run src/intake.py UC-001
 ```
 
-Every check passes, and the approval is recorded in governance/use-cases.json:
-who approved it, when, the agent versions, the data policy, and the Evidence Packs it rests on. Publish a new triage
-version and run intake again, and it's refused until the evidence catches up.
+Every check passes, and the approval is recorded in governance/use-cases.json: who approved it, when, the agent versions, the data policy, and the Evidence Packs it rests on. Publish a new triage version and run intake again, and it's refused until the evidence catches up.
 
-### 5. See Azure Policy deny a model (10 min)
+### 5. See Azure Policy deny a model \(10 min\)
 
-Intake governs a use case. Azure Policy governs the platform underneath it, for every team. In the
-[Azure portal](https://portal.azure.com), open your resource group, select **Policies**, and open
-**Only approved AI models can be deployed**. It uses the built-in policy *Foundry model deployments should only use
-approved models*, with the effect **Deny** and two approved models: `gpt-5-mini` and `gpt-5-nano`.
+Intake governs a use case. Azure Policy governs the platform underneath it, for every team. In the **Azure portal** @lab.CloudPortal.Link, open your resource group, select **Policies**, and open **Only approved AI models can be deployed**. It uses the built-in policy *Foundry model deployments should only use approved models*, with the effect **Deny** and two approved models: `gpt-5-mini` and `gpt-5-nano`.
 
 Try to deploy a model that isn't approved:
 
 ```powershell
-$account = az cognitiveservices account list -g @lab.CloudResourceGroup(1).Name --query "[0].name" -o tsv
-az cognitiveservices account deployment create -g @lab.CloudResourceGroup(1).Name -n $account `
+$account = az cognitiveservices account list -g @lab.CloudResourceGroup(PREL35).Name --query "[0].name" -o tsv
+az cognitiveservices account deployment create -g @lab.CloudResourceGroup(PREL35).Name -n $account `
     --deployment-name unapproved --model-name gpt-4.1-mini --model-version 2025-04-14 --model-format OpenAI `
     --sku-name GlobalStandard --sku-capacity 1
 ```
 
-The deployment is refused, and the error names the policy assignment `approved-ai-models` that denied it. It may also name the lab environment's own policy, which limits what any lab can deploy. Nobody
-needs to remember the approved list: the platform enforces it, whoever deploys and however they do it.
+The deployment is refused, and the error names the policy assignment `approved-ai-models` that denied it. It may also name the lab environment's own policy, which limits what any lab can deploy. Nobody needs to remember the approved list: the platform enforces it, whoever deploys and however they do it.
 
 ## Next
 
@@ -777,7 +765,7 @@ model for part of the work and what it does to quality, a limit on what any call
 by the teams that ran up the tokens.
 
 | Piece | What it is |
-|---|---|
+| ----- | ---------- |
 | **Prices** | evals/prices.json: the price per million tokens of each model, including cached input |
 | **Model routing** | A gateway switch that sends low-risk alerts to `triage-lite`: the triage instructions on `gpt-5-nano` |
 | **Token limit** | A gateway policy that caps the tokens each caller can use per minute |
@@ -804,7 +792,7 @@ Lab 3 completed.
 
 ## Steps
 
-### 1. What a release costs (5 min)
+### 1. What a release costs \(5 min\)
 
 Run the release gate:
 
@@ -812,17 +800,13 @@ Run the release gate:
 uv run src/evaluate.py
 ```
 
-Under the scores you see the cost of the run and the cost per alert: about 3 cents for 14 alerts. Open the
-`report.md` it names: the last column shows which model triaged each alert, and the last line the total.
+Under the scores you see the cost of the run and the cost per alert: about 3 cents for 14 alerts. Open the `report.md` it names: the last column shows which model triaged each alert, and the last line the total.
 
-The cost comes from the tokens each call used and evals/prices.json. Output tokens cost
-eight times as much as input tokens, and input the model saw recently, such as the same instructions and screening
-lists, is cached and costs a tenth. Prompt caching happens on its own; nothing in this lab sets it up.
+The cost comes from the tokens each call used and evals/prices.json. Output tokens cost eight times as much as input tokens, and input the model saw recently, such as the same instructions and screening lists, is cached and costs a tenth. Prompt caching happens on its own; nothing in this lab sets it up.
 
-### 2. Route low-risk alerts to a smaller model (12 min)
+### 2. Route low\-risk alerts to a smaller model \(12 min\)
 
-`gpt-5-nano` costs a fifth of `gpt-5-mini`. The gateway can send alerts with a low risk score to `triage-lite`, which
-has the same instructions on the smaller model. Turn it on, wait a minute, and run the gate:
+`gpt-5-nano` costs a fifth of `gpt-5-mini`. The gateway can send alerts with a low risk score to `triage-lite`, which has the same instructions on the smaller model. Turn it on, wait a minute, and run the gate:
 
 ```powershell
 .\scripts\set_gateway.ps1 model-routing on
@@ -831,13 +815,9 @@ uv run src/evaluate.py
 
 Compare the result with step 1:
 
-- **Cost:** about a tenth lower. Only the four alerts scored 65 or less go to `triage-lite`, and the reviewer still
-  runs on `gpt-5-mini` for every alert.
-- **Quality:** the blocking metrics usually still pass, sometimes right at the threshold, when the smaller model gets
-  one of its four alerts wrong. Look at the alerts on `gpt-5-nano` in the report: they include ALT-1005, a sanctions
-  hit. A risk score measures how unusual the activity is, not how serious a mistake would be.
-- **Reviewer agreement:** usually lower. The reviewer disagrees more often with the smaller model's reasons, and
-  every disagreement is work for an analyst, which costs far more than the tokens saved.
+- **Cost:** about a tenth lower. Only the four alerts scored 65 or less go to `triage-lite`, and the reviewer still runs on `gpt-5-mini` for every alert.
+- **Quality:** the blocking metrics usually still pass, sometimes right at the threshold, when the smaller model gets one of its four alerts wrong. Look at the alerts on `gpt-5-nano` in the report: they include ALT-1005, a sanctions hit. A risk score measures how unusual the activity is, not how serious a mistake would be.
+- **Reviewer agreement:** usually lower. The reviewer disagrees more often with the smaller model's reasons, and every disagreement is work for an analyst, which costs far more than the tokens saved.
 
 The gate turns "is the cheaper model good enough?" into numbers anyone can check. Turn routing off again:
 
@@ -845,10 +825,9 @@ The gate turns "is the cheaper model good enough?" into numbers anyone can check
 .\scripts\set_gateway.ps1 model-routing off
 ```
 
-### 3. Limit tokens per caller (8 min)
+### 3. Limit tokens per caller \(8 min\)
 
-A single runaway script can use the capacity every team shares. The gateway limits the tokens each caller can use
-per minute; the default is high. Set it below what one alert needs:
+A single runaway script can use the capacity every team shares. The gateway limits the tokens each caller can use per minute; the default is high. Set it below what one alert needs:
 
 ```powershell
 .\scripts\set_gateway.ps1 token-limit 3000
@@ -862,22 +841,17 @@ uv run src/investigate.py ALT-1001
 Remove-Item Env:OPENAI_LOG
 ```
 
-The triage call uses most of the 3,000 tokens. The reviewer call gets HTTP 429 from the gateway, with a
-`Retry-After` header, and the client waits and retries until the minute resets. The work still finishes, slowly:
-the limit protects everyone else's capacity, not the caller's deadline. Restore the default:
+The triage call uses most of the 3,000 tokens. The reviewer call gets HTTP 429 from the gateway, with a `Retry-After` header, and the client waits and retries until the minute resets. The work still finishes, slowly: the limit protects everyone else's capacity, not the caller's deadline. Restore the default:
 
 ```powershell
 .\scripts\set_gateway.ps1 token-limit 200000
 ```
 
-### 4. Attribute the cost (12 min)
+### 4. Attribute the cost \(12 min\)
 
-Every call through the gateway carries a cost center (`x-cost-center`): the release gate charges model validation,
-the red team security testing, and an analyst's investigation financial crime operations. The gateway records the
-tokens of each call by cost center, caller and agent.
+Every call through the gateway carries a cost center (`x-cost-center`): the release gate charges model validation, the red team security testing, and an analyst's investigation financial crime operations. The gateway records the tokens of each call by cost center, caller and agent.
 
-In the [Azure portal](https://portal.azure.com), open the Application Insights resource (`appi-…`) in your resource
-group, select **Logs**, and run:
+In the **Azure portal** @lab.CloudPortal.Link, open the Application Insights resource (`appi-...`) in your resource group, select **Logs**, and run:
 
 ```kusto
 let prices = datatable(Agent: string, input: real, cached: real, output: real) [
@@ -896,14 +870,11 @@ customMetrics
 | order by usd desc
 ```
 
-Model validation is most of the bill: you ran the gate more often today than anyone triaged an alert. Then change
-`by CostCenter` to `by tostring(customDimensions["Caller"])` to see the cost per person.
+Model validation is most of the bill: you ran the gate more often today than anyone triaged an alert. Then change `by CostCenter` to `by tostring(customDimensions["Caller"])` to see the cost per person.
 
-A call that sends no cost center is recorded as `unassigned`: it still counts, but nobody can be charged for it. The
-lab's scripts always send one. In production, the gateway would refuse calls without one, or derive it from the
-caller's identity, because a header alone is whatever the caller says it is.
+A call that sends no cost center is recorded as `unassigned`: it still counts, but nobody can be charged for it. The lab's scripts always send one. In production, the gateway would refuse calls without one, or derive it from the caller's identity, because a header alone is whatever the caller says it is.
 
-### 5. Wrap up (3 min)
+### 5. Wrap up \(3 min\)
 
 You can now answer the three questions a FinOps review asks about an AI workload: what each unit of work costs (per
 alert, from the gate), who consumed it (per cost center and caller, from the gateway), and what a cheaper option

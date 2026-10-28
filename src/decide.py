@@ -12,6 +12,7 @@ from datetime import datetime
 
 from azure.ai.projects import AIProjectClient
 
+from console_output import color
 from evaluate import parse, published
 from investigate import ROOT, cases, credential, env, investigate
 
@@ -31,8 +32,8 @@ def whoami() -> str:
 
 
 def ask_until(question: str, valid) -> str:
-    while (answer := input(question).strip()) not in valid:
-        print(f"Answer one of: {', '.join(valid)}")
+    while (answer := input(color(question, "cyan")).strip()) not in valid:
+        print(color(f"Answer one of: {', '.join(valid)}", "yellow"))
     return answer
 
 
@@ -41,30 +42,33 @@ _token = "x." + base64.urlsafe_b64encode(json.dumps({"upn": "ana@contoso.example
 assert claims(_token)["upn"] == "ana@contoso.example"
 
 if __name__ == "__main__":
-    alert_id = sys.argv[1] if len(sys.argv) > 1 else sys.exit("Usage: python src/decide.py ALERT_ID")
+    alert_id = sys.argv[1] if len(sys.argv) > 1 else sys.exit(
+        color("Usage: python src/decide.py ALERT_ID", "red", stream=sys.stderr)
+    )
     if alert_id not in cases:
-        sys.exit(f"Unknown alert {alert_id}. Alerts: {', '.join(cases)}")
+        sys.exit(color(f"Unknown alert {alert_id}. Alerts: {', '.join(cases)}", "red", stream=sys.stderr))
     analyst = whoami()
     agents = published(AIProjectClient(endpoint=env["FOUNDRY_PROJECT_ENDPOINT"], credential=credential))
 
-    print(f"{alert_id}: {cases[alert_id]['alert']['title']} ({cases[alert_id]['customer']['name']})\n")
+    print(color(f"{alert_id}: {cases[alert_id]['alert']['title']} ({cases[alert_id]['customer']['name']})", "cyan") + "\n")
     result = investigate(alert_id)
     triage, review = parse(result["triage"]), parse(result["review"])
-    print(f"Triage recommends: {triage.get('disposition', 'no answer')} (priority {triage.get('priority', '-')})")
+    print(f"{color('Triage recommends:', 'cyan')} {triage.get('disposition', 'no answer')} (priority {triage.get('priority', '-')})")
     for reason in triage.get("reasons", []):
         print(f"  - {reason}")
-    print(f"Reviewer: {review.get('verdict', 'no answer')}")
+    print(f"{color('Reviewer:', 'cyan')} "
+          + color(review.get("verdict", "no answer"), "green" if review.get("verdict") == "agree" else "yellow"))
     for issue in review.get("issues", []):
         print(f"  - {issue}")
 
-    print(f"\nNothing happens to this case until you decide. You are signed in as {analyst}.")
+    print("\n" + color(f"Nothing happens to this case until you decide. You are signed in as {analyst}.", "yellow"))
     approved = ask_until("Approve the recommendation? [y/n] ", ("y", "n")) == "y"
     disposition = triage.get("disposition") if approved else ask_until(f"Your decision [{'/'.join(DISPOSITIONS)}]: ", DISPOSITIONS)
     # Overruling the agents, or going against the reviewer, needs a reason that an auditor can read later.
     needs_reason = not approved or review.get("verdict") != "agree"
-    reason = input("Reason" + (" (required): " if needs_reason else " (optional): ")).strip()
+    reason = input(color("Reason" + (" (required): " if needs_reason else " (optional): "), "cyan")).strip()
     while needs_reason and not reason:
-        reason = input("A reason is required: ").strip()
+        reason = input(color("A reason is required: ", "yellow")).strip()
 
     decision = {
         "alert": alert_id,
@@ -80,4 +84,4 @@ if __name__ == "__main__":
     DECISIONS.parent.mkdir(exist_ok=True)
     with DECISIONS.open("a", encoding="utf-8") as f:
         f.write(json.dumps(decision) + "\n")
-    print(f"\nRecorded: {alert_id} {disposition}, decided by {analyst}. See {DECISIONS.relative_to(ROOT)}.")
+    print("\n" + color(f"Recorded: {alert_id} {disposition}, decided by {analyst}. See {DECISIONS.relative_to(ROOT)}.", "green"))

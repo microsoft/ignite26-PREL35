@@ -4,6 +4,7 @@ param(
     [Parameter(Mandatory)][string]$ResourceGroup
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'console_output.ps1')
 
 # The latest deployment with outputs: Skillable names its deployment differently from scripts/deploy.ps1.
 $outputs = az deployment group list --resource-group $ResourceGroup --query "sort_by([?properties.outputs != null], &properties.timestamp)[-1].properties.outputs" | ConvertFrom-Json
@@ -17,5 +18,14 @@ $lines = @("AZURE_RESOURCE_GROUP=$ResourceGroup") + @(
 )
 $envFile = Join-Path $PSScriptRoot '../.env'
 Set-Content -Path $envFile -Value $lines -Encoding utf8
-$lines | Where-Object { $_ -notmatch '^APPLICATIONINSIGHTS' } | ForEach-Object { Write-Host $_ }
-Write-Host "Wrote $(Resolve-Path $envFile)"
+$visibleValues = @($lines | Where-Object { $_ -notmatch '^APPLICATIONINSIGHTS' } | ForEach-Object {
+    $name, $value = $_ -split '=', 2
+    [pscustomobject]@{ Setting = $name; Value = $value }
+})
+$width = [Math]::Max('Setting'.Length, ($visibleValues | ForEach-Object { $_.Setting.Length } | Measure-Object -Maximum).Maximum)
+Write-LabMessage ("{0}  Value" -f 'Setting'.PadRight($width))
+Write-Host ("{0}  -----" -f ('-' * $width))
+foreach ($entry in $visibleValues) {
+    Write-Host ("{0}  {1}" -f $entry.Setting.PadRight($width), $entry.Value)
+}
+Write-LabMessage "Wrote $(Resolve-Path $envFile)" -Color Green
