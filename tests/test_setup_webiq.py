@@ -91,7 +91,10 @@ class WebIqSetupTests(unittest.TestCase):
         original = {
             "name": "fincrime-research",
             "@odata.etag": '"original"',
-            "knowledgeSources": [{"name": "fincrime-research-schemes", "alwaysQuerySource": True}],
+            "knowledgeSources": [
+                {"name": "fincrime-research-schemes", "alwaysQuerySource": True},
+                {"name": "fincrime-research-web"},
+            ],
             "models": [{"kind": "azureOpenAI", "azureOpenAIParameters": {"deploymentId": "gpt-5-mini"}}],
             "retrieveDefaults": {"maxRuntimeInSeconds": 45, "maxOutputSizeInTokens": 5000},
             "retrievalInstructions": "Keep this authored instruction.",
@@ -117,6 +120,7 @@ class WebIqSetupTests(unittest.TestCase):
             })
             self.assertEqual([tool["name"] for tool in parameters["tools"]], ["web"])
             self.assertEqual(len(state[kb_url]["knowledgeSources"]), 2)
+            self.assertNotIn("fincrime-research-web", [source["name"] for source in state[kb_url]["knowledgeSources"]])
             for name in ("models", "retrieveDefaults", "retrievalInstructions"):
                 self.assertEqual(state[kb_url][name], original[name])
             self.assertEqual(state[kb_url]["knowledgeSources"][0], original["knowledgeSources"][0])

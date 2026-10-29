@@ -436,3 +436,4 @@ __pycache__/
 # Evidence Packs written by src/evaluate.py
 evidence/
 .azure
+.playwright-mcp

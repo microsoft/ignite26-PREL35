@@ -1,0 +1,853 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.45.15.27210",
+      "templateHash": "16842608416552232111"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "learnerPrincipalId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Object ID of the learner. Gets Foundry User so they can see and evaluate the agents. Empty to skip."
+      }
+    },
+    "operatorPrincipalId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Object ID of the identity that runs scripts/create_agents.py. Empty to skip."
+      }
+    },
+    "investigatorPrincipalId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Object ID of the hosted investigator managed identity, not its resource ID. Set after publishing the hosted agent; empty skips its Search read role."
+      }
+    },
+    "investigatorIndexName": {
+      "type": "string",
+      "defaultValue": "fincrime-schemes",
+      "metadata": {
+        "description": "Name of the schemes index to create and seed separately through the Search data plane."
+      }
+    },
+    "investigatorKnowledgeBaseName": {
+      "type": "string",
+      "defaultValue": "fincrime-research"
+    },
+    "investigatorSearchLocation": {
+      "type": "string",
+      "defaultValue": "eastus",
+      "metadata": {
+        "description": "Search region; set separately when the Foundry region has no Search capacity."
+      }
+    },
+    "agentNames": {
+      "type": "array",
+      "defaultValue": [
+        "triage",
+        "reviewer",
+        "triage-lite"
+      ],
+      "metadata": {
+        "description": "Agents published through the gateway. triage-lite is triage on a smaller model (Lab 4)."
+      }
+    },
+    "models": {
+      "type": "array",
+      "defaultValue": [
+        {
+          "name": "gpt-5-mini",
+          "version": "2025-08-07",
+          "capacity": 60,
+          "sku": "GlobalStandard"
+        },
+        {
+          "name": "gpt-5-nano",
+          "version": "2025-08-07",
+          "capacity": 30,
+          "sku": "GlobalStandard"
+        },
+        {
+          "name": "text-embedding-3-small",
+          "version": "1",
+          "capacity": 10,
+          "sku": "Standard"
+        }
+      ],
+      "metadata": {
+        "description": "Model deployments (capacity in 1K tokens per minute). The agents start on the first one."
+      }
+    }
+  },
+  "variables": {
+    "$fxv#0": "<!--\n  Published agents API. Callers send their own Entra ID token; the gateway checks it, limits the caller,\n  then calls Foundry with its own managed identity. The operation name is the agent name.\n-->\n<policies>\n  <inbound>\n    <base />\n    <validate-azure-ad-token tenant-id=\"{{tenant-id}}\" output-token-variable-name=\"jwt\">\n      <audiences>\n        <audience>https://ai.azure.com</audience>\n        <!-- On-Behalf-Of (Lab 2): tokens issued for the gateway's own app registration -->\n        <audience>api://{{obo-client-id}}</audience>\n        <audience>{{obo-client-id}}</audience>\n      </audiences>\n    </validate-azure-ad-token>\n    <rate-limit-by-key calls=\"120\" renewal-period=\"60\"\n                       counter-key=\"@(((Jwt)context.Variables[&quot;jwt&quot;]).Claims.GetValueOrDefault(&quot;oid&quot;, &quot;unknown&quot;))\" />\n    <!-- Token limit (Lab 4): tokens per minute for each caller, set by the token-limit named value. -->\n    <llm-token-limit counter-key=\"@(((Jwt)context.Variables[&quot;jwt&quot;]).Claims.GetValueOrDefault(&quot;oid&quot;, &quot;unknown&quot;))\"\n                     tokens-per-minute=\"{{token-limit}}\" estimate-prompt-tokens=\"false\"\n                     remaining-tokens-header-name=\"x-remaining-tokens\" />\n    <!-- Model routing (Lab 4): when model-routing is \"on\", alerts with a risk score up to routing-max-score go to\n         triage-lite, the same instructions on a smaller model. -->\n    <set-variable name=\"agent\" value=\"@(context.Operation.Id)\" />\n    <choose>\n      <when condition=\"@(&quot;{{model-routing}}&quot; == &quot;on&quot; &amp;&amp; context.Operation.Id == &quot;triage&quot;)\">\n        <set-variable name=\"agent\" value=\"@{\n            try {\n                var input = JObject.Parse((string)context.Request.Body.As<JObject>(preserveContent: true)[&quot;input&quot;]);\n                return (int)input[&quot;alert&quot;][&quot;score&quot;] <= int.Parse(&quot;{{routing-max-score}}&quot;) ? &quot;triage-lite&quot; : &quot;triage&quot;;\n            } catch { return &quot;triage&quot;; }\n        }\" />\n      </when>\n    </choose>\n    <!-- Cost attribution (Lab 4): token use per cost center, caller and agent, sent to Application Insights. -->\n    <llm-emit-token-metric namespace=\"fincrime\">\n      <dimension name=\"Cost center\" value=\"@(context.Request.Headers.GetValueOrDefault(&quot;x-cost-center&quot;, &quot;unassigned&quot;))\" />\n      <dimension name=\"Caller\" value=\"@(((Jwt)context.Variables[&quot;jwt&quot;]).Claims.GetValueOrDefault(&quot;upn&quot;, ((Jwt)context.Variables[&quot;jwt&quot;]).Claims.GetValueOrDefault(&quot;unique_name&quot;, ((Jwt)context.Variables[&quot;jwt&quot;]).Claims.GetValueOrDefault(&quot;appid&quot;, &quot;unknown&quot;))))\" />\n      <dimension name=\"Agent\" value=\"@((string)context.Variables[&quot;agent&quot;])\" />\n    </llm-emit-token-metric>\n    <!-- Prompt Shields (Lab 2): when the prompt-shields named value is \"on\", scan the request for injected\n         instructions before it reaches Foundry. If the scan can't run, the request is refused. -->\n    <choose>\n      <when condition=\"@(\"{{prompt-shields}}\" == \"on\")\">\n        <send-request mode=\"new\" response-variable-name=\"shield\" timeout=\"10\" ignore-error=\"true\">\n          <set-url>{{content-safety-endpoint}}contentsafety/text:shieldPrompt?api-version=2024-09-01</set-url>\n          <set-method>POST</set-method>\n          <set-header name=\"Content-Type\" exists-action=\"override\">\n            <value>application/json</value>\n          </set-header>\n          <set-body>@(new JObject(\n              new JProperty(\"userPrompt\", \"\"),\n              new JProperty(\"documents\", new JArray((context.Request.Body.As<JObject>(preserveContent: true)[\"input\"] ?? \"\").ToString()))\n            ).ToString())</set-body>\n          <authentication-managed-identity resource=\"https://cognitiveservices.azure.com\" />\n        </send-request>\n        <choose>\n          <when condition=\"@(context.Variables[\"shield\"] == null || ((IResponse)context.Variables[\"shield\"]).StatusCode != 200)\">\n            <return-response>\n              <set-status code=\"503\" reason=\"Attack detection unavailable\" />\n              <set-header name=\"Content-Type\" exists-action=\"override\">\n                <value>application/json</value>\n              </set-header>\n              <set-body>{\"error\": {\"code\": \"prompt_shields_unavailable\", \"message\": \"The gateway could not scan this request, so it was refused.\"}}</set-body>\n            </return-response>\n          </when>\n          <when condition=\"@(((IResponse)context.Variables[\"shield\"]).Body.As<JObject>()[\"documentsAnalysis\"].Any(d => (bool)d[\"attackDetected\"]))\">\n            <return-response>\n              <set-status code=\"400\" reason=\"Blocked by gateway\" />\n              <set-header name=\"Content-Type\" exists-action=\"override\">\n                <value>application/json</value>\n              </set-header>\n              <set-body>{\"error\": {\"code\": \"prompt_attack_detected\", \"message\": \"The gateway blocked this request: Prompt Shields detected an injected instruction.\"}}</set-body>\n            </return-response>\n          </when>\n        </choose>\n      </when>\n    </choose>\n    <!-- Whose identity reaches Foundry, set by the caller-identity named value.\n         \"gateway\": the gateway's managed identity, so every caller gets the gateway's rights.\n         \"obo\" (Lab 2): the caller's token is exchanged for one that acts on behalf of the caller,\n         so Foundry applies that person's own permissions. -->\n    <choose>\n      <when condition=\"@(\"{{caller-identity}}\" == \"obo\")\">\n        <send-request mode=\"new\" response-variable-name=\"obo\" timeout=\"10\" ignore-error=\"true\">\n          <set-url>https://login.microsoftonline.com/{{tenant-id}}/oauth2/v2.0/token</set-url>\n          <set-method>POST</set-method>\n          <set-header name=\"Content-Type\" exists-action=\"override\">\n            <value>application/x-www-form-urlencoded</value>\n          </set-header>\n          <set-body>@(\"grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&requested_token_use=on_behalf_of\"\n              + \"&scope=\" + System.Net.WebUtility.UrlEncode(\"https://ml.azure.com/.default\")\n              + \"&client_id={{obo-client-id}}\"\n              + \"&client_secret=\" + System.Net.WebUtility.UrlEncode(\"{{obo-client-secret}}\")\n              + \"&assertion=\" + context.Request.Headers.GetValueOrDefault(\"Authorization\", \"\").Replace(\"Bearer \", \"\"))</set-body>\n        </send-request>\n        <choose>\n          <when condition=\"@(context.Variables[\"obo\"] == null || ((IResponse)context.Variables[\"obo\"]).StatusCode != 200)\">\n            <return-response>\n              <set-status code=\"401\" reason=\"On-Behalf-Of failed\" />\n              <set-header name=\"Content-Type\" exists-action=\"override\">\n                <value>application/json</value>\n              </set-header>\n              <set-body>@(new JObject(new JProperty(\"error\", new JObject(\n                  new JProperty(\"code\", \"on_behalf_of_failed\"),\n                  new JProperty(\"message\", context.Variables[\"obo\"] == null\n                      ? \"The gateway could not reach Entra ID.\"\n                      : (string)((IResponse)context.Variables[\"obo\"]).Body.As<JObject>()[\"error_description\"])))).ToString())</set-body>\n            </return-response>\n          </when>\n          <otherwise>\n            <set-header name=\"Authorization\" exists-action=\"override\">\n              <value>@(\"Bearer \" + (string)((IResponse)context.Variables[\"obo\"]).Body.As<JObject>()[\"access_token\"])</value>\n            </set-header>\n            <set-variable name=\"foundryCaller\" value=\"@(\"on behalf of \" + ((Jwt)context.Variables[\"jwt\"]).Claims.GetValueOrDefault(\"name\", \"the caller\"))\" />\n          </otherwise>\n        </choose>\n      </when>\n      <otherwise>\n        <authentication-managed-identity resource=\"https://ai.azure.com\" />\n        <set-variable name=\"foundryCaller\" value=\"gateway managed identity\" />\n      </otherwise>\n    </choose>\n    <set-backend-service backend-id=\"foundry-project\" />\n    <rewrite-uri template=\"@(&quot;/agents/&quot; + (string)context.Variables[&quot;agent&quot;] + &quot;/endpoint/protocols/openai/responses&quot;)\" copy-unmatched-params=\"false\" />\n    <set-query-parameter name=\"api-version\" exists-action=\"override\">\n      <value>v1</value>\n    </set-query-parameter>\n  </inbound>\n  <backend>\n    <base />\n  </backend>\n  <outbound>\n    <base />\n    <!-- Shows which agent answered and which identity Foundry saw. -->\n    <set-header name=\"x-agent\" exists-action=\"override\">\n      <value>@((string)context.Variables[\"agent\"])</value>\n    </set-header>\n    <set-header name=\"x-foundry-caller\" exists-action=\"override\">\n      <value>@((string)context.Variables[\"foundryCaller\"])</value>\n    </set-header>\n  </outbound>\n  <on-error>\n    <base />\n  </on-error>\n</policies>\n",
+    "token": "[toLower(uniqueString(resourceGroup().id))]",
+    "tags": {
+      "workload": "fincrime-triage"
+    },
+    "foundryUserRole": "53ca6127-db72-4b80-b1b0-d745d6d5456d",
+    "namedValues": [
+      {
+        "name": "tenant-id",
+        "value": "[tenant().tenantId]"
+      },
+      {
+        "name": "content-safety-endpoint",
+        "value": "[format('https://{0}.cognitiveservices.azure.com/', format('aif-{0}', variables('token')))]"
+      },
+      {
+        "name": "prompt-shields",
+        "value": "off"
+      },
+      {
+        "name": "caller-identity",
+        "value": "gateway"
+      },
+      {
+        "name": "token-limit",
+        "value": "200000"
+      },
+      {
+        "name": "model-routing",
+        "value": "off"
+      },
+      {
+        "name": "routing-max-score",
+        "value": "65"
+      },
+      {
+        "name": "obo-client-id",
+        "value": "00000000-0000-0000-0000-000000000000"
+      },
+      {
+        "name": "obo-client-secret",
+        "value": "not-set"
+      }
+    ],
+    "foundryUsers": "[filter(union(createArray(parameters('learnerPrincipalId')), createArray(parameters('operatorPrincipalId'))), lambda('id', not(empty(lambdaVariables('id')))))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[format('log-{0}', variables('token'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "retentionInDays": 30
+      }
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[format('appi-{0}', variables('token'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "kind": "web",
+      "properties": {
+        "Application_Type": "web",
+        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-{0}', variables('token')))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-{0}', variables('token')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2025-06-01",
+      "name": "[format('aif-{0}', variables('token'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "kind": "AIServices",
+      "sku": {
+        "name": "S0"
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "customSubDomainName": "[format('aif-{0}', variables('token'))]",
+        "allowProjectManagement": true,
+        "disableLocalAuth": true,
+        "publicNetworkAccess": "Enabled",
+        "networkAcls": {
+          "defaultAction": "Allow",
+          "ipRules": [],
+          "virtualNetworkRules": []
+        }
+      }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/projects",
+      "apiVersion": "2025-06-01",
+      "name": "[format('{0}/{1}', format('aif-{0}', variables('token')), 'fincrime')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "displayName": "Financial crime triage",
+        "description": "Triage and reviewer agents for transaction monitoring alerts"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('aif-{0}', variables('token')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/projects/connections",
+      "apiVersion": "2025-06-01",
+      "name": "[format('{0}/{1}/{2}', format('aif-{0}', variables('token')), 'fincrime', 'appinsights')]",
+      "properties": {
+        "category": "AppInsights",
+        "target": "[resourceId('Microsoft.Insights/components', format('appi-{0}', variables('token')))]",
+        "authType": "ApiKey",
+        "isSharedToAll": true,
+        "credentials": {
+          "key": "[reference(resourceId('Microsoft.Insights/components', format('appi-{0}', variables('token'))), '2020-02-02').ConnectionString]"
+        },
+        "metadata": {
+          "ApiType": "Azure",
+          "ResourceId": "[resourceId('Microsoft.Insights/components', format('appi-{0}', variables('token')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', format('appi-{0}', variables('token')))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', format('aif-{0}', variables('token')), 'fincrime')]"
+      ]
+    },
+    {
+      "copy": {
+        "name": "deployments",
+        "count": "[length(parameters('models'))]",
+        "mode": "serial",
+        "batchSize": 1
+      },
+      "type": "Microsoft.CognitiveServices/accounts/deployments",
+      "apiVersion": "2025-06-01",
+      "name": "[format('{0}/{1}', format('aif-{0}', variables('token')), parameters('models')[copyIndex()].name)]",
+      "sku": {
+        "name": "[coalesce(tryGet(parameters('models')[copyIndex()], 'sku'), 'GlobalStandard')]",
+        "capacity": "[parameters('models')[copyIndex()].capacity]"
+      },
+      "properties": "[shallowMerge(createArray(createObject('model', createObject('format', 'OpenAI', 'name', parameters('models')[copyIndex()].name, 'version', parameters('models')[copyIndex()].version)), if(equals(parameters('models')[copyIndex()].name, 'text-embedding-3-small'), createObject(), createObject('raiPolicyName', 'Microsoft.DefaultV2'))))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects/connections', format('aif-{0}', variables('token')), 'fincrime', 'appinsights')]",
+        "[resourceId('Microsoft.Resources/deployments', 'approved-models')]",
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('aif-{0}', variables('token')))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', format('aif-{0}', variables('token')), 'fincrime')]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service",
+      "apiVersion": "2024-05-01",
+      "name": "[format('apim-{0}', variables('token'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "sku": {
+        "name": "BasicV2",
+        "capacity": 1
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "publisherEmail": "lab-admin@contoso.example",
+        "publisherName": "FinCrime lab"
+      }
+    },
+    {
+      "copy": {
+        "name": "apimNamedValues",
+        "count": "[length(variables('namedValues'))]",
+        "mode": "serial",
+        "batchSize": 1
+      },
+      "type": "Microsoft.ApiManagement/service/namedValues",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', format('apim-{0}', variables('token')), variables('namedValues')[copyIndex()].name)]",
+      "properties": {
+        "displayName": "[variables('namedValues')[copyIndex()].name]",
+        "value": "[variables('namedValues')[copyIndex()].value]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', format('apim-{0}', variables('token')))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('aif-{0}', variables('token')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/backends",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', format('apim-{0}', variables('token')), 'foundry-project')]",
+      "properties": {
+        "protocol": "http",
+        "url": "[format('https://{0}.services.ai.azure.com/api/projects/{1}', format('aif-{0}', variables('token')), 'fincrime')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', format('apim-{0}', variables('token')))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('aif-{0}', variables('token')))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', format('aif-{0}', variables('token')), 'fincrime')]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', format('apim-{0}', variables('token')), 'agents')]",
+      "properties": {
+        "displayName": "Published agents",
+        "path": "agents",
+        "protocols": [
+          "https"
+        ],
+        "subscriptionRequired": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', format('apim-{0}', variables('token')))]"
+      ]
+    },
+    {
+      "copy": {
+        "name": "agentOperations",
+        "count": "[length(parameters('agentNames'))]"
+      },
+      "type": "Microsoft.ApiManagement/service/apis/operations",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}/{2}', format('apim-{0}', variables('token')), 'agents', parameters('agentNames')[copyIndex()])]",
+      "properties": {
+        "displayName": "[format('{0} agent', parameters('agentNames')[copyIndex()])]",
+        "method": "POST",
+        "urlTemplate": "[format('/{0}/responses', parameters('agentNames')[copyIndex()])]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', format('apim-{0}', variables('token')), 'agents')]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis/policies",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}/{2}', format('apim-{0}', variables('token')), 'agents', 'policy')]",
+      "properties": {
+        "format": "rawxml",
+        "value": "[variables('$fxv#0')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', format('apim-{0}', variables('token')), 'agents')]",
+        "apimNamedValues",
+        "[resourceId('Microsoft.ApiManagement/service/backends', format('apim-{0}', variables('token')), 'foundry-project')]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/loggers",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', format('apim-{0}', variables('token')), 'appinsights')]",
+      "properties": {
+        "loggerType": "applicationInsights",
+        "resourceId": "[resourceId('Microsoft.Insights/components', format('appi-{0}', variables('token')))]",
+        "credentials": {
+          "connectionString": "[reference(resourceId('Microsoft.Insights/components', format('appi-{0}', variables('token'))), '2020-02-02').ConnectionString]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', format('apim-{0}', variables('token')))]",
+        "[resourceId('Microsoft.Insights/components', format('appi-{0}', variables('token')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis/diagnostics",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}/{2}', format('apim-{0}', variables('token')), 'agents', 'applicationinsights')]",
+      "properties": {
+        "loggerId": "[resourceId('Microsoft.ApiManagement/service/loggers', format('apim-{0}', variables('token')), 'appinsights')]",
+        "alwaysLog": "allErrors",
+        "metrics": true,
+        "sampling": {
+          "samplingType": "fixed",
+          "percentage": 100
+        },
+        "verbosity": "information"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', format('apim-{0}', variables('token')), 'agents')]",
+        "[resourceId('Microsoft.ApiManagement/service/loggers', format('apim-{0}', variables('token')), 'appinsights')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts', format('aif-{0}', variables('token')))]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', format('aif-{0}', variables('token'))), resourceId('Microsoft.ApiManagement/service', format('apim-{0}', variables('token'))), variables('foundryUserRole'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('foundryUserRole'))]",
+        "principalId": "[reference(resourceId('Microsoft.ApiManagement/service', format('apim-{0}', variables('token'))), '2024-05-01', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', format('apim-{0}', variables('token')))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('aif-{0}', variables('token')))]"
+      ]
+    },
+    {
+      "copy": {
+        "name": "foundryUserAssignments",
+        "count": "[length(variables('foundryUsers'))]"
+      },
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts', format('aif-{0}', variables('token')))]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', format('aif-{0}', variables('token'))), variables('foundryUsers')[copyIndex()], variables('foundryUserRole'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('foundryUserRole'))]",
+        "principalId": "[variables('foundryUsers')[copyIndex()]]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('aif-{0}', variables('token')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "approved-models",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "modelNames": {
+            "value": "[map(parameters('models'), lambda('m', lambdaVariables('m').name))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "7480916233181010556"
+            }
+          },
+          "parameters": {
+            "modelNames": {
+              "type": "array"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/policyAssignments",
+              "apiVersion": "2024-04-01",
+              "name": "approved-ai-models",
+              "properties": {
+                "displayName": "Only approved AI models can be deployed",
+                "description": "Lab 3: only the approved decision and research models can be deployed.",
+                "policyDefinitionId": "[tenantResourceId('Microsoft.Authorization/policyDefinitions', 'aafe3651-cb78-4f68-9f81-e7e41509110f')]",
+                "parameters": {
+                  "effect": {
+                    "value": "Deny"
+                  },
+                  "allowedAssetIds": {
+                    "copy": [
+                      {
+                        "name": "value",
+                        "count": "[length(parameters('modelNames'))]",
+                        "input": "[format('azureml://registries/azure-openai/models/{0}/', parameters('modelNames')[copyIndex('value')])]"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "investigator",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "searchLocation": {
+            "value": "[parameters('investigatorSearchLocation')]"
+          },
+          "operatorPrincipalId": {
+            "value": "[parameters('operatorPrincipalId')]"
+          },
+          "investigatorPrincipalId": {
+            "value": "[parameters('investigatorPrincipalId')]"
+          },
+          "investigatorIndexName": {
+            "value": "[parameters('investigatorIndexName')]"
+          },
+          "investigatorKnowledgeBaseName": {
+            "value": "[parameters('investigatorKnowledgeBaseName')]"
+          },
+          "foundryAccountName": {
+            "value": "[format('aif-{0}', variables('token'))]"
+          },
+          "foundryProjectName": {
+            "value": "fincrime"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "590921137519525689"
+            }
+          },
+          "parameters": {
+            "searchLocation": {
+              "type": "string",
+              "defaultValue": "eastus",
+              "metadata": {
+                "description": "Search region; can differ from Foundry if the lab region has no Search capacity."
+              }
+            },
+            "operatorPrincipalId": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "investigatorPrincipalId": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "investigatorIndexName": {
+              "type": "string",
+              "defaultValue": "fincrime-schemes"
+            },
+            "investigatorKnowledgeBaseName": {
+              "type": "string",
+              "defaultValue": "fincrime-research"
+            },
+            "foundryAccountName": {
+              "type": "string",
+              "defaultValue": "[format('aif-{0}', toLower(uniqueString(resourceGroup().id)))]",
+              "metadata": {
+                "description": "Existing Foundry account containing the investigator project."
+              }
+            },
+            "foundryProjectName": {
+              "type": "string",
+              "defaultValue": "fincrime"
+            }
+          },
+          "variables": {
+            "token": "[toLower(uniqueString(resourceGroup().id))]",
+            "tags": {
+              "workload": "fincrime-triage"
+            },
+            "searchServiceContributorRole": "7ca78c08-252a-4471-8644-bb5ff32d4ba0",
+            "searchIndexDataContributorRole": "8ebe5a00-799e-43f5-93ac-243d3dce84a7",
+            "searchIndexDataReaderRole": "1407120a-92aa-4202-b7e9-c0e197c71c8f",
+            "openAiUserRole": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
+            "embeddingModel": "text-embedding-3-small"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Search/searchServices",
+              "apiVersion": "2025-05-01",
+              "name": "[format('search-{0}', variables('token'))]",
+              "location": "[parameters('searchLocation')]",
+              "tags": "[variables('tags')]",
+              "sku": {
+                "name": "basic"
+              },
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "replicaCount": 1,
+                "partitionCount": 1,
+                "disableLocalAuth": true,
+                "publicNetworkAccess": "Enabled",
+                "semanticSearch": "free"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token'))), variables('openAiUserRole'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('openAiUserRole'))]",
+                "principalId": "[reference(resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token'))), '2025-05-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.WebIQ/accounts",
+              "apiVersion": "2026-06-01-preview",
+              "name": "[format('webiq-{0}', variables('token'))]",
+              "location": "global",
+              "tags": "[variables('tags')]",
+              "kind": "WebIQ.Grounding",
+              "sku": {
+                "name": "G3"
+              },
+              "properties": {}
+            },
+            {
+              "condition": "[not(empty(parameters('operatorPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token'))), parameters('operatorPrincipalId'), variables('searchServiceContributorRole'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchServiceContributorRole'))]",
+                "principalId": "[parameters('operatorPrincipalId')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('operatorPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token'))), parameters('operatorPrincipalId'), variables('searchIndexDataContributorRole'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataContributorRole'))]",
+                "principalId": "[parameters('operatorPrincipalId')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('investigatorPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token'))), parameters('investigatorPrincipalId'), variables('searchIndexDataReaderRole'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataReaderRole'))]",
+                "principalId": "[parameters('investigatorPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token'))), resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('foundryAccountName'), parameters('foundryProjectName')), variables('searchIndexDataReaderRole'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataReaderRole'))]",
+                "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('foundryAccountName'), parameters('foundryProjectName')), '2025-06-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts/projects/connections",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('foundryAccountName'), parameters('foundryProjectName'), 'investigator-search')]",
+              "properties": {
+                "category": "CognitiveSearch",
+                "target": "[format('https://{0}.search.windows.net', format('search-{0}', variables('token')))]",
+                "authType": "ProjectManagedIdentity",
+                "isSharedToAll": true,
+                "metadata": {
+                  "ApiType": "Azure",
+                  "ApiVersion": "2025-09-01",
+                  "ResourceId": "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]",
+                  "type": "azure_ai_search"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]",
+                "[extensionResourceId(resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token'))), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token'))), resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('foundryAccountName'), parameters('foundryProjectName')), variables('searchIndexDataReaderRole')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "AZURE_SEARCH_SERVICE_NAME": {
+              "type": "string",
+              "value": "[format('search-{0}', variables('token'))]"
+            },
+            "AZURE_SEARCH_ENDPOINT": {
+              "type": "string",
+              "value": "[format('https://{0}.search.windows.net', format('search-{0}', variables('token')))]"
+            },
+            "AZURE_SEARCH_LOCATION": {
+              "type": "string",
+              "value": "[parameters('searchLocation')]"
+            },
+            "AZURE_SEARCH_INDEX_NAME": {
+              "type": "string",
+              "value": "[parameters('investigatorIndexName')]"
+            },
+            "AZURE_SEARCH_CONNECTION_NAME": {
+              "type": "string",
+              "value": "investigator-search"
+            },
+            "AZURE_SEARCH_CONNECTION_ID": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts/projects/connections', parameters('foundryAccountName'), parameters('foundryProjectName'), 'investigator-search')]"
+            },
+            "AZURE_SEARCH_KNOWLEDGE_BASE_NAME": {
+              "type": "string",
+              "value": "[parameters('investigatorKnowledgeBaseName')]"
+            },
+            "INVESTIGATOR_PLANNING_DEPLOYMENT": {
+              "type": "string",
+              "value": "gpt-5-mini"
+            },
+            "INVESTIGATOR_EMBEDDING_ENDPOINT": {
+              "type": "string",
+              "value": "[format('https://{0}.openai.azure.com', parameters('foundryAccountName'))]"
+            },
+            "INVESTIGATOR_EMBEDDING_DEPLOYMENT": {
+              "type": "string",
+              "value": "[variables('embeddingModel')]"
+            },
+            "INVESTIGATOR_EMBEDDING_MODEL": {
+              "type": "string",
+              "value": "[variables('embeddingModel')]"
+            },
+            "INVESTIGATOR_EMBEDDING_DIMENSIONS": {
+              "type": "int",
+              "value": 1536
+            },
+            "WEBIQ_RESOURCE_ID": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.WebIQ/accounts', format('webiq-{0}', variables('token')))]"
+            },
+            "WEBIQ_ACCOUNT_NAME": {
+              "type": "string",
+              "value": "[format('webiq-{0}', variables('token'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "deployments",
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('aif-{0}', variables('token')))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', format('aif-{0}', variables('token')), 'fincrime')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "FOUNDRY_PROJECT_ENDPOINT": {
+      "type": "string",
+      "value": "[format('https://{0}.services.ai.azure.com/api/projects/{1}', format('aif-{0}', variables('token')), 'fincrime')]"
+    },
+    "MODEL_DEPLOYMENT": {
+      "type": "string",
+      "value": "[parameters('models')[0].name]"
+    },
+    "APIM_GATEWAY_URL": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ApiManagement/service', format('apim-{0}', variables('token'))), '2024-05-01').gatewayUrl]"
+    },
+    "APIM_NAME": {
+      "type": "string",
+      "value": "[format('apim-{0}', variables('token'))]"
+    },
+    "AZURE_RESOURCE_GROUP": {
+      "type": "string",
+      "value": "[resourceGroup().name]"
+    },
+    "APPLICATIONINSIGHTS_CONNECTION_STRING": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/components', format('appi-{0}', variables('token'))), '2020-02-02').ConnectionString]"
+    },
+    "APPLICATIONINSIGHTS_NAME": {
+      "type": "string",
+      "value": "[format('appi-{0}', variables('token'))]"
+    },
+    "FOUNDRY_NAME": {
+      "type": "string",
+      "value": "[format('aif-{0}', variables('token'))]"
+    },
+    "FOUNDRY_PROJECT_NAME": {
+      "type": "string",
+      "value": "fincrime"
+    },
+    "AZURE_SEARCH_SERVICE_NAME": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'investigator'), '2025-04-01').outputs.AZURE_SEARCH_SERVICE_NAME.value]"
+    },
+    "AZURE_SEARCH_ENDPOINT": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'investigator'), '2025-04-01').outputs.AZURE_SEARCH_ENDPOINT.value]"
+    },
+    "AZURE_SEARCH_LOCATION": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'investigator'), '2025-04-01').outputs.AZURE_SEARCH_LOCATION.value]"
+    },
+    "AZURE_SEARCH_INDEX_NAME": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'investigator'), '2025-04-01').outputs.AZURE_SEARCH_INDEX_NAME.value]"
+    },
+    "AZURE_SEARCH_CONNECTION_NAME": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'investigator'), '2025-04-01').outputs.AZURE_SEARCH_CONNECTION_NAME.value]"
+    },
+    "AZURE_SEARCH_CONNECTION_ID": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'investigator'), '2025-04-01').outputs.AZURE_SEARCH_CONNECTION_ID.value]"
+    },
+    "AZURE_SEARCH_KNOWLEDGE_BASE_NAME": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'investigator'), '2025-04-01').outputs.AZURE_SEARCH_KNOWLEDGE_BASE_NAME.value]"
+    },
+    "INVESTIGATOR_PLANNING_DEPLOYMENT": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'investigator'), '2025-04-01').outputs.INVESTIGATOR_PLANNING_DEPLOYMENT.value]"
+    },
+    "INVESTIGATOR_EMBEDDING_ENDPOINT": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'investigator'), '2025-04-01').outputs.INVESTIGATOR_EMBEDDING_ENDPOINT.value]"
+    },
+    "INVESTIGATOR_EMBEDDING_DEPLOYMENT": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'investigator'), '2025-04-01').outputs.INVESTIGATOR_EMBEDDING_DEPLOYMENT.value]"
+    },
+    "INVESTIGATOR_EMBEDDING_MODEL": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'investigator'), '2025-04-01').outputs.INVESTIGATOR_EMBEDDING_MODEL.value]"
+    },
+    "INVESTIGATOR_EMBEDDING_DIMENSIONS": {
+      "type": "int",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'investigator'), '2025-04-01').outputs.INVESTIGATOR_EMBEDDING_DIMENSIONS.value]"
+    },
+    "WEBIQ_RESOURCE_ID": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'investigator'), '2025-04-01').outputs.WEBIQ_RESOURCE_ID.value]"
+    },
+    "WEBIQ_ACCOUNT_NAME": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'investigator'), '2025-04-01').outputs.WEBIQ_ACCOUNT_NAME.value]"
+    }
+  }
+}

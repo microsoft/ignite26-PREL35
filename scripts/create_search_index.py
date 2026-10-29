@@ -215,7 +215,8 @@ def seed_index(search, embeddings, definition, documents, deployment):
 def setup_knowledge_base(search, index_name, name, model_endpoint, deployment):
     source_name = f"{name}-schemes"
     existing = search.request("GET", f"knowledgebases/{name}", allow_not_found=True)
-    sources = list(existing["knowledgeSources"]) if existing else []
+    # Detach the retired built-in Bing source; keep Web IQ and any other added sources.
+    sources = [source for source in existing["knowledgeSources"] if source["name"] != f"{name}-web"] if existing else []
     if not any(source["name"] == source_name for source in sources):
         sources.append({"name": source_name})
     search.request("PUT", f"knowledgesources/{source_name}", {
@@ -231,7 +232,7 @@ def setup_knowledge_base(search, index_name, name, model_endpoint, deployment):
             )],
         },
     })
-    search.request("PUT", f"knowledgebases/{name}", {
+    definition = {
         "name": name,
         "description": "Research library for the fictional financial-crime lab; not evidence about a customer.",
         "knowledgeSources": sources,
@@ -254,8 +255,12 @@ def setup_knowledge_base(search, index_name, name, model_endpoint, deployment):
             "maxOutputDocuments": 4,
             "maxOutputSizeInTokens": 5000,
         },
-    })
-    print(f"Knowledge base {name}: source {source_name} uses index {index_name}; query planning uses {deployment}.")
+    }
+    if existing:
+        definition.update({key: value for key, value in existing.items() if not key.startswith("@odata.")})
+    definition["knowledgeSources"] = sources
+    search.request("PUT", f"knowledgebases/{name}", definition)
+    print(f"Knowledge base {name}: index source {source_name}; Web IQ MCP setup uses scripts/setup_webiq.ps1.")
 
 
 def main():

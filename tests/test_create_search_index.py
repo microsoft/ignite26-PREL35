@@ -102,6 +102,10 @@ class IndexSetupTests(unittest.TestCase):
             None,
             {"knowledgeSources": [{"name": "future-source"}]},
             {"knowledgeSources": [{"name": "future-source"}, {"name": "research-schemes"}]},
+            {"knowledgeSources": [
+                {"name": "future-source"}, {"name": "research-schemes"},
+                {"name": "research-web"}, {"name": "research-webiq"},
+            ]},
         ):
             with self.subTest(existing=existing):
                 search = Mock()
@@ -117,13 +121,37 @@ class IndexSetupTests(unittest.TestCase):
                 self.assertNotIn("content_vector", [
                     field["name"] for field in source["searchIndexParameters"]["sourceDataFields"]
                 ])
+                self.assertEqual(len(calls), 3)
                 knowledge_base = calls[2].args[2]
                 sources = [source["name"] for source in knowledge_base["knowledgeSources"]]
                 self.assertEqual(sources.count("research-schemes"), 1)
+                self.assertNotIn("research-web", sources)
+                expected_webiq = bool(existing and any(s["name"] == "research-webiq" for s in existing["knowledgeSources"]))
+                self.assertEqual("research-webiq" in sources, expected_webiq)
                 self.assertEqual("future-source" in sources, existing is not None)
                 parameters = knowledge_base["models"][0]["azureOpenAIParameters"]
                 self.assertEqual(parameters["deploymentId"], "gpt-5-mini")
                 self.assertNotIn("apiKey", parameters)
+
+    def test_setup_preserves_existing_model_and_authored_retrieval_settings(self):
+        existing = {
+            "@odata.etag": '"existing-etag"',
+            "name": "research",
+            "knowledgeSources": [{"name": "research-schemes", "enableFreshness": True}],
+            "models": [{"kind": "azureOpenAI", "azureOpenAIParameters": {"deploymentId": "custom-mini"}}],
+            "retrieveDefaults": {"maxRuntimeInSeconds": 20, "maxOutputDocuments": 2, "maxOutputSizeInTokens": 6000},
+            "retrievalInstructions": "Keep these authored instructions.",
+            "outputMode": "extractiveData",
+        }
+        search = Mock()
+        search.request.return_value = copy.deepcopy(existing)
+        index.setup_knowledge_base(search, "schemes", "research", "https://example.openai.azure.com", "gpt-5-mini")
+        definition = search.request.call_args.args[2]
+        for key in ("models", "retrieveDefaults", "retrievalInstructions", "outputMode"):
+            self.assertEqual(definition[key], existing[key])
+        self.assertEqual(definition["knowledgeSources"][0], existing["knowledgeSources"][0])
+        self.assertNotIn("@odata.etag", definition)
+        self.assertEqual(len(existing["knowledgeSources"]), 1)
 
     def test_failed_knowledge_source_creation_stops_knowledge_base_creation(self):
         search = Mock()

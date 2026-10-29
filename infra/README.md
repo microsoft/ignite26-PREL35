@@ -41,7 +41,7 @@ Every standard deployment includes the research resources through `main.bicep`; 
 azd deployment is needed. Its internal [investigator.bicep](investigator.bicep) module creates Basic Azure AI Search, Web IQ and the Foundry project connection
 `investigator-search`. The connection uses the project's managed identity with **Search Index Data Reader** access
 on the Search service. Search has its own managed identity with **Cognitive Services OpenAI User** access on Foundry
-for query vectorization and knowledge-base query planning. Neither connection uses an API key.
+for query vectorization and knowledge-base query planning. These Search integrations use managed identities, not API keys.
 
 The `models` list in `main.bicep` deploys and approves all three models, including
 `text-embedding-3-small` version 1 (Standard, capacity 10). The two GPT decision models retain GlobalStandard.
@@ -61,7 +61,7 @@ The same entry point creates the `fincrime-research-schemes` knowledge source ov
 `fincrime-research` knowledge base. It reuses the existing `gpt-5-mini` deployment for query planning with low
 reasoning effort and returns extracted source content rather than a synthesized answer. Retrieval defaults limit
 each request to 45 seconds, four documents and 5,000 output tokens (the service minimum); callers can override these defaults.
-Only documents marked synthetic are eligible for the index source. Web IQ setup is a separate organizer step below.
+Only documents marked synthetic are eligible for the index source. Add the Web IQ MCP source through the organizer setup below.
 The index includes a semantic configuration for its title, content and analyst guidance. Semantic ranking uses
 Search's free plan, limited to 1,000 requests per service per month.
 
@@ -79,7 +79,8 @@ Use this command if infrastructure provisioning succeeded but index setup failed
 azd can skip provisioning hooks rather than retrying index setup.
 
 Unchanged notes are skipped without regenerating embeddings. Changed notes are upserted by ID; setup never deletes
-the index or other documents. Existing additional knowledge-source references are preserved on reruns.
+the index or other documents. Existing additional knowledge-source references are preserved on reruns,
+except the retired built-in Bing source `fincrime-research-web`, which is detached without deleting its source object.
 A failed embedding, document upload or knowledge-base setup stops the command instead of reporting success.
 
 Search defaults to `eastus`, independently of the resource group's and Foundry's region.
@@ -109,7 +110,8 @@ use `https://api.microsoft.ai/v3/mcp` and the `x-apikey` header, without an `APP
 
 These are independent integrations. The knowledge source does not reference the Foundry connection, so it also
 works with direct Search retrieval. The script adds it to `fincrime-research`, preserving the existing index source,
-GPT-mini model and retrieval settings. See [MCP knowledge-source authentication](https://learn.microsoft.com/en-us/azure/search/agentic-knowledge-source-how-to-mcp-server#authentication-options).
+GPT-mini model and retrieval settings. Any retired built-in Bing source reference is detached; its source object is not deleted.
+See [MCP knowledge-source authentication](https://learn.microsoft.com/en-us/azure/search/agentic-knowledge-source-how-to-mcp-server#authentication-options).
 The managed identities used for Search and embeddings remain unchanged.
 
 The script also saves the MCP endpoint, connection name/ID and source name in `.env`. Environment refreshes and

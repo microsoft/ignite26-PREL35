@@ -225,14 +225,18 @@ def configure_webiq(settings, key, knowledge_base, request):
         },
     })
     source_name = settings["source_name"]
-    if not any(source["name"] == source_name for source in knowledge_base["knowledgeSources"]):
+    retired_source = f"{settings['AZURE_SEARCH_KNOWLEDGE_BASE_NAME']}-web"
+    sources = [source for source in knowledge_base["knowledgeSources"] if source["name"] != retired_source]
+    if not any(source["name"] == source_name for source in sources):
+        sources.append({"name": source_name})
+    if sources != knowledge_base["knowledgeSources"]:
         updated = {name: value for name, value in knowledge_base.items() if not name.startswith("@odata.")}
-        updated["knowledgeSources"] = [*knowledge_base["knowledgeSources"], {"name": source_name}]
+        updated["knowledgeSources"] = sources
         request("PUT", kb_url, SEARCH_SCOPE, updated, etag=knowledge_base.get("@odata.etag"))
     connection = request("GET", connection_url, ARM_SCOPE).get("properties", {})
     source = request("GET", source_url, SEARCH_SCOPE).get("mcpServerParameters", {})
     saved_base = request("GET", kb_url, SEARCH_SCOPE)
-    expected_sources = {item["name"] for item in knowledge_base["knowledgeSources"]} | {source_name}
+    expected_sources = {item["name"] for item in sources}
     if (
         connection.get("target") != MCP_ENDPOINT
         or connection.get("category") != "RemoteTool"
@@ -242,6 +246,7 @@ def configure_webiq(settings, key, knowledge_base, request):
         or "x-apikey" not in source.get("authentication", {}).get("storedHeadersParameters", {}).get("headers", {})
         or not any(tool["name"] == "web" for tool in source.get("tools", []))
         or not expected_sources.issubset({item["name"] for item in saved_base.get("knowledgeSources", [])})
+        or any(item["name"] == retired_source for item in saved_base.get("knowledgeSources", []))
     ):
         raise SetupError("Saved configuration could not be verified. Rerun setup before using Web IQ.")
 

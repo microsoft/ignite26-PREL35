@@ -1,0 +1,36 @@
+name: Check Bicep template
+
+on:
+  pull_request:
+    paths:
+      - 'infra/**'
+      - 'bicepconfig.json'
+      - '.github/workflows/check-bicep.yml'
+  push:
+    paths:
+      - 'infra/**'
+      - 'bicepconfig.json'
+      - '.github/workflows/check-bicep.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-template:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pinned Bicep version
+        run: az bicep install --version v0.45.15
+
+      - name: Check main.json matches Bicep
+        shell: bash
+        run: |
+          az bicep build --file infra/main.bicep --outfile "$RUNNER_TEMP/main.json"
+          if ! diff -u infra/main.json "$RUNNER_TEMP/main.json"; then
+            echo "::error file=infra/main.json::Template is missing or out of date. Using Bicep v0.45.15, run: az bicep build --file infra/main.bicep"
+            exit 1
+          fi
