@@ -199,7 +199,7 @@ agent and publish version 2 the same way.
 
 ### 3. Tour the landing zone \(5 min\)
 
-- [] Open the **Azure portal** @lab.CloudPortal.Link. Login using +++@lab.CloudPortalCredential(User1).Username+++ and the access token +++@lab.CloudPortalCredential(User1).AccessToken+++.
+- [] Open the **Azure portal** +++@lab.CloudPortal.Url+++. Login using +++@lab.CloudPortalCredential(User1).Username+++ and the access token +++@lab.CloudPortalCredential(User1).AccessToken+++.
 
 Find your resource group and deployed resources:
 
@@ -400,7 +400,7 @@ This is what an approver signs and an auditor reads later. You use it as the app
 
 ### 6. See the versions in the traces and in Foundry \(6 min\)
 
-Every agent call was traced. In the **Azure portal** @lab.CloudPortal.Link, open the Application Insights resource (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) in your resource group, select **Logs**.
+Every agent call was traced. In the **Azure portal** +++@lab.CloudPortal.Url+++, open the Application Insights resource (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) in your resource group, select **Logs**.
 
 > You may need to disable the "Agent" experience and switch from "Simple mode" to "KQL mode".
 
@@ -732,7 +732,7 @@ Every check passes, and the approval is recorded in governance/use-cases.json: w
 
 ### 5. See Azure Policy deny a model \(10 min\)
 
-Intake governs a use case. Azure Policy governs the platform underneath it, for every team. In the **Azure portal** @lab.CloudPortal.Link, open your resource group, select **Policies**, and open **Only approved AI models can be deployed**. It uses the built-in policy *Foundry model deployments should only use approved models*, with the effect **Deny** and two approved models: `gpt-5-mini` and `gpt-5-nano`.
+Intake governs a use case. Azure Policy governs the platform underneath it, for every team. In the **Azure portal** +++@lab.CloudPortal.Url+++, open your resource group, select **Policies**, and open **Only approved AI models can be deployed**. It uses the built-in policy *Foundry model deployments should only use approved models*, with the effect **Deny** and two approved models: `gpt-5-mini` and `gpt-5-nano`.
 
 Try to deploy a model that isn't approved:
 
@@ -851,7 +851,7 @@ The triage call uses most of the 3,000 tokens. The reviewer call gets HTTP 429 f
 
 Every call through the gateway carries a cost center (`x-cost-center`): the release gate charges model validation, the red team security testing, and an analyst's investigation financial crime operations. The gateway records the tokens of each call by cost center, caller and agent.
 
-In the **Azure portal** @lab.CloudPortal.Link, open the Application Insights resource (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) in your resource group, select **Logs**, and run:
+In the **Azure portal** +++@lab.CloudPortal.Url+++, open the Application Insights resource (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) in your resource group, select **Logs**, and run:
 
 ```kusto
 let prices = datatable(Agent: string, input: real, cached: real, output: real) [
