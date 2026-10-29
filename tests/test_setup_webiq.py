@@ -33,6 +33,23 @@ def fixture_env(path):
     return setup.load_configuration(path)
 
 
+def mcp_responses(tool_result, content_type):
+    responses = []
+    for request_id, result in (
+        (1, {"protocolVersion": "2025-03-26"}),
+        (None, None),
+        (2, {"tools": [{"name": "web"}]}),
+        (3, tool_result),
+    ):
+        body = json.dumps({"jsonrpc": "2.0", "id": request_id, "result": result})
+        if content_type == "text/event-stream":
+            body = f"event: message\r\ndata: {body}\r\n\r\n"
+        response = io.BytesIO(body.encode() if request_id is not None else b"")
+        response.headers = {"Content-Type": content_type, "Mcp-Session-Id": "fixture-mcp-session"}
+        responses.append(response)
+    return responses
+
+
 class WebIqSetupTests(unittest.TestCase):
     def test_key_rotation_preserves_other_settings_comments_and_private_permissions(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -129,6 +146,38 @@ class WebIqSetupTests(unittest.TestCase):
         self.assertEqual(kb_puts[0][2], {"etag": '"original"'})
         self.assertNotIn("@odata.etag", kb_puts[0][1])
 
+    def test_verification_accepts_write_only_headers_but_rejects_wrong_authentication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings = fixture_env(Path(directory) / ".env")
+        original = {"knowledgeSources": [
+            {"name": "fincrime-research-schemes"}, {"name": settings["source_name"]},
+        ]}
+        for authentication, accepted in (
+            ({"kind": "storedHeaders"}, True),
+            ({"kind": "storedHeaders", "storedHeadersParameters": {"headers": {}}}, True),
+            ({"kind": "foundryConnection"}, False),
+            ({}, False),
+        ):
+            with self.subTest(authentication=authentication):
+                request = Mock(side_effect=[
+                    {}, {},
+                    {"properties": {
+                        "target": setup.MCP_ENDPOINT, "category": "RemoteTool", "authType": "CustomKeys",
+                    }},
+                    {"mcpServerParameters": {
+                        "serverURL": setup.MCP_ENDPOINT,
+                        "authentication": authentication,
+                        "tools": [{"name": "web"}],
+                    }},
+                    original,
+                ])
+                with redirect_stdout(io.StringIO()):
+                    if accepted:
+                        setup.configure_webiq(settings, FIXTURE_KEY, original, request)
+                    else:
+                        with self.assertRaisesRegex(setup.SetupError, "Saved configuration could not be verified"):
+                            setup.configure_webiq(settings, FIXTURE_KEY, original, request)
+
     def test_configuration_failure_stops_before_changing_knowledge_base(self):
         with tempfile.TemporaryDirectory() as directory:
             settings = fixture_env(Path(directory) / ".env")
@@ -187,6 +236,192 @@ class WebIqSetupTests(unittest.TestCase):
                 self.assertEqual(capture.call_count, 1)
             self.assertNotIn(FIXTURE_KEY, output.getvalue())
             self.assertIn("Error details are withheld", output.getvalue())
+
+    def test_saved_key_is_reused_and_no_run_only_skips_search_checks(self):
+        for arguments in ([], ["--force"], ["--use-saved-key"], ["--no-run"], ["--force", "--no-run"]):
+            with self.subTest(arguments=arguments), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                path = root / ".env"
+                fixture_env(path)
+                setup.save_settings(path, {"WEBIQ_API_KEY": FIXTURE_KEY})
+                settings = setup.load_configuration(path)
+                knowledge_base = {"knowledgeSources": [{"name": "schemes"}]}
+                output = io.StringIO()
+                with (
+                    patch.object(setup, "ROOT", root),
+                    patch.object(setup.subprocess, "run", return_value=Mock(returncode=0)),
+                    patch.object(setup, "AzureCliCredential"),
+                    patch.object(setup, "check_targets", return_value=knowledge_base) as targets,
+                    patch.object(setup, "capture_key") as capture,
+                    patch.object(setup, "configure_webiq") as configure,
+                    patch.object(setup, "check_webiq_search") as web_search,
+                    patch.object(setup, "check_knowledge_base_search") as kb_search,
+                    redirect_stdout(output), redirect_stderr(output),
+                ):
+                    self.assertEqual(setup.main(arguments), 0)
+                targets.assert_called_once()
+                capture.assert_not_called()
+                configure.assert_called_once()
+                if "--no-run" in arguments:
+                    web_search.assert_not_called()
+                    kb_search.assert_not_called()
+                else:
+                    web_search.assert_called_once_with(FIXTURE_KEY)
+                    kb_search.assert_called_once()
+                self.assertEqual(configure.call_args.args[:3], (settings, FIXTURE_KEY, knowledge_base))
+                self.assertEqual(setup.load_configuration(path)["WEBIQ_API_KEY"], FIXTURE_KEY)
+                self.assertNotIn(FIXTURE_KEY, output.getvalue())
+
+    def test_direct_mcp_search_supports_json_and_sse_with_structured_or_text_results(self):
+        payload = {"webResults": [{"title": "Money Mule Initiative", "url": "https://www.justice.gov/civil"}]}
+        for content_type in ("application/json", "text/event-stream"):
+            for result in (
+                {"structuredContent": payload},
+                {"content": [{"type": "text", "text": json.dumps(payload)}]},
+            ):
+                with self.subTest(content_type=content_type, structured="structuredContent" in result):
+                    opener = Mock()
+                    opener.open.side_effect = mcp_responses(result, content_type)
+                    output = io.StringIO()
+                    with patch.object(setup.urllib.request, "build_opener", return_value=opener), redirect_stdout(output):
+                        setup.check_webiq_search(FIXTURE_KEY)
+                    self.assertEqual(opener.open.call_count, 4)
+                    request = opener.open.call_args.args[0]
+                    self.assertEqual(request.full_url, setup.MCP_ENDPOINT)
+                    self.assertEqual(request.get_header("X-apikey"), FIXTURE_KEY)
+                    self.assertEqual(request.get_header("Mcp-session-id"), "fixture-mcp-session")
+                    call = json.loads(request.data)
+                    self.assertEqual(call["method"], "tools/call")
+                    self.assertEqual(call["params"]["arguments"]["contentFormat"], "passage")
+                    self.assertEqual(call["params"]["arguments"]["query"], setup.PUBLIC_TEST_QUERY)
+                    self.assertIn("1 web results", output.getvalue())
+                    self.assertNotIn(FIXTURE_KEY, output.getvalue())
+
+    def test_direct_mcp_search_rejects_tool_errors_and_empty_results_without_leaking_keys(self):
+        for result in (
+            {"isError": True, "content": [{"type": "text", "text": FIXTURE_KEY}]},
+            {"structuredContent": {"webResults": []}},
+        ):
+            with self.subTest(tool_error=bool(result.get("isError"))):
+                opener = Mock()
+                opener.open.side_effect = mcp_responses(result, "application/json")
+                with (
+                    patch.object(setup.urllib.request, "build_opener", return_value=opener),
+                    redirect_stdout(io.StringIO()),
+                    self.assertRaises(setup.SetupError) as raised,
+                ):
+                    setup.check_webiq_search(FIXTURE_KEY)
+                self.assertNotIn(FIXTURE_KEY, str(raised.exception))
+
+    def test_direct_mcp_http_error_does_not_retry_or_expose_server_body(self):
+        opener = Mock()
+        opener.open.side_effect = urllib.error.HTTPError(
+            setup.MCP_ENDPOINT, 403, FIXTURE_KEY, {}, io.BytesIO(FIXTURE_KEY.encode()),
+        )
+        with (
+            patch.object(setup.urllib.request, "build_opener", return_value=opener),
+            redirect_stdout(io.StringIO()),
+            self.assertRaises(setup.SetupError) as raised,
+        ):
+            setup.check_webiq_search(FIXTURE_KEY)
+        opener.open.assert_called_once()
+        self.assertIn("HTTP 403", str(raised.exception))
+        self.assertNotIn(FIXTURE_KEY, str(raised.exception))
+
+    def test_knowledge_base_check_isolates_webiq_and_requires_successful_webiq_references(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings = fixture_env(Path(directory) / ".env")
+        source_name = settings["source_name"]
+        knowledge_base = {"knowledgeSources": [
+            {"name": "schemes"}, {"name": source_name}, {"name": "another-mcp-source"},
+        ]}
+        success = {
+            "activity": [{
+                "type": "mcpServer", "id": 1, "knowledgeSourceName": source_name,
+                "mcpServerArguments": {"toolName": "web"},
+            }],
+            "references": [{"type": "mcpServer", "id": "0", "activitySource": 1}],
+        }
+        cases = [(success, True)]
+        for changes in (
+            {"error": {"message": FIXTURE_KEY}},
+            {"references": []},
+            {"references": [{"type": "searchIndex", "activitySource": 1}]},
+            {"activity": [{**success["activity"][0], "error": {"message": FIXTURE_KEY}}]},
+            {"activity": [{**success["activity"][0], "knowledgeSourceName": "another-mcp-source"}]},
+        ):
+            cases.append(({**success, **changes}, False))
+        for result, accepted in cases:
+            with self.subTest(accepted=accepted, result=result):
+                request = Mock(side_effect=[
+                    copy.deepcopy(knowledge_base), {"kind": "searchIndex"}, {"kind": "mcpServer"}, result,
+                ])
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    if accepted:
+                        setup.check_knowledge_base_search(settings, request)
+                    else:
+                        with self.assertRaises(setup.SetupError) as raised:
+                            setup.check_knowledge_base_search(settings, request)
+                        self.assertNotIn(FIXTURE_KEY, str(raised.exception))
+                method, url, scope, body = request.call_args.args
+                self.assertEqual(method, "POST")
+                self.assertIn("/retrieve?api-version=", url)
+                self.assertEqual(scope, setup.SEARCH_SCOPE)
+                self.assertNotIn("maxOutputSizeInTokens", body)
+                parameters = {entry["knowledgeSourceName"]: entry for entry in body["knowledgeSourceParams"]}
+                self.assertTrue(parameters["schemes"]["neverQuerySource"])
+                self.assertTrue(parameters["another-mcp-source"]["neverQuerySource"])
+                self.assertNotIn("neverQuerySource", parameters[source_name])
+                self.assertEqual(body["messages"][0]["content"][0]["text"], setup.PUBLIC_TEST_QUERY)
+                self.assertEqual(request.call_count, 4)
+                self.assertTrue(all(call.args[0] == "GET" for call in request.call_args_list[:-1]))
+                self.assertNotIn(FIXTURE_KEY, output.getvalue())
+
+    def test_failed_search_keeps_saved_configuration_and_returns_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / ".env"
+            fixture_env(path)
+            setup.save_settings(path, {"WEBIQ_API_KEY": FIXTURE_KEY})
+            output = io.StringIO()
+            with (
+                patch.object(setup, "ROOT", root),
+                patch.object(setup.subprocess, "run", return_value=Mock(returncode=0)),
+                patch.object(setup, "AzureCliCredential"),
+                patch.object(setup, "check_targets", return_value={"knowledgeSources": [{"name": "schemes"}]}),
+                patch.object(setup, "configure_webiq"),
+                patch.object(setup, "check_webiq_search"),
+                patch.object(setup, "check_knowledge_base_search", side_effect=RuntimeError(FIXTURE_KEY)),
+                redirect_stdout(output), redirect_stderr(output),
+            ):
+                self.assertEqual(setup.main([]), 1)
+            self.assertEqual(setup.load_configuration(path)["WEBIQ_API_KEY"], FIXTURE_KEY)
+            self.assertIn("WEBIQ_CONNECTION_ID=", path.read_text())
+            self.assertIn("testing the knowledge-base", output.getvalue())
+            self.assertNotIn(FIXTURE_KEY, output.getvalue())
+
+    def test_force_without_saved_key_stops_without_prompt_or_configuration_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / ".env"
+            fixture_env(path)
+            before = path.read_bytes()
+            output = io.StringIO()
+            with (
+                patch.object(setup, "ROOT", root),
+                patch.object(setup.subprocess, "run", return_value=Mock(returncode=0)),
+                patch.object(setup, "AzureCliCredential"),
+                patch.object(setup, "check_targets", return_value={"knowledgeSources": [{"name": "schemes"}]}),
+                patch.object(setup, "capture_key") as capture,
+                patch.object(setup, "configure_webiq") as configure,
+                redirect_stdout(output), redirect_stderr(output),
+            ):
+                self.assertEqual(setup.main(["--force"]), 1)
+            capture.assert_not_called()
+            configure.assert_not_called()
+            self.assertEqual(path.read_bytes(), before)
+            self.assertIn("No saved WEBIQ_API_KEY", output.getvalue())
 
     def test_tracked_or_unignored_env_stops_before_prompt_or_azure_requests(self):
         with tempfile.TemporaryDirectory() as directory:

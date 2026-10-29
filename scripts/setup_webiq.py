@@ -25,6 +25,7 @@ SEARCH_API_VERSION = "2026-08-01-preview"
 ARM_API_VERSION = "2026-09-01"
 ARM_SCOPE = "https://management.azure.com/.default"
 SEARCH_SCOPE = "https://search.azure.com/.default"
+PUBLIC_TEST_QUERY = "site:justice.gov money mule initiative online job offers receive forward money virtual currency"
 ENV_ENTRY = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$")
 REQUIRED = (
     "AZURE_RESOURCE_GROUP", "FOUNDRY_NAME", "FOUNDRY_PROJECT_NAME",
@@ -207,7 +208,9 @@ def configure_webiq(settings, key, knowledge_base, request):
         "kind": "mcpServer",
         "description": (
             "Public financial-crime typology research through Web IQ. "
-            "Public sources provide general context, not evidence about fictional customers."
+            "Public sources provide general context, not evidence about fictional customers. "
+            "Call web with contentFormat='passage', maxResults=4 and maxLength=2000. "
+            "Do not request text, html or markdown; full-document formats require separate access."
         ),
         "resultsProcessing": "rerank",
         "mcpServerParameters": {
@@ -237,13 +240,13 @@ def configure_webiq(settings, key, knowledge_base, request):
     source = request("GET", source_url, SEARCH_SCOPE).get("mcpServerParameters", {})
     saved_base = request("GET", kb_url, SEARCH_SCOPE)
     expected_sources = {item["name"] for item in sources}
+    # Search can omit stored header names and values on GET; verify the auth mode instead.
     if (
         connection.get("target") != MCP_ENDPOINT
         or connection.get("category") != "RemoteTool"
         or connection.get("authType") != "CustomKeys"
         or source.get("serverURL") != MCP_ENDPOINT
         or source.get("authentication", {}).get("kind") != "storedHeaders"
-        or "x-apikey" not in source.get("authentication", {}).get("storedHeadersParameters", {}).get("headers", {})
         or not any(tool["name"] == "web" for tool in source.get("tools", []))
         or not expected_sources.issubset({item["name"] for item in saved_base.get("knowledgeSources", [])})
         or any(item["name"] == retired_source for item in saved_base.get("knowledgeSources", []))
@@ -251,9 +254,132 @@ def configure_webiq(settings, key, knowledge_base, request):
         raise SetupError("Saved configuration could not be verified. Rerun setup before using Web IQ.")
 
 
+def check_webiq_search(key):
+    print("Testing a direct Web IQ MCP search.")
+    headers = {"x-apikey": key, "Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+    opener = urllib.request.build_opener(NoRedirects())
+
+    def rpc(method, params=None, request_id=None):
+        body = {"jsonrpc": "2.0", "method": method}
+        if params is not None:
+            body["params"] = params
+        if request_id is not None:
+            body["id"] = request_id
+        request = urllib.request.Request(
+            MCP_ENDPOINT, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST",
+        )
+        try:
+            with opener.open(request, timeout=60) as response:
+                if session := response.headers.get("Mcp-Session-Id"):
+                    headers["Mcp-Session-Id"] = session
+                raw = response.read(2_000_001)
+                if len(raw) > 2_000_000:
+                    raise SetupError("Web IQ MCP response exceeded the test size limit.")
+                if request_id is None:
+                    return {}
+                text = raw.decode("utf-8")
+                if response.headers.get("Content-Type", "").startswith("text/event-stream"):
+                    for event in text.replace("\r\n", "\n").split("\n\n"):
+                        data = "\n".join(line[5:].lstrip(" ") for line in event.splitlines() if line.startswith("data:"))
+                        if data:
+                            message = json.loads(data)
+                            if message.get("id") == request_id:
+                                break
+                    else:
+                        raise ValueError
+                else:
+                    message = json.loads(text)
+                if message.get("id") != request_id:
+                    raise ValueError
+                if message.get("error"):
+                    raise SetupError(f"Web IQ MCP {method} failed. Check key permissions and rerun.")
+                if not isinstance(message.get("result"), dict):
+                    raise ValueError
+                return message["result"]
+        except urllib.error.HTTPError as error:
+            raise SetupError(f"Web IQ MCP {method} failed (HTTP {error.code}). Check key permissions and rerun.") from None
+        except (ValueError, UnicodeError):
+            raise SetupError("Web IQ MCP returned an invalid response.") from None
+
+    initialized = rpc("initialize", {
+        "protocolVersion": "2025-03-26", "capabilities": {},
+        "clientInfo": {"name": "prel35-webiq-setup", "version": "1.0"},
+    }, 1)
+    headers["MCP-Protocol-Version"] = initialized.get("protocolVersion", "2025-03-26")
+    rpc("notifications/initialized")
+    tools = rpc("tools/list", request_id=2).get("tools", [])
+    if not any(tool.get("name") == "web" for tool in tools):
+        raise SetupError("The saved Web IQ key does not expose the web tool. Enable the web service for this key.")
+    result = rpc("tools/call", {
+        "name": "web",
+        "arguments": {"query": PUBLIC_TEST_QUERY, "maxResults": 4, "maxLength": 2000, "contentFormat": "passage"},
+    }, 3)
+    if result.get("isError"):
+        raise SetupError("Web IQ web search returned a tool error. Check access to web search and passage content.")
+    payloads = [result.get("structuredContent", {})]
+    for content in result.get("content", []):
+        if content.get("type") == "text":
+            try:
+                payloads.append(json.loads(content["text"]))
+            except ValueError:
+                pass
+    results = next((payload["webResults"] for payload in payloads
+                    if isinstance(payload, dict) and isinstance(payload.get("webResults"), list) and payload["webResults"]), [])
+    if not results:
+        raise SetupError("Web IQ search returned no web results. Configuration is saved; retry the check later.")
+    print(f"Web IQ MCP search passed: {len(results)} web results.")
+
+
+def check_knowledge_base_search(settings, request):
+    print("Testing the knowledge base through its Web IQ MCP source.")
+    _, _, kb_url = target_urls(settings)
+    knowledge_base = request("GET", kb_url, SEARCH_SCOPE)
+    source_name = settings["source_name"]
+    if not any(source["name"] == source_name for source in knowledge_base["knowledgeSources"]):
+        raise SetupError("The Web IQ source is not attached to the knowledge base.")
+    parameters = [{
+        "knowledgeSourceName": source_name, "kind": "mcpServer",
+        "includeReferences": True, "includeReferenceSourceData": True,
+    }]
+    # Disable every other source for this request, without changing the saved knowledge base.
+    for source in knowledge_base["knowledgeSources"]:
+        if source["name"] != source_name:
+            source_url = (
+                f"{settings['search_endpoint']}/knowledgesources/{urllib.parse.quote(source['name'], safe='')}"
+                f"?api-version={SEARCH_API_VERSION}"
+            )
+            definition = request("GET", source_url, SEARCH_SCOPE)
+            parameters.append({
+                "knowledgeSourceName": source["name"], "kind": definition["kind"], "neverQuerySource": True,
+            })
+    result = request("POST", kb_url.replace("?api-version=", "/retrieve?api-version="), SEARCH_SCOPE, {
+        "messages": [{"role": "user", "content": [{"type": "text", "text": PUBLIC_TEST_QUERY}]}],
+        "includeActivity": True, "maxRuntimeInSeconds": 45, "maxOutputDocuments": 4, "maxOutputSize": 5000,
+        "knowledgeSourceParams": parameters,
+    })
+    activities = result.get("activity", [])
+    if result.get("error") or any(activity.get("error") or activity.get("errors") for activity in activities):
+        raise SetupError("Knowledge-base search returned activity errors. Configuration is saved; check source access.")
+    if any(activity.get("knowledgeSourceName") not in (None, source_name) for activity in activities):
+        raise SetupError("Knowledge-base search unexpectedly queried another source.")
+    calls = [activity for activity in activities if activity.get("type") == "mcpServer"
+             and activity.get("knowledgeSourceName") == source_name
+             and activity.get("mcpServerArguments", {}).get("toolName") == "web"]
+    call_ids = {call["id"] for call in calls}
+    references = [reference for reference in result.get("references", [])
+                  if reference.get("type") == "mcpServer" and reference.get("activitySource") in call_ids]
+    if not calls or not references:
+        raise SetupError("Knowledge-base search did not return Web IQ references. Configuration is saved; retry later.")
+    print(f"Knowledge-base search passed: {len(references)} Web IQ references from {len(calls)} MCP web calls.")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--use-saved-key", action="store_true", help="Reuse WEBIQ_API_KEY from .env without browser or prompt.")
+    parser.add_argument(
+        "--use-saved-key", "--force", action="store_true",
+        help="Require WEBIQ_API_KEY in .env and update both integrations without browser or prompt.",
+    )
+    parser.add_argument("--no-run", action="store_true", help="Configure integrations but skip both billable search checks.")
     args = parser.parse_args(argv)
     path = ROOT / ".env"
     stage = "checking local settings"
@@ -272,7 +398,15 @@ def main(argv=None):
             stage = "checking Azure access and the existing knowledge base"
             knowledge_base = check_targets(settings, request)
             stage = "reading the Web IQ key"
-            key = validate_key(settings.get("WEBIQ_API_KEY")) if args.use_saved_key else capture_key(settings)
+            saved_key = settings.get("WEBIQ_API_KEY")
+            if args.use_saved_key and not saved_key:
+                raise SetupError(
+                    "No saved WEBIQ_API_KEY in .env. Run scripts/setup_webiq.ps1 without "
+                    "-Force or -UseSavedKey to enter a key."
+                )
+            key = validate_key(saved_key) if saved_key else capture_key(settings)
+            if saved_key:
+                print("Using WEBIQ_API_KEY from .env. To change it, update or remove that entry.")
             stage = "saving the key in .env"
             save_settings(path, {"WEBIQ_API_KEY": key})
             stage = "configuring the independent Foundry and Search integrations"
@@ -284,8 +418,16 @@ def main(argv=None):
                 "WEBIQ_CONNECTION_ID": settings["connection_id"],
                 "WEBIQ_KNOWLEDGE_SOURCE_NAME": settings["source_name"],
             })
-        print("Web IQ configuration saved. The existing index source and knowledge-base settings were preserved.")
-        print("No web search was run. Use only approved public-topic queries, never customer data or full case prompts.")
+            print("Web IQ configuration saved. The existing index source and knowledge-base settings were preserved.")
+            if args.no_run:
+                print("Search checks skipped (-NoRun). No web search was run.")
+            else:
+                print("Running billable search checks with a fixed public DOJ topic; no customer or case data is sent.")
+                stage = "testing the direct Web IQ MCP search"
+                check_webiq_search(key)
+                stage = "testing the knowledge-base Web IQ MCP search"
+                check_knowledge_base_search(settings, request)
+        print("Use only approved public-topic queries, never customer data or full case prompts.")
         return 0
     except (KeyboardInterrupt, EOFError):
         print("Web IQ setup cancelled. Rerun setup to finish any partially applied configuration.", file=sys.stderr)
