@@ -191,6 +191,23 @@ def check_targets(settings, request):
     return knowledge_base
 
 
+def webiq_is_configured(settings, knowledge_base, request):
+    connection_url, source_url, _ = target_urls(settings)
+    connection = (request("GET", connection_url, ARM_SCOPE, allow_not_found=True) or {}).get("properties", {})
+    source = (request("GET", source_url, SEARCH_SCOPE, allow_not_found=True) or {}).get("mcpServerParameters", {})
+    sources = {item["name"] for item in knowledge_base.get("knowledgeSources", [])}
+    return (
+        connection.get("target") == MCP_ENDPOINT
+        and connection.get("category") == "RemoteTool"
+        and connection.get("authType") == "CustomKeys"
+        and source.get("serverURL") == MCP_ENDPOINT
+        and source.get("authentication", {}).get("kind") == "storedHeaders"
+        and any(tool.get("name") == "web" for tool in source.get("tools", []))
+        and settings["source_name"] in sources
+        and f"{settings['AZURE_SEARCH_KNOWLEDGE_BASE_NAME']}-web" not in sources
+    )
+
+
 def configure_webiq(settings, key, knowledge_base, request):
     connection_url, source_url, kb_url = target_urls(settings)
     print(f"Configuring Foundry MCP connection {CONNECTION_NAME}.")
@@ -380,6 +397,10 @@ def main(argv=None):
         help="Require WEBIQ_API_KEY in .env and update both integrations without browser or prompt.",
     )
     parser.add_argument("--no-run", action="store_true", help="Configure integrations but skip both billable search checks.")
+    parser.add_argument(
+        "--if-needed", action="store_true",
+        help="Skip setup and search checks when both deployed integrations are already configured.",
+    )
     args = parser.parse_args(argv)
     path = ROOT / ".env"
     stage = "checking local settings"
@@ -397,6 +418,9 @@ def main(argv=None):
 
             stage = "checking Azure access and the existing knowledge base"
             knowledge_base = check_targets(settings, request)
+            if args.if_needed and webiq_is_configured(settings, knowledge_base, request):
+                print("Web IQ is already configured. No settings were changed or search checks run.")
+                return 0
             stage = "reading the Web IQ key"
             saved_key = settings.get("WEBIQ_API_KEY")
             if args.use_saved_key and not saved_key:

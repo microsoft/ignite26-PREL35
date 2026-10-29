@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "16842608416552232111"
+      "templateHash": "15169819435154461204"
     }
   },
   "parameters": {
@@ -17,7 +17,7 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Object ID of the learner. Gets Foundry User so they can see and evaluate the agents. Empty to skip."
+        "description": "Object ID of the learner. Gets Foundry User, project/Search setup roles and Web IQ account Contributor. Empty to skip."
       }
     },
     "operatorPrincipalId": {
@@ -97,6 +97,7 @@
       "workload": "fincrime-triage"
     },
     "foundryUserRole": "53ca6127-db72-4b80-b1b0-d745d6d5456d",
+    "cognitiveServicesContributorRole": "25fbc0a9-bd7c-42a3-aa1a-3b75d497ee68",
     "namedValues": [
       {
         "name": "tenant-id",
@@ -417,6 +418,20 @@
       ]
     },
     {
+      "condition": "[not(empty(parameters('learnerPrincipalId')))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts/projects', format('aif-{0}', variables('token')), 'fincrime')]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts/projects', format('aif-{0}', variables('token')), 'fincrime'), parameters('learnerPrincipalId'), variables('cognitiveServicesContributorRole'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesContributorRole'))]",
+        "principalId": "[parameters('learnerPrincipalId')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', format('aif-{0}', variables('token')), 'fincrime')]"
+      ]
+    },
+    {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "approved-models",
@@ -490,6 +505,9 @@
           "operatorPrincipalId": {
             "value": "[parameters('operatorPrincipalId')]"
           },
+          "learnerPrincipalId": {
+            "value": "[parameters('learnerPrincipalId')]"
+          },
           "investigatorPrincipalId": {
             "value": "[parameters('investigatorPrincipalId')]"
           },
@@ -513,7 +531,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.45.15.27210",
-              "templateHash": "590921137519525689"
+              "templateHash": "6784615965202014503"
             }
           },
           "parameters": {
@@ -525,6 +543,10 @@
               }
             },
             "operatorPrincipalId": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "learnerPrincipalId": {
               "type": "string",
               "defaultValue": ""
             },
@@ -557,11 +579,13 @@
             "tags": {
               "workload": "fincrime-triage"
             },
+            "contributorRole": "b24988ac-6180-42a0-ab88-20f7382dd24c",
             "searchServiceContributorRole": "7ca78c08-252a-4471-8644-bb5ff32d4ba0",
             "searchIndexDataContributorRole": "8ebe5a00-799e-43f5-93ac-243d3dce84a7",
             "searchIndexDataReaderRole": "1407120a-92aa-4202-b7e9-c0e197c71c8f",
             "openAiUserRole": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
-            "embeddingModel": "text-embedding-3-small"
+            "embeddingModel": "text-embedding-3-small",
+            "searchSetupPrincipals": "[filter(union(createArray(parameters('operatorPrincipalId')), createArray(parameters('learnerPrincipalId'))), lambda('id', not(empty(lambdaVariables('id')))))]"
           },
           "resources": [
             {
@@ -611,14 +635,45 @@
               "properties": {}
             },
             {
-              "condition": "[not(empty(parameters('operatorPrincipalId')))]",
+              "condition": "[not(empty(parameters('learnerPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.WebIQ/accounts', format('webiq-{0}', variables('token')))]",
+              "name": "[guid(resourceId('Microsoft.WebIQ/accounts', format('webiq-{0}', variables('token'))), parameters('learnerPrincipalId'), variables('contributorRole'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('contributorRole'))]",
+                "principalId": "[parameters('learnerPrincipalId')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.WebIQ/accounts', format('webiq-{0}', variables('token')))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "searchServiceContributors",
+                "count": "[length(variables('searchSetupPrincipals'))]"
+              },
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
               "scope": "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]",
-              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token'))), parameters('operatorPrincipalId'), variables('searchServiceContributorRole'))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token'))), variables('searchSetupPrincipals')[copyIndex()], variables('searchServiceContributorRole'))]",
               "properties": {
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchServiceContributorRole'))]",
-                "principalId": "[parameters('operatorPrincipalId')]"
+                "principalId": "[variables('searchSetupPrincipals')[copyIndex()]]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('learnerPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token'))), parameters('learnerPrincipalId'), variables('searchIndexDataReaderRole'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataReaderRole'))]",
+                "principalId": "[parameters('learnerPrincipalId')]"
               },
               "dependsOn": [
                 "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]"

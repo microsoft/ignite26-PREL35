@@ -1,0 +1,34 @@
+{
+  "cash-structuring": {
+    "library": "What do the synthetic typology notes say about fragmented cash deposits, legitimate explanations and analyst verification questions?",
+    "public": "What does site:fincen.gov say about structured cash deposits and trade-based money laundering indicators?"
+  },
+  "rapid-funds-transit": {
+    "library": "What do the synthetic typology notes say about rapid pass-through payments, legitimate procurement agency and analyst verification questions?",
+    "public": "What does site:fincen.gov FIN-2010-A001 say about incoming funds followed by outgoing transfers in the same or nearly the same amounts?"
+  },
+  "money-mule-recruitment": {
+    "library": "What do the synthetic typology notes say about money mule recruitment, remote payment-assistant jobs, possible deception and analyst verification questions?",
+    "public": "What does site:justice.gov say about the money mule initiative, online job offers to receive and forward money, and virtual currency?"
+  },
+  "trade-document-consistency": {
+    "library": "What do the synthetic typology notes say about inconsistent trade invoices, shipping descriptions, third-party payers and legitimate explanations?",
+    "public": "What does site:fincen.gov say about trade-based money laundering indicators involving inconsistent trade documents and unexplained third-party payments?"
+  },
+  "account-control-changes": {
+    "library": "What do the synthetic typology notes say about account takeover, contact changes, new recipients and legitimate explanations?",
+    "public": "What does site:fincen.gov say about account takeover indicators involving changed customer profiles and unusual transfers?"
+  },
+  "ownership-transparency": {
+    "library": "What do the synthetic typology notes say about opaque ownership, related-entity payments, legitimate holding structures and verification questions?",
+    "public": "What does site:fincen.gov say about potential money laundering risks related to shell companies and their legitimate uses?"
+  },
+  "merchant-processing-anomalies": {
+    "library": "What do the synthetic typology notes say about merchant payment processor anomalies, legitimate explanations and verification questions?",
+    "public": "What does site:fincen.gov say about third-party payment processor risk indicators and activity inconsistent with a merchant profile?"
+  },
+  "email-payment-diversion": {
+    "library": "What do the synthetic typology notes say about email payment diversion, changed supplier instructions, legitimate explanations and verification questions?",
+    "public": "What does site:fincen.gov say about business email compromise and changes to supplier payment instructions?"
+  }
+}

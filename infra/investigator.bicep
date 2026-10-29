@@ -4,6 +4,7 @@ targetScope = 'resourceGroup'
 param searchLocation string = 'eastus'
 
 param operatorPrincipalId string = ''
+param learnerPrincipalId string = ''
 param investigatorPrincipalId string = ''
 param investigatorIndexName string = 'fincrime-schemes'
 param investigatorKnowledgeBaseName string = 'fincrime-research'
@@ -15,6 +16,7 @@ param foundryProjectName string = 'fincrime'
 
 var token = toLower(uniqueString(resourceGroup().id))
 var tags = { workload: 'fincrime-triage' }
+var contributorRole = 'b24988ac-6180-42a0-ab88-20f7382dd24c'
 var searchServiceContributorRole = '7ca78c08-252a-4471-8644-bb5ff32d4ba0'
 var searchIndexDataContributorRole = '8ebe5a00-799e-43f5-93ac-243d3dce84a7'
 var searchIndexDataReaderRole = '1407120a-92aa-4202-b7e9-c0e197c71c8f'
@@ -66,12 +68,32 @@ resource webIq 'Microsoft.WebIQ/accounts@2026-06-01-preview' = {
   properties: {}
 }
 
-resource operatorSearchServiceContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(operatorPrincipalId)) {
+resource learnerWebIqContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(learnerPrincipalId)) {
+  scope: webIq
+  name: guid(webIq.id, learnerPrincipalId, contributorRole)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', contributorRole)
+    principalId: learnerPrincipalId
+  }
+}
+
+var searchSetupPrincipals = filter(union([operatorPrincipalId], [learnerPrincipalId]), id => !empty(id))
+
+resource searchServiceContributors 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for id in searchSetupPrincipals: {
   scope: investigatorSearch
-  name: guid(investigatorSearch.id, operatorPrincipalId, searchServiceContributorRole)
+  name: guid(investigatorSearch.id, id, searchServiceContributorRole)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchServiceContributorRole)
-    principalId: operatorPrincipalId
+    principalId: id
+  }
+}]
+
+resource learnerSearchReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(learnerPrincipalId)) {
+  scope: investigatorSearch
+  name: guid(investigatorSearch.id, learnerPrincipalId, searchIndexDataReaderRole)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchIndexDataReaderRole)
+    principalId: learnerPrincipalId
   }
 }
 

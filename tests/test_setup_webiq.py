@@ -50,7 +50,106 @@ def mcp_responses(tool_result, content_type):
     return responses
 
 
+def configured_webiq_state(settings):
+    connection_url, source_url, kb_url = setup.target_urls(settings)
+    return {
+        connection_url: {"properties": {
+            "target": setup.MCP_ENDPOINT, "category": "RemoteTool", "authType": "CustomKeys",
+        }},
+        source_url: {"kind": "mcpServer", "mcpServerParameters": {
+            "serverURL": setup.MCP_ENDPOINT,
+            "authentication": {"kind": "storedHeaders"},
+            "tools": [{"name": "web"}],
+        }},
+        kb_url: {"knowledgeSources": [
+            {"name": "fincrime-research-schemes"}, {"name": settings["source_name"]},
+        ]},
+    }
+
+
 class WebIqSetupTests(unittest.TestCase):
+    def test_if_needed_checks_deployed_configuration_not_local_key(self):
+        for missing, saved_key in ((None, False), ("connection", True), ("source", False), ("attachment", True)):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                path = root / ".env"
+                settings = fixture_env(path)
+                if saved_key:
+                    setup.save_settings(path, {"WEBIQ_API_KEY": FIXTURE_KEY})
+                before = path.read_bytes()
+                state = configured_webiq_state(settings)
+                connection_url, source_url, kb_url = setup.target_urls(settings)
+                if missing == "connection":
+                    del state[connection_url]
+                elif missing == "source":
+                    del state[source_url]
+                elif missing == "attachment":
+                    state[kb_url]["knowledgeSources"].pop()
+                output = io.StringIO()
+                with (
+                    patch.object(setup, "ROOT", root),
+                    patch.object(setup.subprocess, "run", return_value=Mock(returncode=0)),
+                    patch.object(setup, "AzureCliCredential"),
+                    patch.object(setup, "azure_request", side_effect=lambda credential, method, url, *a, **k: state.get(url)) as request,
+                    patch.object(setup, "capture_key", return_value=FIXTURE_KEY) as capture,
+                    patch.object(setup, "configure_webiq") as configure,
+                    patch.object(setup, "check_webiq_search") as web_search,
+                    patch.object(setup, "check_knowledge_base_search") as kb_search,
+                    redirect_stdout(output), redirect_stderr(output),
+                ):
+                    self.assertEqual(setup.main(["--if-needed"]), 0)
+                    self.assertTrue(all(call.args[1] == "GET" for call in request.call_args_list))
+                    if missing is None:
+                        self.assertEqual(path.read_bytes(), before)
+                        capture.assert_not_called()
+                        configure.assert_not_called()
+                        web_search.assert_not_called()
+                        kb_search.assert_not_called()
+                        self.assertIn("already configured", output.getvalue())
+                    else:
+                        self.assertEqual(capture.call_count, 0 if saved_key else 1)
+                        configure.assert_called_once()
+                        web_search.assert_called_once_with(FIXTURE_KEY)
+                        kb_search.assert_called_once()
+                self.assertNotIn(FIXTURE_KEY, output.getvalue())
+
+    def test_if_needed_repairs_wrong_authentication_and_missing_web_tool(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings = fixture_env(Path(directory) / ".env")
+        connection_url, source_url, kb_url = setup.target_urls(settings)
+        for changed in ("connection-auth", "source-auth", "web-tool", "retired-source"):
+            with self.subTest(changed=changed):
+                state = configured_webiq_state(settings)
+                if changed == "connection-auth":
+                    state[connection_url]["properties"]["authType"] = "AAD"
+                elif changed == "source-auth":
+                    state[source_url]["mcpServerParameters"]["authentication"] = {"kind": "foundryConnection"}
+                elif changed == "web-tool":
+                    state[source_url]["mcpServerParameters"]["tools"] = []
+                else:
+                    state[kb_url]["knowledgeSources"].append({"name": "fincrime-research-web"})
+                request = Mock(side_effect=lambda method, url, *a, **k: state[url])
+                self.assertFalse(setup.webiq_is_configured(settings, state[kb_url], request))
+
+    def test_if_needed_does_not_treat_access_errors_as_missing_setup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture_env(root / ".env")
+            output = io.StringIO()
+            with (
+                patch.object(setup, "ROOT", root),
+                patch.object(setup.subprocess, "run", return_value=Mock(returncode=0)),
+                patch.object(setup, "AzureCliCredential"),
+                patch.object(setup, "azure_request", side_effect=setup.SetupError("Azure GET failed (HTTP 403).")),
+                patch.object(setup, "capture_key") as capture,
+                patch.object(setup, "configure_webiq") as configure,
+                redirect_stdout(output), redirect_stderr(output),
+            ):
+                self.assertEqual(setup.main(["--if-needed"]), 1)
+                capture.assert_not_called()
+                configure.assert_not_called()
+            self.assertIn("HTTP 403", output.getvalue())
+
     def test_key_rotation_preserves_other_settings_comments_and_private_permissions(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / ".env"

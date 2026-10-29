@@ -46,3 +46,6 @@ foreach ($entry in $visibleValues) {
     Write-Host ("{0}  {1}" -f $entry.Setting.PadRight($width), $entry.Value)
 }
 Write-LabMessage "Wrote $(Resolve-Path $envFile)" -Color Green
+if (Get-Command azd -ErrorAction SilentlyContinue) {
+    & (Join-Path $PSScriptRoot 'configure_evidence_agent.ps1') -ResourceGroup $ResourceGroup
+}

@@ -11,6 +11,23 @@ $before = if (Test-Path $envFile) { (Get-FileHash $envFile).Hash } else { $null 
 $fixtureKeyLine = 'WEBIQ_API_KEY="test-only-webiq-key"'
 $global:fixtureEnvPath = $envFile
 $global:fixtureEnv = @('# organizer settings', $fixtureKeyLine, 'OBO_SCOPE=keep', 'FOUNDRY_PROJECT_ENDPOINT=stale')
+$global:fixtureAzd = @{}
+$global:azdWrites = 0
+
+function global:azd {
+    $global:LASTEXITCODE = 0
+    switch ($args[0..1] -join ' ') {
+        'env list' { return '[{"Name":"fixture"}]' }
+        'env select' { return }
+        'env get-value' {
+            if ($global:fixtureAzd.ContainsKey($args[2])) { return $global:fixtureAzd[$args[2]] }
+            $global:LASTEXITCODE = 1
+            return
+        }
+        'env set' { $global:azdWrites++; $global:fixtureAzd[$args[2]] = $args[3]; return }
+    }
+    throw 'Unexpected azd command.'
+}
 
 function global:Get-Content {
     param([string]$Path, [switch]$Raw)
@@ -23,13 +40,19 @@ function global:Get-Content {
 function global:az {
     $global:LASTEXITCODE = 0
     $command = $args -join ' '
+    if ($command -like 'group show *') {
+        return '{"id":"/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/fixture","location":"eastus2"}'
+    }
     if ($command -like 'deployment group list *') {
         $baseline = @{
             FOUNDRY_PROJECT_ENDPOINT = @{ value = 'https://foundry.example/api/projects/fincrime' }
             APIM_GATEWAY_URL = @{ value = 'https://gateway.example' }
+            FOUNDRY_NAME = @{ value = 'foundry-fixture' }
+            FOUNDRY_PROJECT_NAME = @{ value = 'fincrime' }
         }
         $research = @{
             AZURE_SEARCH_ENDPOINT = @{ value = 'https://example.search.windows.net' }
+            AZURE_SEARCH_SERVICE_NAME = @{ value = 'example' }
             AZURE_SEARCH_INDEX_NAME = @{ value = 'fincrime-schemes' }
             AZURE_SEARCH_KNOWLEDGE_BASE_NAME = @{ value = 'fincrime-research' }
             WEBIQ_RESOURCE_ID = @{ value = '/fixture/webiq' }
@@ -95,6 +118,22 @@ if ($global:writtenLines -notcontains $fixtureKeyLine -or $global:writtenLines -
     ($deploymentMessages | Out-String) -match 'test-only-webiq-key') {
     throw 'Environment refresh must preserve organizer settings without printing the Web IQ key.'
 }
+$savedSubscription = $global:fixtureAzd.AZURE_SUBSCRIPTION_ID
+$global:fixtureAzd.AZURE_SUBSCRIPTION_ID = '00000000-0000-0000-0000-000000000099'
+$writesBefore = $global:azdWrites
+$failed = $false
+try {
+    & (Join-Path $root 'scripts/configure_evidence_agent.ps1') -ResourceGroup fixture
+} catch {
+    if ($_.Exception.Message -notlike '*targets a different lab*') { throw }
+    $failed = $true
+}
+if (-not $failed -or $global:azdWrites -ne $writesBefore) {
+    throw 'Configuring evidence must not overwrite an environment bound to another subscription.'
+}
+$global:fixtureAzd.AZURE_SUBSCRIPTION_ID = $savedSubscription
+& (Join-Path $root 'scripts/configure_evidence_agent.ps1') -ResourceGroup fixture -ValidateOnly
+if ($global:azdWrites -ne $writesBefore) { throw 'Predeploy validation must not rewrite azd settings.' }
 $global:mode = 'index'
 $global:failIndex = $true
 $failed = $false
@@ -112,6 +151,13 @@ $global:missingOutput = ''
 $global:hookOutputNames = @(Select-String -Path (Join-Path $root 'infra/main.bicep') -Pattern '^output\s+(\w+)\s' |
     ForEach-Object { $_.Matches[0].Groups[1].Value })
 function global:azd {
+    if ($args[1] -eq 'list') { $global:LASTEXITCODE = 0; return '[{"Name":"fixture"}]' }
+    if ($args[1] -eq 'select') { $global:LASTEXITCODE = 0; return }
+    if ($args -contains '--environment') {
+        $global:LASTEXITCODE = 0
+        if ($args[1] -eq 'set') { $global:fixtureAzd[$args[2]] = $args[3]; return }
+        return $global:fixtureAzd[$args[2]]
+    }
     if (($args[0..1] -join ' ') -ne 'env get-value' -or $args[2] -notin $global:hookOutputNames) {
         throw 'Unexpected azd output lookup.'
     }

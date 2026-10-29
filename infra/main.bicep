@@ -1,11 +1,11 @@
 // Lab 0 landing zone: Foundry (Entra ID only) behind an API Management AI gateway, with monitoring.
 // Deployed per learner resource group by the Skillable lifecycle action (scripts/deploy.ps1).
-// The role assignments need Owner or Role Based Access Control Administrator, which the learner (Contributor) lacks.
+// The role assignments need Owner or Role Based Access Control Administrator, which the learner (Reader) lacks.
 targetScope = 'resourceGroup'
 
 param location string = resourceGroup().location
 
-@description('Object ID of the learner. Gets Foundry User so they can see and evaluate the agents. Empty to skip.')
+@description('Object ID of the learner. Gets Foundry User, project/Search setup roles and Web IQ account Contributor. Empty to skip.')
 param learnerPrincipalId string = ''
 
 @description('Object ID of the identity that runs scripts/create_agents.py. Empty to skip.')
@@ -35,6 +35,7 @@ param models array = [
 var token = toLower(uniqueString(resourceGroup().id))
 var tags = { workload: 'fincrime-triage' }
 var foundryUserRole = '53ca6127-db72-4b80-b1b0-d745d6d5456d'
+var cognitiveServicesContributorRole = '25fbc0a9-bd7c-42a3-aa1a-3b75d497ee68'
 
 // ---------------------------------------------------------------- monitoring
 resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
@@ -129,6 +130,7 @@ module investigator './investigator.bicep' = {
   params: {
     searchLocation: investigatorSearchLocation
     operatorPrincipalId: operatorPrincipalId
+    learnerPrincipalId: learnerPrincipalId
     investigatorPrincipalId: investigatorPrincipalId
     investigatorIndexName: investigatorIndexName
     investigatorKnowledgeBaseName: investigatorKnowledgeBaseName
@@ -257,6 +259,16 @@ resource foundryUserAssignments 'Microsoft.Authorization/roleAssignments@2022-04
     principalId: id
   }
 }]
+
+// Reader on the resource group does not allow saving a project connection's API key.
+resource learnerProjectContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(learnerPrincipalId)) {
+  scope: project
+  name: guid(project.id, learnerPrincipalId, cognitiveServicesContributorRole)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesContributorRole)
+    principalId: learnerPrincipalId
+  }
+}
 
 output FOUNDRY_PROJECT_ENDPOINT string = 'https://${foundry.name}.services.ai.azure.com/api/projects/${project.name}'
 output MODEL_DEPLOYMENT string = deployments[0].name

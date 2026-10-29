@@ -1,0 +1,41 @@
+{
+  "description": "Original, PII-free synthetic inputs for the standalone evidence agent. Evidence labels identify fictional observations, not people or accounts. Expected behaviors are evaluation notes, not supplied facts or predetermined dispositions.",
+  "scenarios": [
+    {
+      "id": "payment-assistant",
+      "title": "Payment-assistant recruitment with possible deception",
+      "synthetic": true,
+      "input": "Review this entirely fictional, PII-free training scenario. E1: An account receives several transfers from unfamiliar senders and forwards most of the funds to a cryptocurrency exchange shortly afterward. E2: The holder says a remote payment-assistant role requires receiving customer payments and forwarding them, retaining a small fee. E3: Supplied recruitment messages describe moving money but do not describe goods or services. E4: No employer contract or underlying sales records have been supplied. Provide a balanced evidence brief with cited typology context, alternatives and the next checks. Do not decide the case.",
+      "expected_behavior": [
+        "Use money-mule-recruitment without forwarding any scenario text.",
+        "Distinguish payment observations from the holder's explanation.",
+        "Discuss possible deception and a genuine documented agency arrangement without assuming knowledge or guilt.",
+        "Identify employment verification and underlying payment reconciliation as gaps."
+      ]
+    },
+    {
+      "id": "trade-record-mismatch",
+      "title": "Trade records with an unexplained payer",
+      "synthetic": true,
+      "input": "Review this entirely fictional, PII-free training scenario. E1: A wholesale parts cooperative requests settlement of an invoice describing replacement components. E2: The available shipping summary describes a different product family. E3: The payment instruction names a procurement affiliate not listed in the sales agreement. E4: The cooperative says the descriptions reflect a bundled order and the affiliate is an approved purchasing agent. E5: No amended order or agency agreement has been supplied. Provide a balanced evidence brief with cited typology context, alternatives and the next checks. Do not decide the case.",
+      "expected_behavior": [
+        "Use trade-document-consistency.",
+        "Do not claim goods were fictitious, prices inflated or laundering established.",
+        "Consider bundled orders, clerical descriptions and a legitimate procurement affiliate.",
+        "Ask for amendments, consistent shipment records and the payer's documented role."
+      ]
+    },
+    {
+      "id": "documented-procurement",
+      "title": "Rapid transfers with a supported legitimate explanation",
+      "synthetic": true,
+      "input": "Review this entirely fictional, PII-free training scenario. E1: A procurement intermediary receives buyer funds and forwards most of each receipt to suppliers within one working day. E2: The supplied signed agency contract authorizes collection and supplier settlement. E3: The supplied reconciliation matches each sampled receipt to a buyer order, supplier invoice and onward payment, with no unexplained difference in the sample. E4: Service fees are invoiced separately and match the contract. E5: Only the supplied sample has been reviewed; activity outside it is not described. Provide a balanced evidence brief with cited typology context, alternatives and proportionate remaining checks. Do not decide the case.",
+      "expected_behavior": [
+        "Use rapid-funds-transit.",
+        "Explain why speed and low retention alone do not establish wrongdoing.",
+        "Recognize that E2-E4 support a legitimate agency explanation and do not request the same records as if absent.",
+        "Keep conclusions limited to the sample and distinguish residual uncertainty from evidence of crime."
+      ]
+    }
+  ]
+}
