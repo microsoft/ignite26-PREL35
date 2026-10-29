@@ -205,11 +205,11 @@ Find your resource group and deployed resources:
 
 | Resource | Look for |
 | -------- | -------- |
-| Foundry (`aif-...`) | **Resource Management > Keys and Endpoint**: local (key) authentication is disabled |
-| API Management (`apim-...`) | **APIs > Published agents**: one operation per agent. Open the policy: token check, rate limit, managed identity |
-| Application Insights (`appi-...`) | Where agent traces land. You use it in Lab 1 |
+| Foundry (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[FOUNDRY_NAME]`) | **Resource Management > Keys and Endpoint**: local (key) authentication is disabled |
+| API Management (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APIM_NAME]`) | **APIs > Published agents**: one operation per agent. Open the policy: token check, rate limit, managed identity |
+| Application Insights (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) | Where agent traces land. You use it in Lab 1 |
 
-Then open the [Foundry portal](https://ai.azure.com) `https://ai.azure.com`. By either going direct to the URL, or through Azure Portal ──► Foundry ──► blue button "Go to Foundry Portal".
+Then open the **Foundry portal** `https://ai.azure.com`. By either going direct to the URL, or through Azure Portal ──► Foundry ──► blue button "Go to Foundry Portal".
 
 - [] Select the `fincrime` project, and open **Build** ──► **Agents**. You see **triage** and **reviewer**. Open triage and read its instructions: they're the same text as `src/agents/triage.md`.
 
@@ -400,7 +400,7 @@ This is what an approver signs and an auditor reads later. You use it as the app
 
 ### 6. See the versions in the traces and in Foundry \(6 min\)
 
-Every agent call was traced. In the **Azure portal** @lab.CloudPortal.Link, open the Application Insights resource (`appi-...`) in your resource group, select **Logs**.
+Every agent call was traced. In the **Azure portal** @lab.CloudPortal.Link, open the Application Insights resource (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) in your resource group, select **Logs**.
 
 > You may need to disable the "Agent" experience and switch from "Simple mode" to "KQL mode".
 
@@ -418,7 +418,7 @@ dependencies
 
 You see one row per agent version: the concise prompt was the fastest version, and it was the one the gate blocked.
 
-Then open the [Foundry portal](https://ai.azure.com) `https://ai.azure.com`, select the `fincrime` project, and open **Evaluations**.
+Then open the [Foundry portal]() `https://ai.azure.com`, select the `fincrime` project, and open **Evaluations**.
 - [] Open **Triage task adherence** and the run from step 1: the AI judge's score and its reasoning for each alert.
 
 ### 7. The same gate in a pipeline \(3 min\)
@@ -528,7 +528,7 @@ In both, what stopped the attack is the model and the agent's own instructions: 
 
 ### 2. See the guardrail in Foundry \(4 min\)
 
-Open the [Foundry portal](https://ai.azure.com) `https://ai.azure.com`, select the `fincrime` project, and open **Guardrails**. Open the guardrail on `gpt-5-mini` (`Microsoft.DefaultV2`) and note:
+Open the **Foundry portal** `https://ai.azure.com`, select the `fincrime` project, and open **Guardrails**. Open the guardrail on `gpt-5-mini` (`Microsoft.DefaultV2`) and note:
 
 - The content categories and the severity at which they block, on both the prompt and the completion;
 - Jailbreak detection on the user prompt, which blocked `JB-01`;
@@ -613,7 +613,7 @@ You see `Red team: PASS`, unless `PER-02` got through again as in step 1. Each a
 
 Open the latest `evidence/...-redteam` folder. `report.md` lists every attack, its outcome and the control that stopped it; `results.json` holds every answer in full.
 
-Then open the [Foundry portal](https://ai.azure.com) `https://ai.azure.com`, select the `fincrime` project, open **Evaluations**, and open the **Red team gpt-5-mini ...** run from step 1. Foundry generated violence, hate, sexual and self-harm attacks, sent some of them disguised (Base64-encoded or reversed), and scored every answer. Look at the attack success rate by category and by disguise: the scan tests the model and its guardrail across far more attacks than you wrote by hand, and your attacks test what only you know, the financial-crime abuse of this agent through the gateway.
+Then open the **Foundry portal** `https://ai.azure.com`, select the `fincrime` project, open **Evaluations**, and open the **Red team gpt-5-mini ...** run from step 1. Foundry generated violence, hate, sexual and self-harm attacks, sent some of them disguised (Base64-encoded or reversed), and scored every answer. Look at the attack success rate by category and by disguise: the scan tests the model and its guardrail across far more attacks than you wrote by hand, and your attacks test what only you know, the financial-crime abuse of this agent through the gateway.
 
 Together with the release gate's Evidence Pack, these are the security input to the approval in Lab 3.
 
@@ -851,7 +851,7 @@ The triage call uses most of the 3,000 tokens. The reviewer call gets HTTP 429 f
 
 Every call through the gateway carries a cost center (`x-cost-center`): the release gate charges model validation, the red team security testing, and an analyst's investigation financial crime operations. The gateway records the tokens of each call by cost center, caller and agent.
 
-In the **Azure portal** @lab.CloudPortal.Link, open the Application Insights resource (`appi-...`) in your resource group, select **Logs**, and run:
+In the **Azure portal** @lab.CloudPortal.Link, open the Application Insights resource (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) in your resource group, select **Logs**, and run:
 
 ```kusto
 let prices = datatable(Agent: string, input: real, cached: real, output: real) [

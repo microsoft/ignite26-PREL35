@@ -11,13 +11,25 @@ param learnerPrincipalId string = ''
 @description('Object ID of the identity that runs scripts/create_agents.py. Empty to skip.')
 param operatorPrincipalId string = ''
 
+@description('Object ID of the hosted investigator managed identity, not its resource ID. Set after publishing the hosted agent; empty skips its Search read role.')
+param investigatorPrincipalId string = ''
+
+@description('Name of the schemes index to create and seed separately through the Search data plane.')
+param investigatorIndexName string = 'fincrime-schemes'
+
+param investigatorKnowledgeBaseName string = 'fincrime-research'
+
+@description('Search region; set separately when the Foundry region has no Search capacity.')
+param investigatorSearchLocation string = 'eastus'
+
 @description('Agents published through the gateway. triage-lite is triage on a smaller model (Lab 4).')
 param agentNames array = ['triage', 'reviewer', 'triage-lite']
 
 @description('Model deployments (capacity in 1K tokens per minute). The agents start on the first one.')
 param models array = [
-  { name: 'gpt-5-mini', version: '2025-08-07', capacity: 60 }
-  { name: 'gpt-5-nano', version: '2025-08-07', capacity: 30 } // Lab 1: the replacement in the model swap
+  { name: 'gpt-5-mini', version: '2025-08-07', capacity: 60, sku: 'GlobalStandard' }
+  { name: 'gpt-5-nano', version: '2025-08-07', capacity: 30, sku: 'GlobalStandard' } // Lab 1: the replacement in the model swap
+  { name: 'text-embedding-3-small', version: '1', capacity: 10, sku: 'Standard' }
 ]
 
 var token = toLower(uniqueString(resourceGroup().id))
@@ -94,28 +106,36 @@ resource appInsightsConnection 'Microsoft.CognitiveServices/accounts/projects/co
 resource deployments 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = [for m in models: {
   parent: foundry
   name: m.name
-  sku: { name: 'GlobalStandard', capacity: m.capacity }
+  sku: { name: m.?sku ?? 'GlobalStandard', capacity: m.capacity }
   properties: {
     model: { format: 'OpenAI', name: m.name, version: m.version }
-    raiPolicyName: 'Microsoft.DefaultV2'
+    ...(m.name == 'text-embedding-3-small' ? {} : { raiPolicyName: 'Microsoft.DefaultV2' })
   }
-  dependsOn: [project, appInsightsConnection]
+  dependsOn: [project, appInsightsConnection, approvedModels]
 }]
 
-// Lab 3: the models the bank has approved. Any other model deployment in this resource group is denied.
-resource approvedModels 'Microsoft.Authorization/policyAssignments@2024-04-01' = {
-  name: 'approved-ai-models'
-  properties: {
-    displayName: 'Only approved AI models can be deployed'
-    description: 'Lab 3: the bank approves gpt-5-mini and gpt-5-nano. Deployments of any other model are denied.'
-    // Built-in: Foundry model deployments should only use approved models
-    policyDefinitionId: tenantResourceId('Microsoft.Authorization/policyDefinitions', 'aafe3651-cb78-4f68-9f81-e7e41509110f')
-    parameters: {
-      effect: { value: 'Deny' }
-      allowedAssetIds: { value: [for m in models: 'azureml://registries/azure-openai/models/${m.name}/'] }
-    }
+// Approve decision and research models before provisioning them.
+module approvedModels './model-policy.bicep' = {
+  name: 'approved-models'
+  params: {
+    modelNames: map(models, m => m.name)
   }
-  dependsOn: [deployments] // assigned after the approved deployments exist
+}
+
+// ---------------------------------------------------------------- investigator knowledge and public research
+// Research resources are part of every lab deployment.
+module investigator './investigator.bicep' = {
+  name: 'investigator'
+  params: {
+    searchLocation: investigatorSearchLocation
+    operatorPrincipalId: operatorPrincipalId
+    investigatorPrincipalId: investigatorPrincipalId
+    investigatorIndexName: investigatorIndexName
+    investigatorKnowledgeBaseName: investigatorKnowledgeBaseName
+    foundryAccountName: foundry.name
+    foundryProjectName: project.name
+  }
+  dependsOn: [deployments]
 }
 
 // ---------------------------------------------------------------- API Management: the only way in for apps
@@ -247,3 +267,17 @@ output APPLICATIONINSIGHTS_CONNECTION_STRING string = appInsights.properties.Con
 output APPLICATIONINSIGHTS_NAME string = appInsights.name
 output FOUNDRY_NAME string = foundry.name
 output FOUNDRY_PROJECT_NAME string = project.name
+output AZURE_SEARCH_SERVICE_NAME string = investigator.outputs.AZURE_SEARCH_SERVICE_NAME
+output AZURE_SEARCH_ENDPOINT string = investigator.outputs.AZURE_SEARCH_ENDPOINT
+output AZURE_SEARCH_LOCATION string = investigator.outputs.AZURE_SEARCH_LOCATION
+output AZURE_SEARCH_INDEX_NAME string = investigator.outputs.AZURE_SEARCH_INDEX_NAME
+output AZURE_SEARCH_CONNECTION_NAME string = investigator.outputs.AZURE_SEARCH_CONNECTION_NAME
+output AZURE_SEARCH_CONNECTION_ID string = investigator.outputs.AZURE_SEARCH_CONNECTION_ID
+output AZURE_SEARCH_KNOWLEDGE_BASE_NAME string = investigator.outputs.AZURE_SEARCH_KNOWLEDGE_BASE_NAME
+output INVESTIGATOR_PLANNING_DEPLOYMENT string = investigator.outputs.INVESTIGATOR_PLANNING_DEPLOYMENT
+output INVESTIGATOR_EMBEDDING_ENDPOINT string = investigator.outputs.INVESTIGATOR_EMBEDDING_ENDPOINT
+output INVESTIGATOR_EMBEDDING_DEPLOYMENT string = investigator.outputs.INVESTIGATOR_EMBEDDING_DEPLOYMENT
+output INVESTIGATOR_EMBEDDING_MODEL string = investigator.outputs.INVESTIGATOR_EMBEDDING_MODEL
+output INVESTIGATOR_EMBEDDING_DIMENSIONS int = investigator.outputs.INVESTIGATOR_EMBEDDING_DIMENSIONS
+output WEBIQ_RESOURCE_ID string = investigator.outputs.WEBIQ_RESOURCE_ID
+output WEBIQ_ACCOUNT_NAME string = investigator.outputs.WEBIQ_ACCOUNT_NAME

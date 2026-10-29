@@ -1,4 +1,16 @@
 {
+  "public_research_examples": [
+    {
+      "alert_id": "ALT-1008",
+      "approved_topic_id": "money-mule-recruitment",
+      "public_query": "site:justice.gov money mule initiative online job offers receive forward money virtual currency",
+      "reference_title": "U.S. Department of Justice: Money Mule Initiative",
+      "reference_url": "https://www.justice.gov/civil/consumer-protection-branch/money-mule-initiative",
+      "research_question": "How do money-mule recruiters use remote job offers and virtual currency, and what should an analyst verify before assuming the account holder knowingly participated?",
+      "expected_context": "The published DOJ guidance describes ill-defined jobs, money arriving from strangers, onward transfers and virtual currency. It explains that some participants are deceived. This is general context, not evidence about this fictional customer or exchange.",
+      "query_boundary": "Only the fixed public_query is suitable for the public-web step. Do not send the alert ID, customer identity, account details, transactions or recruitment-message text."
+    }
+  ],
   "screening_lists": {
     "sanctions": [
       {
@@ -1608,7 +1620,17 @@
         }
       ],
       "prior_cases": [],
-      "documents": []
+      "documents": [
+        {
+          "id": "DOC-1008-01",
+          "customer_id": "C-008",
+          "title": "Customer-supplied remote-job message (fictional)",
+          "type": "customer_correspondence",
+          "source": "customer_upload",
+          "classification": 2,
+          "content": "The customer supplied a message advertising a part-time remote payment-assistant role. It asks the recipient to receive payments into a personal account and convert the funds to virtual currency for onward transfer, keeping a commission. The message describes no underlying goods or services. The sender's identity, employment relationship and source of the payments have not been independently verified. This is a fictional training document, not a quotation from or evidence about a real employer."
+        }
+      ]
     },
     {
       "alert": {

@@ -1,0 +1,215 @@
+{
+  "schema_version": 1,
+  "description": "Eight original synthetic financial-crime typology training notes for future investigator search indexing; not case evidence or decision recommendations.",
+  "reference_policy": "Official public HTML references support GENERAL typologies only. All examples, organizations, events, and transaction descriptions are original and fictional, not drawn from lab answers or customer fixtures and not attributed to the cited authorities. References were checked on 2026-10-29 UTC. Historical guidance is used for typology education, not as a statement of current legal requirements. Indicators require contextual verification and do not establish wrongdoing or recommend a disposition. approved_topic_id values are fixed topic labels, not customer identifiers, instructions, or generated web queries.",
+  "documents": [
+    {
+      "id": "typology-structuring-cash-activity",
+      "title": "Possible structuring in fragmented cash activity",
+      "scheme_type": "structuring",
+      "approved_topic_id": "cash-structuring",
+      "content": "General pattern: Structuring involves deliberately fragmenting transactions to evade reporting requirements. Repeated cash activity across locations or related accounts can warrant contextual review, but transaction size or frequency alone does not establish that intent. FinCEN's trade-based money laundering advisory discusses structured cash deposits and related account activity as potential indicators within a broader typology. This note focuses on understanding observed fragmentation, not on specifying reporting limits or ways to avoid controls.\n\nFICTIONAL example: A fictional neighborhood repair cooperative previously deposited receipts from its main workshop. Its recent activity includes cash deposits at several branches by different authorized staff, followed by transfers to a common purchasing account. Deposit records do not explain which workshop supplied each receipt. The cooperative says it has opened temporary service counters. Nothing in this example establishes whether that explanation is accurate or whether any fragmentation was deliberate.\n\nLimitations: Separate branches, staff schedules, secure cash-handling arrangements, and multiple trading locations can all produce fragmented deposits. A cash-intensive business can legitimately have frequent deposits and shared purchasing arrangements. Incomplete account visibility may make unrelated receipts appear coordinated. Do not infer intent from a selected transaction subset, a business sector, or the absence of an immediate explanation.\n\nAnalyst verification: Compare activity with the cooperative's expected operations and an appropriate historical period. Reconcile available receipts, deposit records, and authorized depositor roles before describing a pattern. Ask whether new locations or cash-collection arrangements explain the change. Record missing evidence and competing explanations separately. This training pattern is neither proof of wrongdoing nor a recommendation to file, restrict, or close an account.",
+      "indicators": [
+        "Repeated cash deposits across locations inconsistent with the documented operating footprint",
+        "Related deposits without a clear reconciliation to business receipts",
+        "Changes in depositor activity unexplained by known staffing or collection arrangements"
+      ],
+      "benign_explanations": [
+        "New trading locations or seasonal service counters",
+        "Separate staff cash-handling responsibilities",
+        "Centralized purchasing funded by legitimate local receipts"
+      ],
+      "analyst_questions": [
+        "Do business receipts reconcile with the observed deposits?",
+        "Have operating locations or cash-collection practices changed?",
+        "What evidence, if any, supports deliberate evasion rather than operational fragmentation?"
+      ],
+      "source_title": "FinCEN: Advisory to Financial Institutions on Filing Suspicious Activity Reports regarding Trade-Based Money Laundering (FIN-2010-A001)",
+      "source_url": "https://www.fincen.gov/resources/advisories/fincen-advisory-fin-2010-a001",
+      "content_version": "1.0",
+      "is_synthetic": true
+    },
+    {
+      "id": "typology-rapid-pass-through",
+      "title": "Rapid pass-through without a clear economic role",
+      "scheme_type": "rapid-pass-through",
+      "approved_topic_id": "rapid-funds-transit",
+      "content": "General pattern: A pass-through account receives funds and sends similar amounts onward with little apparent retention or operating activity. FinCEN's trade-based money laundering advisory identifies incoming funds followed by outgoing transfers in the same or nearly the same amounts, and abrupt bursts of payments, as potential warning signs in context. The useful question is whether the intermediary has a documented economic role, not whether money moved quickly by itself.\n\nFICTIONAL example: A fictional equipment coordination business receives transfers from several buyers and forwards most of each receipt to a small group of suppliers. Its recorded activity previously consisted of occasional consulting fees. Payment references describe equipment orders, but the available customer profile does not explain whether the business acts as a disclosed purchasing agent. The business says a new procurement contract explains the increased turnover. The contract has not yet been reviewed, so the apparent mismatch remains an information gap.\n\nLimitations: Disclosed agents, settlement businesses, treasury functions, and procurement intermediaries routinely move money quickly. Small retained balances may reflect scheduled settlement rather than concealment. Fees may be collected separately. Posting dates, netting, foreign exchange, and incomplete payment-chain visibility can distort an apparent match between incoming and outgoing funds. Timing is not evidence that a receipt came from crime.\n\nAnalyst verification: Establish the intermediary's contractual role, fee model, and expected counterparties. Reconcile a proportionate sample of receipts and disbursements to orders or settlement records. Distinguish observed timing from assumptions about beneficial ownership or source of funds. Compare the explanation with the business profile and record evidence that supports ordinary agency activity as carefully as unresolved discrepancies. This is training guidance, not proof or a decision recommendation.",
+      "indicators": [
+        "Similar incoming and outgoing amounts with limited explained retention",
+        "Abrupt payment bursts outside the documented business profile",
+        "Unclear relationships between payers, the intermediary, and recipients"
+      ],
+      "benign_explanations": [
+        "Disclosed procurement or collection agency",
+        "Contractual settlement schedules",
+        "Centralized treasury or separately billed service fees"
+      ],
+      "analyst_questions": [
+        "What contractual service explains the intermediary's role?",
+        "Can receipts and disbursements be reconciled to underlying obligations?",
+        "Does the timing reflect ordinary settlement or a change needing explanation?"
+      ],
+      "source_title": "FinCEN: Advisory to Financial Institutions on Filing Suspicious Activity Reports regarding Trade-Based Money Laundering (FIN-2010-A001)",
+      "source_url": "https://www.fincen.gov/resources/advisories/fincen-advisory-fin-2010-a001",
+      "content_version": "1.0",
+      "is_synthetic": true
+    },
+    {
+      "id": "typology-money-mule-recruitment",
+      "title": "Money mule recruitment and third-party direction",
+      "scheme_type": "money-mule-accounts",
+      "approved_topic_id": "money-mule-recruitment",
+      "content": "General pattern: Money mules receive and move money obtained from fraud victims at another party's direction. The U.S. Department of Justice explains that recruitment can involve supposed jobs, online relationships, or prize stories. Some participants understand the criminal purpose; others are deceived. Receiving money for onward transfer is therefore a pattern to investigate, not a basis for assuming the account holder's knowledge or culpability.\n\nFICTIONAL example: A fictional account holder reports accepting a remote payment-assistant role with a fictional logistics collective. The account receives payments from unfamiliar senders, followed by onward transfers described as supplier settlement. The holder cannot explain what was sold and supplies messages describing duties mainly as receiving and forwarding funds. No independent employer relationship has been established. These facts raise questions about possible recruitment while leaving open whether the holder is a victim, a legitimate contractor, or a knowing participant.\n\nLimitations: Family support, shared expenses, disclosed agency arrangements, and genuine employment reimbursements can involve third-party funds. Unfamiliar counterparties alone are not proof that funds were stolen. An account graph cannot establish coercion, deception, knowledge, or the underlying fraud. Avoid treating age, occupation, nationality, or limited financial experience as a substitute for transaction evidence.\n\nAnalyst verification: Ask proportionate questions about the job, actual services, origin of incoming payments, and who directs disbursements. Use authorized records to corroborate any claimed employer relationship. Separate the account holder's statements from independently confirmed facts and preserve relevant communications through approved processes. Consider possible victimization and uncertainty in the factual summary. This note provides training context only; it establishes neither wrongdoing nor an account or reporting decision.",
+      "indicators": [
+        "Unfamiliar incoming senders followed by transfers at another party's direction",
+        "Purported employment duties largely limited to moving money",
+        "Inability to explain the underlying goods or services"
+      ],
+      "benign_explanations": [
+        "Documented payment agency or employment arrangement",
+        "Family support or shared-expense reimbursement",
+        "Legitimate collection of funds for an agreed purpose"
+      ],
+      "analyst_questions": [
+        "What work or obligation explains the incoming funds?",
+        "Who directs the onward transfers and how is that relationship documented?",
+        "What evidence distinguishes possible deception from knowing participation?"
+      ],
+      "source_title": "U.S. Department of Justice: Money Mule Initiative",
+      "source_url": "https://www.justice.gov/civil/consumer-protection-branch/money-mule-initiative",
+      "content_version": "1.0",
+      "is_synthetic": true
+    },
+    {
+      "id": "typology-trade-document-inconsistencies",
+      "title": "Trade-based laundering and inconsistent commercial records",
+      "scheme_type": "trade-based-laundering",
+      "approved_topic_id": "trade-document-consistency",
+      "content": "General pattern: Trade-based money laundering can disguise the movement of value through misrepresented prices, quantities, descriptions, or repeated invoicing. FinCEN's advisory highlights discrepancies between trade documents, unexplained third-party payments, and missing supporting records. The central analytic task is to compare the payment with a genuine commercial obligation and the associated goods or services, while recognizing that a financial institution may see documents rather than the goods themselves.\n\nFICTIONAL example: A fictional wholesale parts cooperative requests payment for replacement components. An invoice describes one product family while the available shipping summary describes another. Payment is requested from a procurement affiliate not named in the sales agreement. The cooperative says the descriptions reflect a bundled order and the affiliate is an approved purchasing agent. Those explanations are plausible but unverified; the example supplies no finding about the shipment, valuation, or parties' intentions.\n\nLimitations: Document amendments, industry abbreviations, partial shipments, currency changes, and legitimate agency arrangements can create apparent inconsistencies. A price comparison without specifications, delivery terms, insurance, and market conditions may be misleading. A third-party payer is not inherently illicit. Repeated document numbers may represent installments or corrections rather than duplicate claims. Geographic connections alone do not establish wrongdoing.\n\nAnalyst verification: Compare purchase orders, invoices, shipping records, amendments, and payment instructions within authorized access. Ask for clarification of material inconsistencies rather than assuming a false shipment. Establish why the payer differs from the purchaser and whether the relationship is documented. Record which documents were actually available and which assertions remain uncorroborated. This training note is not proof of trade-based laundering or a recommendation about disposition.",
+      "indicators": [
+        "Material inconsistencies between invoice and shipping descriptions",
+        "Payments by parties with no documented role in the trade",
+        "Missing or unexplained amendments to supporting commercial records"
+      ],
+      "benign_explanations": [
+        "Bundled orders or partial shipments",
+        "Documented procurement affiliate or payment agent",
+        "Clerical corrections or differences in product terminology"
+      ],
+      "analyst_questions": [
+        "Do the available records describe the same commercial obligation?",
+        "What documented relationship explains the third-party payer?",
+        "Do specifications and delivery terms explain apparent valuation differences?"
+      ],
+      "source_title": "FinCEN: Advisory to Financial Institutions on Filing Suspicious Activity Reports regarding Trade-Based Money Laundering (FIN-2010-A001)",
+      "source_url": "https://www.fincen.gov/resources/advisories/fincen-advisory-fin-2010-a001",
+      "content_version": "1.0",
+      "is_synthetic": true
+    },
+    {
+      "id": "typology-account-takeover-profile-change",
+      "title": "Account takeover signals after profile and activity changes",
+      "scheme_type": "account-takeover",
+      "approved_topic_id": "account-control-changes",
+      "content": "General pattern: Account takeover involves unauthorized control of a customer's account to affect or remove customer funds. FinCEN identifies departures from normal activity, sudden transfers, and customer or account profile changes as possible indicators of intrusion. A formerly quiet account becoming active can supply context for these observations, but dormancy or reactivation is not itself a diagnosis. The cited guidance supports the account-takeover pattern, not a rule that reactivated accounts are suspicious.\n\nFICTIONAL example: A fictional community publishing cooperative has used an account infrequently while a project was paused. After a contact-detail update, the account begins sending transfers to new service providers. The cooperative's recorded purpose has not changed. The available record does not show whether an authorized officer approved the update or payments. A resumed publishing project and an authorized administrator change could explain both observations, while unauthorized access remains a hypothesis requiring corroboration.\n\nLimitations: Project restarts, seasonal work, staff turnover, and legitimate account maintenance can produce abrupt changes. New contact details do not prove compromise, and a quiet history provides a weak baseline for future activity. Missing approval evidence in an analyst's view may reflect record-access limits rather than a failure to obtain approval. Avoid confusing an account holder harmed by intrusion with the person controlling the intrusion.\n\nAnalyst verification: Corroborate authority for profile changes and transaction approvals using established contact channels and approved records. Compare the chronology of changes with project documentation and available access records, involving authorized fraud specialists where appropriate. Separate confirmed unauthorized activity from unresolved anomalies and preserve uncertainty in the summary. This synthetic training material neither establishes wrongdoing nor recommends a reporting or account decision.",
+      "indicators": [
+        "Profile changes followed by transfers unlike prior observed activity",
+        "New recipients without an explained connection to the stated purpose",
+        "Unresolved authority for contact updates or payment instructions"
+      ],
+      "benign_explanations": [
+        "Restart of a paused project",
+        "Authorized change of administrator",
+        "Seasonal operations or newly contracted service providers"
+      ],
+      "analyst_questions": [
+        "Was the profile change authorized through a verified channel?",
+        "Does project documentation explain the renewed activity and recipients?",
+        "What evidence establishes account control rather than merely unusual behavior?"
+      ],
+      "source_title": "FinCEN: Account Takeover Activity (FIN-2011-A016)",
+      "source_url": "https://www.fincen.gov/resources/advisories/fincen-advisory-fin-2011-a016",
+      "content_version": "1.0",
+      "is_synthetic": true
+    },
+    {
+      "id": "typology-opaque-ownership",
+      "title": "Opaque ownership and unexplained entity relationships",
+      "scheme_type": "opaque-ownership",
+      "approved_topic_id": "ownership-transparency",
+      "content": "General pattern: Layered ownership can make it difficult to establish who ultimately owns or controls an entity and why funds move between related businesses. FinCEN's shell-company guidance describes limited ownership transparency, payments without a clear purpose, and transfers inconsistent with a company's profile as potential risks. It also emphasizes that most shell companies serve legitimate purposes. Legal form or structural complexity alone does not establish concealment or criminal activity.\n\nFICTIONAL example: A fictional licensing holding vehicle receives service payments and sends funds to several entities described as affiliates. The customer file lists an intermediate corporate owner, but available documents do not establish ultimate control. Payment descriptions refer only to agreements not present in the file. The vehicle says it holds intellectual property for a wider operating group. That business model could be legitimate; the unresolved issue is whether ownership, control, and payment purpose can be corroborated.\n\nLimitations: Holding structures, special-purpose vehicles, professional registered agents, and centralized group services are common legitimate arrangements. Shared administrative details do not by themselves establish common control. Public records can be incomplete, stale, or limited in scope. This historical source is used for general typology education, not as a statement of current ownership-disclosure law or filing duties.\n\nAnalyst verification: Trace ownership and control through authorized, reliable documentation, noting where the chain remains unresolved. Compare stated business activities with agreements and payment purposes. Distinguish registered agents, legal owners, authorized signatories, and actual controllers rather than treating those roles as interchangeable. Document reasonable legitimate explanations and evidence limitations without labeling an entity criminal because it is complex. This note is training material, not proof of wrongdoing or a decision recommendation.",
+      "indicators": [
+        "Unresolved ultimate ownership or control in available documentation",
+        "Payments with unclear commercial purpose",
+        "Activity inconsistent with the entity's documented function"
+      ],
+      "benign_explanations": [
+        "Intellectual-property or investment holding arrangement",
+        "Legitimate special-purpose vehicle",
+        "Centralized administration or documented group services"
+      ],
+      "analyst_questions": [
+        "Which records establish ultimate ownership and actual control?",
+        "What agreements explain payments among the entities?",
+        "Are apparent information gaps caused by record limitations or inconsistent explanations?"
+      ],
+      "source_title": "FinCEN: Potential Money Laundering Risks Related to Shell Companies",
+      "source_url": "https://www.fincen.gov/resources/statutes-regulations/guidance/potential-money-laundering-risks-related-shell-companies",
+      "content_version": "1.0",
+      "is_synthetic": true
+    },
+    {
+      "id": "typology-payment-processor-misuse",
+      "title": "Payment-processor misuse and merchant-level anomalies",
+      "scheme_type": "payment-processor-misuse",
+      "approved_topic_id": "merchant-processing-anomalies",
+      "content": "General pattern: Third-party payment processors handle payments for merchants that may not have a direct relationship with the processor's bank. FinCEN explains that these services are often legitimate but can be misused to move fraud proceeds or mask unauthorized transactions. Consumer complaints and returns can be informative, particularly when aggregate processor activity hides materially different behavior at individual merchants. The analytic focus is the underlying merchant activity and authorization, not the existence of a processor relationship.\n\nFICTIONAL example: A fictional subscription-services processor has an apparently stable overall return pattern. A newly onboarded merchant, however, accounts for a concentrated group of complaints describing unrecognized debits. Settlement records show proceeds moving to an affiliate whose role is not documented in the available file. The merchant says a billing-system migration caused descriptor confusion and that the affiliate handles fulfillment. Neither the complaints nor that explanation has yet been independently reconciled.\n\nLimitations: Billing mistakes, unfamiliar payment descriptors, seasonal sales, and product disputes can produce legitimate returns or complaints. Multiple banking relationships can support operational resilience. A complaint is an allegation, not proof, and a processor may itself be deceived by a merchant. Aggregate and merchant-level measures should use comparable periods and denominators; low transaction volumes can exaggerate apparent changes.\n\nAnalyst verification: Review authorized merchant-level settlement and return information alongside complaint themes and service records. Establish the reason for the affiliate payments and assess the explanation for disputed authorization. Separate processor conduct from merchant conduct and identify what evidence is missing. Document corroborated facts and plausible operational causes without treating an anomaly as a finding of fraud. This is synthetic training guidance, not a recommendation to report, restrict, or terminate services.",
+      "indicators": [
+        "Concentrated unauthorized-payment complaints at an individual merchant",
+        "Merchant-level returns obscured by stable aggregate processing activity",
+        "Settlement payments to an affiliate with an unexplained role"
+      ],
+      "benign_explanations": [
+        "Billing migration or confusing payment descriptors",
+        "Service disputes or seasonal changes in sales",
+        "Documented fulfillment and settlement arrangements"
+      ],
+      "analyst_questions": [
+        "Do merchant-level records corroborate the complaint pattern?",
+        "Are comparisons based on consistent periods and transaction populations?",
+        "What evidence explains customer authorization and the settlement recipient's role?"
+      ],
+      "source_title": "FinCEN: Risk Associated with Third-Party Payment Processors (FIN-2012-A010)",
+      "source_url": "https://www.fincen.gov/resources/advisories/fincen-advisory-fin-2012-a010",
+      "content_version": "1.0",
+      "is_synthetic": true
+    },
+    {
+      "id": "typology-email-fraud-proceeds",
+      "title": "Business email compromise and diverted payment proceeds",
+      "scheme_type": "fraud-proceeds-movement",
+      "approved_topic_id": "email-payment-diversion",
+      "content": "General pattern: Business email compromise can divert legitimate payments through fraudulent instructions that appear to come from an executive, employee, or supplier. FinCEN describes altered beneficiary details, unusual urgency, and a mismatch between the intended beneficiary and the receiving account holder as contextual warning signs. This typology concerns the provenance and authority of payment instructions and the receipt of potentially diverted funds, rather than assuming that any new beneficiary is fraudulent.\n\nFICTIONAL example: A fictional maintenance collective pays an invoice after receiving an emailed supplier-account change. The receiving account belongs to a fictional general-services venture rather than the supplier named on the invoice. The collective later questions whether the change was genuine. The receiving venture says it collects payments for the supplier, but no agency agreement is available to the analyst. The example leaves open whether the payment was diverted, the recipient was authorized, or the payer simply has incomplete records.\n\nLimitations: Suppliers can legitimately change banks, use collection agents, or trade under names different from their account registration. Urgency may arise from normal deadlines. A discrepancy in payment records does not establish email compromise, and receipt of a disputed payment does not establish the recipient's knowledge. This historical advisory supports general detection concepts; its reporting procedures and recovery statements are not presented as current instructions.\n\nAnalyst verification: Compare the disputed instruction with previously verified details and corroborate changes through an established independent contact channel. Review the invoice, claimed collection relationship, and available payment records within authorized access. Distinguish the payer's allegation, the recipient's explanation, and independently confirmed facts. Preserve uncertainty and potential victim status. This synthetic note is neither evidence of wrongdoing nor a recommendation about reporting or account action.",
+      "indicators": [
+        "Supplier payment details changed through unverified email instructions",
+        "Intended beneficiary differs from the receiving account holder",
+        "Unusual urgency combined with an undocumented collection relationship"
+      ],
+      "benign_explanations": [
+        "Legitimate supplier bank change",
+        "Authorized collection agent or trading-name difference",
+        "Ordinary invoice deadline or incomplete payer records"
+      ],
+      "analyst_questions": [
+        "Was the change independently confirmed through an established contact channel?",
+        "What documentation authorizes the recipient to collect for the supplier?",
+        "Which facts corroborate diversion rather than a naming or recordkeeping discrepancy?"
+      ],
+      "source_title": "FinCEN Advisory - FIN-2016-A003",
+      "source_url": "https://www.fincen.gov/resources/advisories/fincen-advisory-fin-2016-a003",
+      "content_version": "1.0",
+      "is_synthetic": true
+    }
+  ]
+}

@@ -5,8 +5,8 @@
     "operatorPrincipalId": {
       "value": "${AZURE_PRINCIPAL_ID}"
     },
-    "operatorPrincipalType": {
-      "value": "${AZURE_PRINCIPAL_TYPE}"
+    "investigatorSearchLocation": {
+      "value": "${INVESTIGATOR_SEARCH_LOCATION=eastus}"
     }
   }
 }
