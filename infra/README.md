@@ -101,16 +101,18 @@ When the lab reaches public-web research and hosted agents, configure Web IQ and
 with one command, then deploy separately from the repository root:
 
 ```powershell
-uv run configure-evidence-agent --resource-group <lab-resource-group>
+uv run configure-evidence-agent
 azd deploy
 ```
 
-`configure-evidence-agent` discovers the existing lab resources directly, refreshes `.env` while preserving custom
-entries and keys, and configures and selects the lab's azd environment. It then runs [Web IQ setup](#set-up-web-iq)
+`configure-evidence-agent` reads the resource group and deployment settings already saved in `.env`
+and configures and selects the lab's azd environment. It then runs [Web IQ setup](#set-up-web-iq)
 if the deployed integrations are missing or incomplete, including hidden key input, validation and retries.
 Already configured integrations are left unchanged, without another search check. If Web IQ setup fails or is
 cancelled, the command fails instead of reporting that deployment is ready.
-It does not depend on ARM deployment-output history. No manual `azd env set` commands are needed.
+It does not rediscover the lab resources or depend on ARM deployment-output history.
+Run `setup-lab` first if `.env` is missing or incomplete. No manual `azd env set` commands are needed.
+An optional `--resource-group` must match the value in `.env`; it cannot retarget the lab.
 Existing environments that target another subscription, resource group or Foundry project are not overwritten.
 Organizer `uv run deploy-lab` setup and `uv run lab-env` environment loading still configure azd automatically
 when it is installed; learner `uv run setup-lab` does not.

@@ -95,14 +95,20 @@ def test_configure_sets_role_free_environment_and_reuses_supplied_outputs(lab_se
     assert azd_environment["calls"][-1] == ["azd", "env", "select", "fixture"]
 
 
-@pytest.mark.parametrize("existing_env", [False, True])
-def test_combined_evidence_setup_refreshes_env_and_configures_webiq_without_deployment_history(
-    lab_root, azure_resources, azd_environment, monkeypatch, capsys, existing_env,
+@pytest.mark.parametrize("arguments", [
+    ["--environment-name", "later-step"],
+    ["--resource-group", "fixture", "--environment-name", "later-step"],
+])
+def test_combined_evidence_setup_reuses_saved_env_and_configures_webiq_without_rediscovery(
+    lab_root, lab_settings, azure_resources, azd_environment, monkeypatch, capsys, arguments,
 ):
     monkeypatch.setattr(evidence, "deployment_settings", Mock(side_effect=AssertionError("No deployment history")))
     path = lab_root / ".env"
-    if existing_env:
-        path.write_text('# custom settings\nWEBIQ_API_KEY="fixture-secret"\nOBO_SCOPE=keep\n')
+    common.write_settings(path, lab_settings)
+    with path.open("a") as file:
+        file.write('# custom settings\nWEBIQ_API_KEY="fixture-secret"\nOBO_SCOPE=keep\n')
+    before = path.read_bytes()
+    azure_resources["read"].reset_mock()
 
     def setup_webiq(arguments):
         assert arguments == ["--if-needed"]
@@ -110,19 +116,20 @@ def test_combined_evidence_setup_refreshes_env_and_configures_webiq_without_depl
         assert settings["AZURE_RESOURCE_GROUP"] == "fixture"
         assert settings["WEBIQ_ACCOUNT_NAME"] == "webiq-fixture"
         assert azd_environment["calls"][-1] == ["azd", "env", "select", "later-step"]
-        if existing_env:
-            assert settings["WEBIQ_API_KEY"] == "fixture-secret"
-            assert settings["OBO_SCOPE"] == "keep"
-            assert "# custom settings" in path.read_text()
+        assert settings["WEBIQ_API_KEY"] == "fixture-secret"
+        assert settings["OBO_SCOPE"] == "keep"
+        assert "# custom settings" in path.read_text()
         return 0
 
     webiq = Mock(side_effect=setup_webiq)
     monkeypatch.setattr(evidence.setup_webiq, "main", webiq)
-    assert evidence.main(["--resource-group", "fixture", "--environment-name", "later-step"]) == 0
+    assert evidence.main(arguments) == 0
     webiq.assert_called_once_with(["--if-needed"])
     assert azd_environment["values"]["AZD_AGENT_SKIP_ROLE_ASSIGNMENTS"] == "true"
     assert azd_environment["values"]["AZURE_SEARCH_KNOWLEDGE_BASE_NAME"] == "fincrime-research"
     assert azd_environment["calls"][-1] == ["azd", "env", "select", "later-step"]
+    assert path.read_bytes() == before
+    azure_resources["read"].assert_called_once_with("group", "show", "--name", "fixture")
     output = capsys.readouterr()
     assert "Run azd deploy." in output.out
     assert "fixture-secret" not in str(output)
@@ -130,11 +137,13 @@ def test_combined_evidence_setup_refreshes_env_and_configures_webiq_without_depl
 
 @pytest.mark.parametrize("failure", ["local-target", "azd-target", "webiq-failed", "webiq-cancelled"])
 def test_combined_setup_stops_without_deployment_advice_on_failure(
-    failure, lab_root, azure_resources, azd_environment, monkeypatch, capsys,
+    failure, lab_root, lab_settings, azure_resources, azd_environment, monkeypatch, capsys,
 ):
     path = lab_root / ".env"
-    before = "AZURE_RESOURCE_GROUP=other-lab\n" if failure == "local-target" else "# keep\n"
-    path.write_text(before)
+    common.write_settings(path, {
+        **lab_settings, "AZURE_RESOURCE_GROUP": "other-lab" if failure == "local-target" else "fixture",
+    })
+    before = path.read_bytes()
     if failure == "azd-target":
         azd_environment["values"]["AZURE_RESOURCE_GROUP"] = "other-lab"
     webiq = Mock(return_value=1)
@@ -143,7 +152,7 @@ def test_combined_setup_stops_without_deployment_advice_on_failure(
     monkeypatch.setattr(evidence.setup_webiq, "main", webiq)
     assert evidence.main(["--resource-group", "fixture"]) == 1
     if failure in ("local-target", "azd-target"):
-        assert path.read_text() == before
+        assert path.read_bytes() == before
         webiq.assert_not_called()
         assert not any(args[:3] == ["azd", "env", "set"] for args in azd_environment["calls"])
     else:
@@ -159,14 +168,48 @@ def test_combined_setup_validate_only_does_not_change_env_or_configure_webiq(
     evidence.configure_evidence("fixture", settings=lab_settings)
     azd_environment["calls"].clear()
     path = lab_root / ".env"
-    path.write_text("# preserved\n")
+    common.write_settings(path, lab_settings)
+    before = path.read_bytes()
     webiq = Mock()
     monkeypatch.setattr(evidence.setup_webiq, "main", webiq)
-    assert evidence.main(["--resource-group", "fixture", "--validate-only"]) == 0
+    assert evidence.main(["--validate-only"]) == 0
     webiq.assert_not_called()
-    assert path.read_text() == "# preserved\n"
+    assert path.read_bytes() == before
     assert all(args[2] in ("list", "get-value") for args in azd_environment["calls"])
     assert "Run azd deploy." not in str(capsys.readouterr())
+
+
+@pytest.mark.parametrize("missing", ["file", "AZURE_RESOURCE_GROUP", "INVESTIGATOR_PLANNING_DEPLOYMENT"])
+def test_combined_setup_requires_saved_settings_before_azd_or_webiq(
+    lab_root, lab_settings, azd_environment, monkeypatch, capsys, missing,
+):
+    if missing != "file":
+        del lab_settings[missing]
+        common.write_settings(lab_root / ".env", lab_settings)
+    webiq = Mock()
+    monkeypatch.setattr(evidence.setup_webiq, "main", webiq)
+    assert evidence.main([]) == 1
+    assert azd_environment["calls"] == []
+    webiq.assert_not_called()
+    assert "setup-lab" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("changed", ["subscription", "project"])
+def test_saved_target_must_match_azure_before_environment_changes(
+    changed, lab_root, lab_settings, azure_resources, azd_environment, monkeypatch,
+):
+    if changed == "subscription":
+        azure_resources["group"]["id"] = azure_resources["group"]["id"].replace(
+            "00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002",
+        )
+    else:
+        lab_settings["FOUNDRY_PROJECT_ENDPOINT"] = "https://other.services.ai.azure.com/api/projects/fincrime"
+    common.write_settings(lab_root / ".env", lab_settings)
+    webiq = Mock()
+    monkeypatch.setattr(evidence.setup_webiq, "main", webiq)
+    assert evidence.main([]) == 1
+    assert azd_environment["calls"] == []
+    webiq.assert_not_called()
 
 
 @pytest.mark.parametrize("key", [
