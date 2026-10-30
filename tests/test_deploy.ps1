@@ -13,6 +13,9 @@ $global:operatorLookupExitCode = 0
 $global:accountExitCode = 0
 $global:identityLookups = 0
 $global:deploymentOperatorId = ''
+$global:deploymentOutputReads = 0
+$global:emitAzdNotice = $false
+$global:failAzdSet = $false
 $envFile = Join-Path $root '.env'
 $before = if (Test-Path $envFile) { (Get-FileHash $envFile).Hash } else { $null }
 $fixtureKeyLine = 'WEBIQ_API_KEY="test-only-webiq-key"'
@@ -27,11 +30,19 @@ function global:azd {
         'env list' { return '[{"Name":"fixture"}]' }
         'env select' { return }
         'env get-value' {
+            if ($global:emitAzdNotice) {
+                Write-Error -Message 'Update available: azd fixture notice' -ErrorId NativeCommandError
+            }
             if ($global:fixtureAzd.ContainsKey($args[2])) { return $global:fixtureAzd[$args[2]] }
             $global:LASTEXITCODE = 1
             return
         }
-        'env set' { $global:azdWrites++; $global:fixtureAzd[$args[2]] = $args[3]; return }
+        'env set' {
+            if ($global:failAzdSet) { $global:LASTEXITCODE = 1; return }
+            $global:azdWrites++
+            $global:fixtureAzd[$args[2]] = $args[3]
+            return
+        }
     }
     throw 'Unexpected azd command.'
 }
@@ -51,6 +62,7 @@ function global:az {
         return '{"id":"/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/fixture","location":"eastus2"}'
     }
     if ($command -like 'deployment group list *') {
+        $global:deploymentOutputReads++
         $baseline = @{
             FOUNDRY_PROJECT_ENDPOINT = @{ value = 'https://foundry.example/api/projects/fincrime' }
             APIM_GATEWAY_URL = @{ value = 'https://gateway.example' }
@@ -68,7 +80,7 @@ function global:az {
             INVESTIGATOR_PLANNING_DEPLOYMENT = @{ value = 'gpt-5-mini' }
         }
         if ($global:mode -eq 'default') {
-            return (@($baseline + $research) | ConvertTo-Json -Depth 10)
+            return (ConvertTo-Json -InputObject @($baseline + $research) -Depth 10)
         }
         return (@($baseline, $research) | ConvertTo-Json -Depth 10)
     }
@@ -133,19 +145,52 @@ function global:Resolve-Path {
     return [System.IO.Path]::GetFullPath($Path)
 }
 
+$savedJsonDefaults = $PSDefaultParameterValues.Clone()
+try {
+    foreach ($noEnumerate in @($false, $true)) {
+        $PSDefaultParameterValues['ConvertFrom-Json:NoEnumerate'] = $noEnumerate
+        foreach ($global:mode in @('default', 'index')) {
+            $outputs = & (Join-Path $root 'scripts/env.ps1') -ResourceGroup fixture -PassThru
+            if ($outputs -is [array] -or $outputs.PSObject.Properties.Name -contains 'Count' -or
+                $outputs.FOUNDRY_PROJECT_ENDPOINT.value -ne 'https://foundry.example/api/projects/fincrime' -or
+                $outputs.APIM_GATEWAY_URL.value -ne 'https://gateway.example' -or
+                $outputs.AZURE_SEARCH_ENDPOINT.value -ne 'https://example.search.windows.net') {
+                throw 'Deployment outputs must be one merged output object, not array metadata, for single and split deployments.'
+            }
+        }
+    }
+} finally {
+    $PSDefaultParameterValues = $savedJsonDefaults
+}
+$global:mode = 'index'
+
 & (Join-Path $root 'scripts/deploy.ps1') -ResourceGroup fixture -IndexOnly -LogPath $logFile
 if ($global:indexes -ne 1 -or $global:deployments -ne 0 -or $global:agents -ne 0 -or $global:writes -ne 0) {
     throw 'Index-only mode performed unexpected work.'
 }
 $global:mode = 'default'
+$savedFixtureEnv = $global:fixtureEnv
+$global:fixtureEnv += @('COUNT=', 'LENGTH=', 'LONGLENGTH=', 'RANK=', 'SYNCROOT=', 'ISREADONLY=', 'ISFIXEDSIZE=', 'ISSYNCHRONIZED=', 'COUNT=custom')
+$outputReadsBefore = $global:deploymentOutputReads
 $deploymentMessages = & (Join-Path $root 'scripts/deploy.ps1') -ResourceGroup fixture -LogPath $logFile 6>&1
+$global:fixtureEnv = $savedFixtureEnv
 if ($global:indexes -ne 2 -or $global:deployments -ne 1 -or $global:agents -ne 1 -or $global:writes -ne 1) {
     throw 'The default deployment must set up the index and knowledge base too.'
+}
+if ($global:deploymentOutputReads - $outputReadsBefore -ne 2) {
+    throw 'Environment export must pass its outputs to evidence configuration instead of reading them a second time.'
 }
 if ($global:writtenLines -notcontains $fixtureKeyLine -or $global:writtenLines -notcontains 'OBO_SCOPE=keep' -or
     $global:writtenLines -notcontains '# organizer settings' -or
     ($deploymentMessages | Out-String) -match 'test-only-webiq-key') {
     throw 'Environment refresh must preserve organizer settings without printing the Web IQ key.'
+}
+if ($global:writtenLines -notcontains 'FOUNDRY_PROJECT_ENDPOINT=https://foundry.example/api/projects/fincrime' -or
+    $global:writtenLines -notcontains 'APIM_GATEWAY_URL=https://gateway.example' -or
+    $global:writtenLines -notcontains 'AZURE_SEARCH_ENDPOINT=https://example.search.windows.net' -or
+    $global:writtenLines -notcontains 'COUNT=custom' -or
+    @($global:writtenLines | Where-Object { $_ -match '^(COUNT|LENGTH|LONGLENGTH|RANK|SYNCROOT|ISREADONLY|ISFIXEDSIZE|ISSYNCHRONIZED)=$' }).Count) {
+    throw 'Environment export must write deployment values, remove old empty metadata and preserve nonempty custom settings.'
 }
 $deploymentLog = [System.IO.File]::ReadAllText($logFile)
 foreach ($step in @('Starting deployment', 'IndexOnly: skipping', 'Resolving the operator object ID',
@@ -213,8 +258,24 @@ if (-not $failed -or $global:azdWrites -ne $writesBefore) {
     throw 'Configuring evidence must not overwrite an environment bound to another subscription.'
 }
 $global:fixtureAzd.AZURE_SUBSCRIPTION_ID = $savedSubscription
+$global:emitAzdNotice = $true
 & (Join-Path $root 'scripts/configure_evidence_agent.ps1') -ResourceGroup fixture -ValidateOnly
 if ($global:azdWrites -ne $writesBefore) { throw 'Predeploy validation must not rewrite azd settings.' }
+$savedModel = $global:fixtureAzd.AZURE_AI_MODEL_DEPLOYMENT_NAME
+$global:fixtureAzd.AZURE_AI_MODEL_DEPLOYMENT_NAME = 'outdated-model'
+$global:failAzdSet = $true
+$failed = $false
+try {
+    & (Join-Path $root 'scripts/configure_evidence_agent.ps1') -ResourceGroup fixture
+} catch {
+    if ($_.Exception.Message -ne 'Could not save azd setting AZURE_AI_MODEL_DEPLOYMENT_NAME.') { throw }
+    $failed = $true
+} finally {
+    $global:failAzdSet = $false
+    $global:emitAzdNotice = $false
+    $global:fixtureAzd.AZURE_AI_MODEL_DEPLOYMENT_NAME = $savedModel
+}
+if (-not $failed) { throw 'Ignoring an azd update notice must not ignore a failed settings write.' }
 if ($global:fixtureAzd.AZD_AGENT_SKIP_ROLE_ASSIGNMENTS -ne 'true') {
     throw 'Learner azd deployment must disable automatic role assignments.'
 }

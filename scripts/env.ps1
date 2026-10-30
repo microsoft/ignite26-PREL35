@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'console_output.ps1')
 
 # Include outputs from earlier partial deployments when updating an existing lab.
-$outputSets = @(az deployment group list --resource-group $ResourceGroup --query "sort_by([?properties.provisioningState=='Succeeded' && properties.outputs != null], &properties.timestamp)[].properties.outputs" | ConvertFrom-Json)
+$outputSets = az deployment group list --resource-group $ResourceGroup --query "sort_by([?properties.provisioningState=='Succeeded' && properties.outputs != null], &properties.timestamp)[].properties.outputs" | ConvertFrom-Json
 $outputs = $outputSets | Where-Object { $_.FOUNDRY_PROJECT_ENDPOINT -and $_.APIM_GATEWAY_URL } | Select-Object -Last 1
 if (-not $outputs) { throw "No lab deployment found in resource group $ResourceGroup." }
 
@@ -31,7 +31,10 @@ $envFile = Join-Path $PSScriptRoot '../.env'
 $outputNames = @($lines | ForEach-Object { ($_ -split '=', 2)[0] })
 $preserved = @(if (Test-Path $envFile) {
     Get-Content $envFile | Where-Object {
-        $_ -notmatch '^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=' -or $Matches[1] -notin $outputNames
+        # Remove empty array properties written by the old output parsing.
+        $_ -notmatch '^\s*(?:COUNT|LENGTH|LONGLENGTH|RANK|SYNCROOT|ISREADONLY|ISFIXEDSIZE|ISSYNCHRONIZED)\s*=\s*$' -and (
+            $_ -notmatch '^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=' -or $Matches[1] -notin $outputNames
+        )
     }
 })
 Set-Content -Path $envFile -Value ($preserved + $lines) -Encoding utf8
@@ -47,5 +50,5 @@ foreach ($entry in $visibleValues) {
 }
 Write-LabMessage "Wrote $(Resolve-Path $envFile)" -Color Green
 if (Get-Command azd -ErrorAction SilentlyContinue) {
-    & (Join-Path $PSScriptRoot 'configure_evidence_agent.ps1') -ResourceGroup $ResourceGroup
+    & (Join-Path $PSScriptRoot 'configure_evidence_agent.ps1') -ResourceGroup $ResourceGroup -DeploymentOutputs $outputs
 }

@@ -42,8 +42,16 @@ if (-not $exists) {
 }
 $current = @{}
 foreach ($key in $expected.Keys) {
-    $value = azd env get-value $key --environment $EnvironmentName 2>$null
-    $current[$key] = if ($LASTEXITCODE) { '' } else { "$value" }
+    $previousPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell treats native stderr notices as errors, even when the command succeeds.
+        $ErrorActionPreference = 'Continue'
+        $value = azd env get-value $key --environment $EnvironmentName 2>$null
+        $readExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    $current[$key] = if ($readExitCode) { '' } else { "$value" }
 }
 foreach ($key in @('AZURE_SUBSCRIPTION_ID', 'AZURE_RESOURCE_GROUP', 'AZURE_AI_PROJECT_ID', 'FOUNDRY_PROJECT_ENDPOINT')) {
     if ($current[$key] -and $current[$key] -ine $expected[$key]) {
