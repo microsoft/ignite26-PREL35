@@ -69,7 +69,6 @@ uv run setup-lab --resource-group <your-resource-group>
 
 uv installs the Python dependencies automatically. Setup saves `.env`, creates and seeds the Search index,
 and creates its knowledge base. It does not deploy infrastructure, assign roles or publish prompt agents.
-When prompted, choose whether to set up Web IQ now; you can also run `uv run setup-webiq` later.
 Setup uses colored progress messages in a terminal; set `NO_COLOR=1` to disable colors.
 
 ### 2. Publish the agents (2 min)
@@ -78,7 +77,7 @@ Each agent is a Markdown file of instructions in [src/agents](../../src/agents).
 each agent in Foundry:
 
 ```powershell
-uv run scripts/create_agents.py
+uv run create-agents
 ```
 
 You see three agents:

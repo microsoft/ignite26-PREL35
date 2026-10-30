@@ -1,11 +1,8 @@
 """Prepare an existing lab's Search index and knowledge base, without publishing prompt agents."""
 import argparse
-import shutil
-import sys
 
-from scripts import create_search_index, setup_webiq
+from scripts import create_search_index
 from scripts.common import ROOT, SetupError, az_json, check_target, cli, message, read_settings, write_settings
-from scripts.configure_evidence_agent import configure_evidence
 
 
 def find_resource(resources, resource_group, resource_type, name="", kind=""):
@@ -99,26 +96,12 @@ def setup_search(settings):
         ) from error
 
 
-def offer_webiq():
-    if not sys.stdin.isatty():
-        message("Web IQ needs interactive setup. Run uv run setup-webiq in a terminal.", "yellow")
-        return
-    message("Web IQ adds public-web research and can incur Web IQ, model and Search charges.", "yellow")
-    answer = input("Set up Web IQ now? [y/N]: ").strip().lower()
-    if answer in ("y", "yes"):
-        if setup_webiq.main(["--if-needed"]):
-            raise SetupError("Web IQ setup did not finish. Rerun uv run setup-webiq.")
-    else:
-        message("Web IQ setup skipped. Run uv run setup-webiq when you have its API key.", "yellow")
-
-
 @cli
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--resource-group", required=True)
     parser.add_argument("--foundry-name", default="")
     parser.add_argument("--search-name", default="")
-    parser.add_argument("--environment-name", default="")
     args = parser.parse_args(argv)
     message("Reading the existing lab resources.")
     settings = discover_settings(args.resource_group, args.foundry_name, args.search_name)
@@ -129,14 +112,8 @@ def main(argv=None):
     )
     write_settings(path, settings)
     message("Saved lab settings; preserved custom .env entries without printing their values.", "green")
-    if shutil.which("azd"):
-        configure_evidence(args.resource_group, args.environment_name, settings=settings)
-    else:
-        message("azd is not installed. Install it and rerun setup before deploying the hosted evidence agent.", "yellow")
     setup_search(settings)
-    offer_webiq()
     message("Lab setup finished. No infrastructure, roles, prompt agents or gateway settings were changed.", "green")
-    message("Next, run azd deploy to create the connection, Toolbox and hosted evidence agent.")
 
 
 if __name__ == "__main__":

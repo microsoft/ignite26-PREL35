@@ -59,7 +59,7 @@ If you're learning at your own pace:
 
 #### Console colors
 
-The Python setup commands, `scripts/create_agents.py`, `src/investigate.py`, and `src/evaluate.py` use colors in interactive terminals. Redirected output and saved reports stay plain.
+The Python setup commands, `uv run create-agents`, `src/investigate.py`, and `src/evaluate.py` use colors in interactive terminals. Redirected output and saved reports stay plain.
 
 Set the `NO_COLOR` environment variable to disable colors, regardless of its value (even an empty value).
 
@@ -81,7 +81,7 @@ Remove the variable to restore automatic colors: `unset NO_COLOR` in Bash or `Re
 #### Setup commands and tests
 
 Run `uv run setup-lab --resource-group <your-resource-group>` to configure an existing lab's settings,
-Search index and knowledge base. It offers Web IQ setup and leaves prompt-agent publishing to
+Search index and knowledge base. It leaves prompt-agent publishing to
 [Lab 0](instructions/lab-0-setup/README.md). Setup commands are Python entry points in `pyproject.toml`;
 only Skillable's cloud-hosted lifecycle actions remain PowerShell.
 

@@ -6,7 +6,8 @@ Analytics and Application Insights. It also includes Azure AI Search, Web IQ, an
 research connections and roles. [agents-api-policy.xml](agents-api-policy.xml) is the gateway policy.
 
 Foundry agents aren't Azure resources, so Bicep can't create them. [scripts/create_agents.py](../scripts/create_agents.py)
-creates the prompt agents from top-level Markdown files in [src/agents](../src/agents) after the deployment.
+creates the prompt agents from top-level Markdown files in [src/agents](../src/agents) after the deployment,
+using `uv run create-agents`.
 The standalone hosted evidence agent is deployed separately with azd, as described below.
 
 ## Deploy
@@ -86,39 +87,45 @@ uv run setup-lab --resource-group <lab-resource-group>
 [`setup_lab.py`](../scripts/setup_lab.py) reads [`data/investigator/schemes.json`](../data/investigator/schemes.json)
 from the local repository, creates `fincrime-schemes`, generates embeddings and uploads the eight synthetic
 notes, and creates the knowledge source and `fincrime-research` knowledge base.
-It saves lab settings while preserving custom `.env` entries and configures the lab's azd environment.
+It saves lab settings while preserving custom `.env` entries.
 It discovers existing resources directly; successful ARM deployment-output records are not required.
 It never deploys infrastructure, assigns roles or changes gateway controls.
-It offers Web IQ setup after the knowledge base is ready. Accept to open the existing hidden-key workflow,
-or decline and run `uv run setup-webiq` later. Noninteractive runs print that command instead of waiting for input.
+Web IQ and hosted-agent preparation happen together later, not during initial learner setup.
+Introduce public-web research and hosted agents before asking learners to run `configure-evidence-agent`.
 Newly assigned roles may need time to take effect; if setup reports
 HTTP 403, wait for the permissions to take effect and rerun it.
 
 ## Deploy the evidence agent
 
-After normal lab setup, run this from the repository root:
+When the lab reaches public-web research and hosted agents, configure Web IQ and the deployment environment
+with one command, then deploy separately from the repository root:
 
 ```powershell
+uv run configure-evidence-agent --resource-group <lab-resource-group>
 azd deploy
 ```
 
-Learner `uv run setup-lab`, normal `uv run deploy-lab` setup and `uv run lab-env` environment loading configure and select the lab's azd
-environment automatically when azd is installed. No manual `azd env set` commands are needed. Existing environments
-that target another subscription, resource group or Foundry project are not overwritten. For an older lab, run
-`uv run lab-env --resource-group <your-lab-resource-group>` once to refresh its deployment settings.
+`configure-evidence-agent` discovers the existing lab resources directly, refreshes `.env` while preserving custom
+entries and keys, and configures and selects the lab's azd environment. It then runs [Web IQ setup](#set-up-web-iq)
+if the deployed integrations are missing or incomplete, including hidden key input, validation and retries.
+Already configured integrations are left unchanged, without another search check. If Web IQ setup fails or is
+cancelled, the command fails instead of reporting that deployment is ready.
+It does not depend on ARM deployment-output history. No manual `azd env set` commands are needed.
+Existing environments that target another subscription, resource group or Foundry project are not overwritten.
+Organizer `uv run deploy-lab` setup and `uv run lab-env` environment loading still configure azd automatically
+when it is installed; learner `uv run setup-lab` does not.
+`--validate-only` checks the azd environment without changing `.env`, configuring Web IQ or running searches.
 
 Use azd 1.37.1 or later with `azure.ai.agents` 1.0.0-beta.17 or later and `azure.ai.connections` and
 `azure.ai.toolboxes` 1.0.0-beta.8 or later, signed in to the lab's subscription.
+The hooks launch Python through PowerShell 7 on Windows and `sh` on Linux/macOS; the Windows VM does not need Bash.
 The learner needs the scoped Foundry/project permissions granted during setup, not permission to assign roles.
 Environment loading sets `AZD_AGENT_SKIP_ROLE_ASSIGNMENTS=true` to disable azd's automatic role grants.
 
-Before deploying, azd checks the deployed Web IQ connection, knowledge source and knowledge-base attachment.
-If setup is missing or incomplete, it runs the interactive Web IQ setup automatically: reuse `WEBIQ_API_KEY`
-from `.env`, or guide the user through the portal and hidden key prompt, then run the normal search checks.
-This first-time setup also needs permission to manage Foundry connections and Search knowledge sources.
-Setup must finish before agent deployment proceeds. In a noninteractive terminal without a saved key, deployment
-stops with instructions rather than waiting for input. Already configured integrations are left unchanged,
-without requiring a local key or running another search. This metadata check does not verify whether a stored key has expired.
+Run `configure-evidence-agent` successfully before deploying. There is no predeploy hook:
+`azd deploy` does not configure Web IQ or prompt for a key. Rerun the preparation command if settings
+or integrations need attention. Already configured Web IQ integrations are reused; the metadata check
+does not verify whether a stored key has expired.
 
 Deployment uploads the Python source and builds dependencies on the hosted platform; no local Python 3.13
 installation, Docker build, new registry or model deployment is required. It reuses the existing Foundry project
@@ -217,6 +224,9 @@ For azd, set `INVESTIGATOR_SEARCH_LOCATION` to that region.
 
 ## Set up Web IQ
 
+The combined `configure-evidence-agent` command runs this workflow when needed. To configure or repair
+Web IQ on its own, use `setup-webiq` as described below.
+
 After deployment, sign in with `az login` and run this in an interactive terminal. Use an identity that can
 create Foundry project connections and has **Search Service Contributor** access on the Search service.
 
@@ -226,10 +236,11 @@ The default knowledge-base check also requires **Search Index Data Reader** (or 
 uv run setup-webiq
 ```
 
-If `.env` already contains `WEBIQ_API_KEY`, the script reuses it without opening a browser or prompting.
+If `.env` already contains a valid `WEBIQ_API_KEY`, the script reuses it without opening a browser or prompting.
 Otherwise, it opens the [Web IQ profile portal](https://webiq.microsoft.ai/profiles), displays the deployed billing
 resource ID, and guides you to select or connect that resource and create a key with the **web** service enabled.
-Paste the key into the hidden terminal prompt, not into chat. It is saved locally as plaintext `WEBIQ_API_KEY` in the ignored `.env`.
+Paste the key into the hidden terminal prompt, not into chat. After validating MCP access, the script saves it locally
+as plaintext `WEBIQ_API_KEY` in the ignored `.env`.
 Use an organizer-controlled shared key: project members can access credentials stored in a Foundry connection.
 Protect `.env` and restrict project and Search administration access. On Unix, the script writes `.env` with owner-only permissions.
 
@@ -259,6 +270,8 @@ uv run setup-webiq --force
 
 `--force` is an alias for `--use-saved-key`. Target and access checks still apply.
 The flag requires a saved key; if none is saved, the script stops and asks you to run normal setup first.
+Normal interactive setup asks for another key if the pasted or saved key is invalid or Web IQ rejects its access.
+Press Ctrl+C to cancel. Explicit saved-key runs stop on an invalid key instead of prompting.
 
 To rotate the key, create a replacement in the portal and update `WEBIQ_API_KEY` in `.env`, or remove that entry
 and rerun normal setup to paste the replacement into hidden input. Both integrations are updated;
@@ -279,7 +292,8 @@ uv run setup-webiq --no-run
 uv run setup-webiq --force --no-run
 ```
 
-`--no-run` skips both search checks, not the configuration changes.
+`--no-run` skips both search checks, not key validation or the configuration changes.
+Key validation checks MCP access and the available tools without running a web search.
 
 Once added, the knowledge base can select Web IQ for retrieval. Web research can incur charges and sends queries
 outside Azure geographic/compliance boundaries. Use only approved public-topic queries, never customer data or full

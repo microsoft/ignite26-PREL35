@@ -63,10 +63,12 @@ services:
       PYTHONNOUSERSITE: "1"
 
 hooks:
-  predeploy:
-    shell: sh
-    interactive: true
-    run: uv run --directory "$(git rev-parse --show-toplevel)" lab-hook predeploy
   postprovision:
-    shell: sh
-    run: uv run --directory "$(git rev-parse --show-toplevel)" lab-hook postprovision
+    windows:
+      shell: pwsh
+      run: |
+        uv run lab-hook postprovision
+        exit $LASTEXITCODE
+    posix:
+      shell: sh
+      run: uv run lab-hook postprovision

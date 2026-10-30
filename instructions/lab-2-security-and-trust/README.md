@@ -110,7 +110,7 @@ Apply it, publish it, and run the red team:
 
 ```powershell
 Copy-Item src/agents/variants/triage.helpful.md src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 uv run src/redteam.py
 ```
 
@@ -163,7 +163,7 @@ Restore the approved prompt, publish, and run the red team with Prompt Shields s
 
 ```powershell
 git checkout src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 uv run src/redteam.py
 ```
 

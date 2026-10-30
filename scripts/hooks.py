@@ -2,11 +2,9 @@
 import argparse
 import os
 
-from scripts import setup_webiq
-from scripts.common import ROOT, SetupError, cli, command
-from scripts.configure_evidence_agent import configure_evidence
+from scripts.common import SetupError, cli, command
 from scripts.env import refresh_environment
-from scripts.setup_lab import discover_settings, setup_search
+from scripts.setup_lab import setup_search
 
 OUTPUT_NAMES = (
     "FOUNDRY_PROJECT_ENDPOINT", "MODEL_DEPLOYMENT", "APIM_GATEWAY_URL", "APIM_NAME",
@@ -18,14 +16,6 @@ OUTPUT_NAMES = (
     "INVESTIGATOR_EMBEDDING_DEPLOYMENT", "INVESTIGATOR_EMBEDDING_MODEL", "INVESTIGATOR_EMBEDDING_DIMENSIONS",
     "WEBIQ_RESOURCE_ID", "WEBIQ_ACCOUNT_NAME",
 )
-
-
-def predeploy(resource_group, environment_name):
-    configure_evidence(
-        resource_group, environment_name, settings=discover_settings(resource_group), validate_only=True,
-    )
-    if setup_webiq.main(["--if-needed"]):
-        raise SetupError("Web IQ setup did not finish. Resolve the message above and rerun.")
 
 
 def postprovision(resource_group, environment_name):
@@ -41,23 +31,20 @@ def postprovision(resource_group, environment_name):
     if settings["AZURE_RESOURCE_GROUP"].casefold() != resource_group.casefold():
         raise SetupError("Deployment outputs target a different resource group. No settings were changed.")
     refresh_environment(resource_group, environment_name, settings=settings)
-    command(["uv", "run", "python", str(ROOT / "scripts/create_agents.py")], show=True)
+    command(["uv", "run", "create-agents"], show=True)
     setup_search(settings)
 
 
 @cli
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("phase", choices=("predeploy", "postprovision"))
-    args = parser.parse_args(argv)
+    parser.add_argument("phase", choices=("postprovision",))
+    parser.parse_args(argv)
     resource_group = os.environ.get("AZURE_RESOURCE_GROUP", "")
     if not resource_group:
         raise SetupError("AZURE_RESOURCE_GROUP is required. Select the lab's azd environment first.")
     environment_name = os.environ.get("AZURE_ENV_NAME", "")
-    if args.phase == "predeploy":
-        predeploy(resource_group, environment_name)
-    else:
-        postprovision(resource_group, environment_name)
+    postprovision(resource_group, environment_name)
 
 
 if __name__ == "__main__":

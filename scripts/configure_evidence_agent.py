@@ -1,10 +1,12 @@
-"""Bind azd to an existing lab without assigning hosted-agent roles."""
+"""Configure Web IQ and the existing lab's environment for evidence-agent deployment."""
 import argparse
 import json
 import re
 
-from scripts.common import az_json, check_target, cli, command, message, SetupError
+from scripts import setup_webiq
+from scripts.common import ROOT, az_json, check_target, cli, command, message, read_settings, write_settings, SetupError
 from scripts.env import deployment_settings
+from scripts.setup_lab import discover_settings
 
 REQUIRED = (
     "FOUNDRY_PROJECT_ENDPOINT", "FOUNDRY_NAME", "FOUNDRY_PROJECT_NAME",
@@ -67,7 +69,7 @@ def configure_evidence(resource_group, environment_name="", *, settings=None, va
         command(["azd", "env", "set", key, value, "--environment", environment_name])
     if not validate_only:
         command(["azd", "env", "select", environment_name])
-        message(f"Evidence agent deployment is configured for '{environment_name}'. Run azd deploy.", "green")
+        message(f"Evidence agent deployment target is configured for '{environment_name}'.", "green")
 
 
 @cli
@@ -75,9 +77,28 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--resource-group", required=True)
     parser.add_argument("--environment-name", default="")
-    parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument(
+        "--validate-only", action="store_true",
+        help="Check the azd environment without changing settings or configuring Web IQ.",
+    )
     args = parser.parse_args(argv)
-    configure_evidence(args.resource_group, args.environment_name, validate_only=args.validate_only)
+    settings = discover_settings(args.resource_group)
+    path = ROOT / ".env"
+    if not args.validate_only:
+        check_target(
+            read_settings(path), settings,
+            ("AZURE_RESOURCE_GROUP", "FOUNDRY_PROJECT_ENDPOINT", "WEBIQ_RESOURCE_ID"), ".env",
+        )
+    configure_evidence(
+        args.resource_group, args.environment_name,
+        settings=settings, validate_only=args.validate_only,
+    )
+    if args.validate_only:
+        return
+    write_settings(path, settings)
+    if setup_webiq.main(["--if-needed"]):
+        raise SetupError("Web IQ setup did not finish. Resolve the message above and rerun configure-evidence-agent.")
+    message("Web IQ and the evidence agent environment are ready. Run azd deploy.", "green")
 
 
 if __name__ == "__main__":

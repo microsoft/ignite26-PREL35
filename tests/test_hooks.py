@@ -1,4 +1,9 @@
+import json
+import os
 import re
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 from subprocess import CompletedProcess
 from unittest.mock import Mock
@@ -7,50 +12,8 @@ import pytest
 import yaml
 
 from scripts import common, hooks
-from scripts.configure_evidence_agent import configure_evidence
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-@pytest.mark.parametrize("failure", ["", "validate", "webiq"])
-def test_predeploy_validates_before_webiq_and_propagates_failures(failure, monkeypatch):
-    steps = []
-    settings = {"existing": "resources"}
-    monkeypatch.setattr(hooks, "discover_settings", lambda group: settings)
-
-    def validate(*args, **kwargs):
-        assert args == ("fixture", "fixture")
-        assert kwargs == {"settings": settings, "validate_only": True}
-        steps.append("validate")
-        if failure == "validate":
-            raise common.SetupError("target mismatch")
-
-    def webiq(args):
-        assert args == ["--if-needed"]
-        steps.append("webiq")
-        return int(failure == "webiq")
-
-    monkeypatch.setattr(hooks, "configure_evidence", validate)
-    monkeypatch.setattr(hooks.setup_webiq, "main", webiq)
-    if failure:
-        with pytest.raises(common.SetupError):
-            hooks.predeploy("fixture", "fixture")
-    else:
-        hooks.predeploy("fixture", "fixture")
-    assert steps == (["validate"] if failure == "validate" else ["validate", "webiq"])
-
-
-def test_predeploy_validates_learner_setup_without_arm_deployment_history(
-    lab_settings, azd_environment, azure_resources, monkeypatch,
-):
-    configure_evidence("fixture", settings=lab_settings)
-    azd_environment["calls"].clear()
-    webiq = Mock(return_value=0)
-    monkeypatch.setattr(hooks.setup_webiq, "main", webiq)
-    hooks.predeploy("fixture", "fixture")
-    webiq.assert_called_once_with(["--if-needed"])
-    assert all(args[2] in ("list", "get-value") for args in azd_environment["calls"])
-    assert not any(call.args[:2] == ("deployment", "group") for call in azure_resources["read"].call_args_list)
 
 
 def test_postprovision_reads_all_outputs_before_writing_and_setting_up_data(lab_settings, monkeypatch):
@@ -64,7 +27,7 @@ def test_postprovision_reads_all_outputs_before_writing_and_setting_up_data(lab_
     def command(args, **kwargs):
         if args[:3] == ["azd", "env", "get-value"]:
             return read(args)
-        assert args[0:3] == ["uv", "run", "python"]
+        assert args == ["uv", "run", "create-agents"]
         steps.append(("prompts", args[-1]))
 
     monkeypatch.setattr(hooks, "command", command)
@@ -110,25 +73,78 @@ def test_postprovision_stops_at_first_failure(failure, lab_settings, monkeypatch
     }[failure]
 
 
-def test_azd_hooks_call_installed_python_entry_points_and_keep_interactive_input():
+def test_azd_only_runs_postprovision_and_uses_platform_launchers():
     config = yaml.safe_load((ROOT / "azure.yaml").read_text())
-    assert config["hooks"]["predeploy"]["interactive"] is True
-    for phase in ("predeploy", "postprovision"):
-        hook = config["hooks"][phase]
-        assert hook["shell"] == "sh"
-        assert hook["run"].endswith(f"lab-hook {phase}")
-        assert hook["run"].startswith("uv run ")
+    assert set(config["hooks"]) == {"postprovision"}
+    for platform, shell in (("windows", "pwsh"), ("posix", "sh")):
+        hook = config["hooks"]["postprovision"][platform]
+        assert hook["shell"] == shell
+        assert hook["run"].splitlines()[0] == "uv run lab-hook postprovision"
     output_names = re.findall(r"^output\s+(\w+)\s", (ROOT / "infra/main.bicep").read_text(), re.MULTILINE)
     assert set(hooks.OUTPUT_NAMES) == set(output_names)
 
 
+@pytest.mark.parametrize("platform,shell", [("windows", "pwsh"), ("posix", "sh")])
+@pytest.mark.parametrize("exit_code", [0, 19])
+@pytest.mark.parametrize("runner", ["shell", "azd"])
+def test_hook_launchers_run_python_command_from_project_root_and_propagate_exit_code(
+    tmp_path, platform, shell, exit_code, runner,
+):
+    phase = "postprovision"
+    executable = shutil.which(shell)
+    if not executable or (platform == "posix" and os.name == "nt"):
+        pytest.skip(f"{shell} is not available for this platform")
+    azd = shutil.which("azd")
+    if runner == "azd" and not azd:
+        pytest.skip("azd is not available")
+    root = tmp_path / "lab checkout"
+    root.mkdir()
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    shim = tools / "uv_stub.py"
+    shim.write_text(
+        "import json, os, sys\n"
+        "print(json.dumps({'args': sys.argv[1:], 'cwd': os.getcwd()}))\n"
+        "sys.exit(int(os.environ['HOOK_EXIT_CODE']))\n",
+        encoding="utf-8",
+    )
+    if os.name == "nt":
+        (tools / "uv.cmd").write_text(f'@"{sys.executable}" "{shim}" %*\n', encoding="utf-8")
+    else:
+        launcher = tools / "uv"
+        launcher.write_text(f"#!{sys.executable}\n" + shim.read_text(), encoding="utf-8")
+        launcher.chmod(0o755)
+    hook = yaml.safe_load((ROOT / "azure.yaml").read_text())["hooks"][phase][platform]
+    arguments = [executable, "-NoProfile", "-NonInteractive", "-Command"] if shell == "pwsh" else [executable, "-c"]
+    command = [*arguments, hook["run"]]
+    if runner == "azd":
+        (root / "azure.yaml").write_text(yaml.safe_dump({
+            "name": "hook-fixture", "hooks": {phase: {platform: hook}},
+        }), encoding="utf-8")
+        environment = root / ".azure" / "fixture"
+        environment.mkdir(parents=True)
+        (environment / ".env").write_text("AZURE_ENV_NAME=fixture\n", encoding="utf-8")
+        command = [azd, "hooks", "run", phase, "--platform", platform, "--environment", "fixture", "--no-prompt"]
+    result = subprocess.run(
+        command, cwd=root,
+        env={**os.environ, "PATH": str(tools) + os.pathsep + os.environ.get("PATH", ""),
+             "HOOK_EXIT_CODE": str(exit_code)},
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert (result.returncode == 0) == (exit_code == 0), result.stderr
+    if runner == "shell":
+        assert result.returncode == exit_code
+    output = next(json.loads(line) for line in result.stdout.splitlines() if line.startswith('{"args":'))
+    assert output == {"args": ["run", "lab-hook", phase], "cwd": str(root)}
+
+
 def test_hook_requires_resource_group_and_returns_nonzero_on_failure(monkeypatch, capsys):
     monkeypatch.delenv("AZURE_RESOURCE_GROUP", raising=False)
-    assert hooks.main(["predeploy"]) == 1
+    assert hooks.main(["postprovision"]) == 1
     assert "AZURE_RESOURCE_GROUP is required" in capsys.readouterr().err
     monkeypatch.setenv("AZURE_RESOURCE_GROUP", "fixture")
     monkeypatch.setenv("AZURE_ENV_NAME", "chosen")
     action = Mock(side_effect=common.SetupError("fixture failure"))
-    monkeypatch.setattr(hooks, "predeploy", action)
-    assert hooks.main(["predeploy"]) == 1
+    monkeypatch.setattr(hooks, "postprovision", action)
+    assert hooks.main(["postprovision"]) == 1
     action.assert_called_once_with("fixture", "chosen")

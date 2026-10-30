@@ -172,7 +172,7 @@ and creates its knowledge base.
 Each agent is a Markdown file of instructions in src/agents. Publishing creates a new version of each agent in Foundry:
 
 ```powershell
-uv run scripts/create_agents.py
+uv run create-agents
 ```
 
 > To disable colors in the terminal output, set the environment variable `UV_NO_COLOR` to `1` using  
@@ -332,7 +332,7 @@ git diff --no-index src/agents/triage.md src/agents/variants/triage.concise.md
 
 ```powershell
 Copy-Item src/agents/variants/triage.concise.md src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 uv run src/evaluate.py
 ```
 
@@ -354,7 +354,7 @@ The command ended with exit code 1 (check with `$LASTEXITCODE`). In a pipeline, 
 
 ```powershell
 git checkout src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 uv run src/evaluate.py
 ```
 
@@ -367,7 +367,7 @@ Model versions are retired on a schedule, so sooner or later the agents must mov
 - [] Publish both agents on `gpt-5-nano` and run it:
 
 ```powershell
-uv run scripts/create_agents.py gpt-5-nano
+uv run create-agents gpt-5-nano
 uv run src/evaluate.py
 ```
 
@@ -376,7 +376,7 @@ Read the result. The smaller model is close to the accuracy threshold, so you ma
 - [] Then go back to the approved model:
 
 ```powershell
-uv run scripts/create_agents.py
+uv run create-agents
 ```
 
 ### 5. Open the Evidence Pack \(4 min\)
@@ -425,7 +425,7 @@ Open .github/workflows/release-gate.yml. It runs the commands you ran: connect, 
 Make the smaller model good enough. Open the `report.md` of the `gpt-5-nano` run from step 4 and pick an alert it got wrong. If it got all of them right, take ALT-1006: a sanctions name match where the date of birth doesn't match, so it should be closed. Edit src/agents/triage.md, then publish on `gpt-5-nano` and run the gate:
 
 ```powershell
-uv run scripts/create_agents.py gpt-5-nano
+uv run create-agents gpt-5-nano
 uv run src/evaluate.py
 ```
 
@@ -433,7 +433,7 @@ Did you fix it without breaking another alert? Run the gate twice: one correct r
 
 ```powershell
 git checkout src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 ```
 
 ## Next
@@ -546,7 +546,7 @@ git diff --no-index src/agents/triage.md src/agents/variants/triage.helpful.md
 
 ```powershell
 Copy-Item src/agents/variants/triage.helpful.md src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 uv run src/redteam.py
 ```
 
@@ -598,7 +598,7 @@ Restore the approved prompt, publish, and run the red team with Prompt Shields s
 
 ```powershell
 git checkout src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 uv run src/redteam.py
 ```
 

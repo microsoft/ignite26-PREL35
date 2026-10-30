@@ -260,7 +260,7 @@ def setup_knowledge_base(search, index_name, name, model_endpoint, deployment):
         definition.update({key: value for key, value in existing.items() if not key.startswith("@odata.")})
     definition["knowledgeSources"] = sources
     search.request("PUT", f"knowledgebases/{name}", definition)
-    print(f"Knowledge base {name}: index source {source_name}; Web IQ MCP setup uses uv run setup-webiq.")
+    print(f"Knowledge base {name}: index source {source_name}.")
 
 
 def main(argv=None):

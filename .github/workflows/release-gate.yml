@@ -38,7 +38,7 @@ jobs:
         run: uv run lab-env --resource-group "$LAB_RESOURCE_GROUP"
 
       - name: Publish the agents from this commit
-        run: uv run scripts/create_agents.py
+        run: uv run create-agents
 
       # Exits with 1 when a blocking threshold fails, which fails the job and blocks the release.
       - name: Release gate

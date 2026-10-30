@@ -4,14 +4,14 @@ from unittest.mock import Mock
 
 import pytest
 
-from scripts import common, configure_evidence_agent, deploy, env, hooks, set_gateway, setup_lab, setup_obo, setup_webiq
+from scripts import common, configure_evidence_agent, deploy, env, set_gateway, setup_lab, setup_obo, setup_webiq
 
 GROUP_ID = "/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/fixture"
 
 
 @pytest.fixture
 def lab_root(tmp_path, monkeypatch):
-    for module in (common, deploy, env, hooks, set_gateway, setup_lab, setup_obo, setup_webiq):
+    for module in (common, configure_evidence_agent, deploy, env, set_gateway, setup_lab, setup_obo, setup_webiq):
         monkeypatch.setattr(module, "ROOT", tmp_path)
     return tmp_path
 

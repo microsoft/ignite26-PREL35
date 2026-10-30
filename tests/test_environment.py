@@ -95,6 +95,80 @@ def test_configure_sets_role_free_environment_and_reuses_supplied_outputs(lab_se
     assert azd_environment["calls"][-1] == ["azd", "env", "select", "fixture"]
 
 
+@pytest.mark.parametrize("existing_env", [False, True])
+def test_combined_evidence_setup_refreshes_env_and_configures_webiq_without_deployment_history(
+    lab_root, azure_resources, azd_environment, monkeypatch, capsys, existing_env,
+):
+    monkeypatch.setattr(evidence, "deployment_settings", Mock(side_effect=AssertionError("No deployment history")))
+    path = lab_root / ".env"
+    if existing_env:
+        path.write_text('# custom settings\nWEBIQ_API_KEY="fixture-secret"\nOBO_SCOPE=keep\n')
+
+    def setup_webiq(arguments):
+        assert arguments == ["--if-needed"]
+        settings = common.read_settings(path)
+        assert settings["AZURE_RESOURCE_GROUP"] == "fixture"
+        assert settings["WEBIQ_ACCOUNT_NAME"] == "webiq-fixture"
+        assert azd_environment["calls"][-1] == ["azd", "env", "select", "later-step"]
+        if existing_env:
+            assert settings["WEBIQ_API_KEY"] == "fixture-secret"
+            assert settings["OBO_SCOPE"] == "keep"
+            assert "# custom settings" in path.read_text()
+        return 0
+
+    webiq = Mock(side_effect=setup_webiq)
+    monkeypatch.setattr(evidence.setup_webiq, "main", webiq)
+    assert evidence.main(["--resource-group", "fixture", "--environment-name", "later-step"]) == 0
+    webiq.assert_called_once_with(["--if-needed"])
+    assert azd_environment["values"]["AZD_AGENT_SKIP_ROLE_ASSIGNMENTS"] == "true"
+    assert azd_environment["values"]["AZURE_SEARCH_KNOWLEDGE_BASE_NAME"] == "fincrime-research"
+    assert azd_environment["calls"][-1] == ["azd", "env", "select", "later-step"]
+    output = capsys.readouterr()
+    assert "Run azd deploy." in output.out
+    assert "fixture-secret" not in str(output)
+
+
+@pytest.mark.parametrize("failure", ["local-target", "azd-target", "webiq-failed", "webiq-cancelled"])
+def test_combined_setup_stops_without_deployment_advice_on_failure(
+    failure, lab_root, azure_resources, azd_environment, monkeypatch, capsys,
+):
+    path = lab_root / ".env"
+    before = "AZURE_RESOURCE_GROUP=other-lab\n" if failure == "local-target" else "# keep\n"
+    path.write_text(before)
+    if failure == "azd-target":
+        azd_environment["values"]["AZURE_RESOURCE_GROUP"] = "other-lab"
+    webiq = Mock(return_value=1)
+    if failure == "webiq-cancelled":
+        webiq.side_effect = KeyboardInterrupt
+    monkeypatch.setattr(evidence.setup_webiq, "main", webiq)
+    assert evidence.main(["--resource-group", "fixture"]) == 1
+    if failure in ("local-target", "azd-target"):
+        assert path.read_text() == before
+        webiq.assert_not_called()
+        assert not any(args[:3] == ["azd", "env", "set"] for args in azd_environment["calls"])
+    else:
+        webiq.assert_called_once_with(["--if-needed"])
+    if failure == "local-target":
+        assert azd_environment["calls"] == []
+    assert "Run azd deploy." not in str(capsys.readouterr())
+
+
+def test_combined_setup_validate_only_does_not_change_env_or_configure_webiq(
+    lab_root, lab_settings, azure_resources, azd_environment, monkeypatch, capsys,
+):
+    evidence.configure_evidence("fixture", settings=lab_settings)
+    azd_environment["calls"].clear()
+    path = lab_root / ".env"
+    path.write_text("# preserved\n")
+    webiq = Mock()
+    monkeypatch.setattr(evidence.setup_webiq, "main", webiq)
+    assert evidence.main(["--resource-group", "fixture", "--validate-only"]) == 0
+    webiq.assert_not_called()
+    assert path.read_text() == "# preserved\n"
+    assert all(args[2] in ("list", "get-value") for args in azd_environment["calls"])
+    assert "Run azd deploy." not in str(capsys.readouterr())
+
+
 @pytest.mark.parametrize("key", [
     "AZURE_SUBSCRIPTION_ID", "AZURE_RESOURCE_GROUP", "AZURE_AI_PROJECT_ID", "FOUNDRY_PROJECT_ENDPOINT",
 ])
@@ -105,7 +179,7 @@ def test_configure_does_not_overwrite_another_lab(key, lab_settings, azd_environ
     assert not any(args[:3] in (["azd", "env", "set"], ["azd", "env", "select"]) for args in azd_environment["calls"])
 
 
-def test_predeploy_validation_is_read_only_and_detects_stale_values(lab_settings, azd_environment):
+def test_environment_validation_is_read_only_and_detects_stale_values(lab_settings, azd_environment):
     evidence.configure_evidence("fixture", settings=lab_settings)
     azd_environment["calls"].clear()
     evidence.configure_evidence("fixture", settings=lab_settings, validate_only=True)
