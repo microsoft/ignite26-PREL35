@@ -17,7 +17,7 @@ from console_output import color
 
 ROOT = Path(__file__).resolve().parent.parent
 if not (ROOT / ".env").exists():
-    sys.exit(color("No .env yet. Run: .\\scripts\\env.ps1 -ResourceGroup <your-resource-group>",
+    sys.exit(color("No .env yet. Run: uv run setup-lab --resource-group <your-resource-group>",
                    "red", stream=sys.stderr))
 env = dict(line.split("=", 1) for line in (ROOT / ".env").read_text(encoding="utf-8-sig").splitlines() if "=" in line)
 data = json.loads((ROOT / "data" / "cases.json").read_text(encoding="utf-8"))
@@ -58,7 +58,7 @@ COST_CENTER = "financial-crime-operations"
 
 
 def ask(agent: str, text: str):
-    # After scripts/setup_obo.ps1 (Lab 2), the token is for the gateway's own API instead of for Foundry.
+    # After uv run setup-obo, the token is for the gateway's own API instead of for Foundry.
     token = credential.get_token(env.get("OBO_SCOPE", "https://ai.azure.com/.default")).token
     # The gateway limits calls per minute; retries wait for the limit to reset.
     client = OpenAI(base_url=f"{env['APIM_GATEWAY_URL']}/agents/{agent}", api_key=token, max_retries=8,

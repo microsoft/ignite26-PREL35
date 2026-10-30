@@ -59,7 +59,7 @@ If you're learning at your own pace:
 
 #### Console colors
 
-`scripts/create_agents.py`, `src/investigate.py`, and `src/evaluate.py` use colors in interactive terminals. Redirected output and saved reports stay plain.
+The Python setup commands, `scripts/create_agents.py`, `src/investigate.py`, and `src/evaluate.py` use colors in interactive terminals. Redirected output and saved reports stay plain.
 
 Set the `NO_COLOR` environment variable to disable colors, regardless of its value (even an empty value).
 
@@ -77,6 +77,16 @@ uv run src/evaluate.py
 ```
 
 Remove the variable to restore automatic colors: `unset NO_COLOR` in Bash or `Remove-Item Env:NO_COLOR` in PowerShell.
+
+#### Setup commands and tests
+
+Run `uv run setup-lab --resource-group <your-resource-group>` to configure an existing lab's settings,
+Search index and knowledge base. It offers Web IQ setup and leaves prompt-agent publishing to
+[Lab 0](instructions/lab-0-setup/README.md). Setup commands are Python entry points in `pyproject.toml`;
+only Skillable's cloud-hosted lifecycle actions remain PowerShell.
+
+Run the offline test suite with `uv run pytest`. GitHub Actions runs it on Linux and Windows with Python
+3.12 and 3.13 for pull requests and pushes to `main`. Tests mock Azure access and do not require credentials.
 
 ### 🎯 Learning outcomes
 

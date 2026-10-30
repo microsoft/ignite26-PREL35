@@ -260,10 +260,10 @@ def setup_knowledge_base(search, index_name, name, model_endpoint, deployment):
         definition.update({key: value for key, value in existing.items() if not key.startswith("@odata.")})
     definition["knowledgeSources"] = sources
     search.request("PUT", f"knowledgebases/{name}", definition)
-    print(f"Knowledge base {name}: index source {source_name}; Web IQ MCP setup uses scripts/setup_webiq.ps1.")
+    print(f"Knowledge base {name}: index source {source_name}; Web IQ MCP setup uses uv run setup-webiq.")
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--endpoint", required=True)
     parser.add_argument("--index", required=True)
@@ -272,7 +272,7 @@ def main():
     parser.add_argument("--knowledge-base", required=True)
     parser.add_argument("--planning-deployment", required=True)
     parser.add_argument("--data", type=Path, default=ROOT / "data/investigator/schemes.json")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,126}[a-z0-9]", args.index):
         raise ValueError("The Search index name must contain 2 to 128 lowercase letters, digits or hyphens.")
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,118}[a-z0-9]", args.knowledge_base):

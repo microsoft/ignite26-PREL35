@@ -428,7 +428,7 @@ FodyWeavers.xsd
 *.msm
 *.msp
 
-# Lab environment values written by scripts/env.ps1
+# Lab environment values written by the Python setup commands
 .env
 .venv/
 __pycache__/
@@ -439,3 +439,4 @@ evidence/
 !/data/evidence/
 .azure
 .playwright-mcp
+.pytest_cache/

@@ -158,19 +158,14 @@ Optionally, open the repository in VS Code:
 code .
 ```
 
-- [] Write your environment's values to `.env`, using your resource group name:
+- [] Prepare the existing lab using your resource group name:
 
 ```powershell
-.\scripts\env.ps1 -ResourceGroup @lab.CloudResourceGroup(PREL35).Name
+uv run setup-lab --resource-group @lab.CloudResourceGroup(PREL35).Name
 ```
 
-You see the project endpoint, the model deployment and the gateway URL.
-
-- [] Install python dependencies:
-
-```powershell
-uv sync
-```
+uv installs the Python dependencies automatically. Setup saves `.env`, creates and seeds the Search index,
+and creates its knowledge base.
 
 ### 2. Publish the agents \(2 min\)
 
@@ -572,7 +567,7 @@ Every request already passes through API Management. Switch on its Prompt Shield
 - [] Turn on Prompt Shields at the gateway:
 
 ```powershell
-.\scripts\set_gateway.ps1 prompt-shields on
+uv run set-gateway prompt-shields on
 ```
 
 Wait a minute for the gateway to apply it, then run the red team again, still on the "helpful" prompt:
@@ -809,7 +804,7 @@ The cost comes from the tokens each call used and evals/prices.json. Output toke
 `gpt-5-nano` costs a fifth of `gpt-5-mini`. The gateway can send alerts with a low risk score to `triage-lite`, which has the same instructions on the smaller model. Turn it on, wait a minute, and run the gate:
 
 ```powershell
-.\scripts\set_gateway.ps1 model-routing on
+uv run set-gateway model-routing on
 uv run src/evaluate.py
 ```
 
@@ -822,7 +817,7 @@ Compare the result with step 1:
 The gate turns "is the cheaper model good enough?" into numbers anyone can check. Turn routing off again:
 
 ```powershell
-.\scripts\set_gateway.ps1 model-routing off
+uv run set-gateway model-routing off
 ```
 
 ### 3. Limit tokens per caller \(8 min\)
@@ -830,7 +825,7 @@ The gate turns "is the cheaper model good enough?" into numbers anyone can check
 A single runaway script can use the capacity every team shares. The gateway limits the tokens each caller can use per minute; the default is high. Set it below what one alert needs:
 
 ```powershell
-.\scripts\set_gateway.ps1 token-limit 3000
+uv run set-gateway token-limit 3000
 ```
 
 Wait a minute, then run one alert with the client's retries shown:
@@ -844,7 +839,7 @@ Remove-Item Env:OPENAI_LOG
 The triage call uses most of the 3,000 tokens. The reviewer call gets HTTP 429 from the gateway, with a `Retry-After` header, and the client waits and retries until the minute resets. The work still finishes, slowly: the limit protects everyone else's capacity, not the caller's deadline. Restore the default:
 
 ```powershell
-.\scripts\set_gateway.ps1 token-limit 200000
+uv run set-gateway token-limit 200000
 ```
 
 ### 4. Attribute the cost \(12 min\)

@@ -16,6 +16,7 @@ import webbrowser
 from pathlib import Path
 
 from azure.identity import AzureCliCredential
+from scripts.console_output import color
 
 ROOT = Path(__file__).resolve().parent.parent
 PORTAL = "https://webiq.microsoft.ai/profiles"
@@ -45,7 +46,7 @@ class NoRedirects(urllib.request.HTTPRedirectHandler):
 
 def load_configuration(path):
     if not path.is_file() or path.is_symlink():
-        raise SetupError("A regular .env file is required. Run deployment or scripts/env.ps1 first.")
+        raise SetupError("A regular .env file is required. Run uv run setup-lab or uv run lab-env first.")
     settings = {}
     for line in path.read_text(encoding="utf-8-sig").splitlines():
         match = ENV_ENTRY.match(line)
@@ -99,8 +100,19 @@ def validate_key(key):
 
 
 def save_settings(path, updates):
-    lines = path.read_text(encoding="utf-8-sig").splitlines()
-    kept = [line for line in lines if not ((match := ENV_ENTRY.match(line)) and match[1] in updates)]
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise SetupError("Refusing to overwrite a linked or non-regular .env file.")
+    lines = path.read_text(encoding="utf-8-sig").splitlines() if path.exists() else []
+    kept = [
+        line for line in lines
+        if not ((match := ENV_ENTRY.match(line)) and (
+            match[1] in updates
+            or (match[1] in {
+                "COUNT", "LENGTH", "LONGLENGTH", "RANK", "SYNCROOT",
+                "ISREADONLY", "ISFIXEDSIZE", "ISSYNCHRONIZED",
+            } and not match[2].strip())
+        ))
+    ]
     kept += [f"{name}={json.dumps(value) if name == 'WEBIQ_API_KEY' else value}" for name, value in updates.items()]
     temporary = None
     try:
@@ -118,8 +130,8 @@ def save_settings(path, updates):
 def capture_key(settings):
     if not sys.stdin.isatty():
         raise SetupError("Run setup in an interactive terminal for hidden key input, or use --use-saved-key.")
-    print(f"Web IQ billing resource: {settings['WEBIQ_RESOURCE_ID']}")
-    print(f"1. Sign in at {PORTAL}.")
+    print(color(f"Web IQ billing resource: {settings['WEBIQ_RESOURCE_ID']}", "cyan"))
+    print(color(f"1. Sign in at {PORTAL}.", "cyan"))
     print("2. Select the profile linked to this billing resource, or connect the resource if it is not listed.")
     print("3. Create an API key in that profile with the web service enabled, then copy it.")
     print("The key will be saved in the ignored .env file and shared with this Foundry project and Search service.")
@@ -179,7 +191,7 @@ def check_targets(settings, request):
     connection_url, source_url, kb_url = target_urls(settings)
     knowledge_base = request("GET", kb_url, SEARCH_SCOPE, allow_not_found=True)
     if not knowledge_base or not knowledge_base.get("knowledgeSources"):
-        raise SetupError("The knowledge base needs its index source first. Run scripts/deploy.ps1 -IndexOnly.")
+        raise SetupError("The knowledge base needs its index source first. Run uv run setup-lab --resource-group <your-resource-group>.")
     connection = request("GET", connection_url, ARM_SCOPE, allow_not_found=True)
     if connection:
         properties = connection.get("properties", {})
@@ -210,7 +222,7 @@ def webiq_is_configured(settings, knowledge_base, request):
 
 def configure_webiq(settings, key, knowledge_base, request):
     connection_url, source_url, kb_url = target_urls(settings)
-    print(f"Configuring Foundry MCP connection {CONNECTION_NAME}.")
+    print(color(f"Configuring Foundry MCP connection {CONNECTION_NAME}.", "cyan"))
     request("PUT", connection_url, ARM_SCOPE, {
         "properties": {
             "category": "RemoteTool",
@@ -219,7 +231,7 @@ def configure_webiq(settings, key, knowledge_base, request):
             "credentials": {"keys": {"x-apikey": key}},
         },
     })
-    print(f"Configuring MCP knowledge source {settings['source_name']}.")
+    print(color(f"Configuring MCP knowledge source {settings['source_name']}.", "cyan"))
     request("PUT", source_url, SEARCH_SCOPE, {
         "name": settings["source_name"],
         "kind": "mcpServer",
@@ -344,7 +356,7 @@ def check_webiq_search(key):
                     if isinstance(payload, dict) and isinstance(payload.get("webResults"), list) and payload["webResults"]), [])
     if not results:
         raise SetupError("Web IQ search returned no web results. Configuration is saved; retry the check later.")
-    print(f"Web IQ MCP search passed: {len(results)} web results.")
+    print(color(f"Web IQ MCP search passed: {len(results)} web results.", "green"))
 
 
 def check_knowledge_base_search(settings, request):
@@ -387,7 +399,7 @@ def check_knowledge_base_search(settings, request):
                   if reference.get("type") == "mcpServer" and reference.get("activitySource") in call_ids]
     if not calls or not references:
         raise SetupError("Knowledge-base search did not return Web IQ references. Configuration is saved; retry later.")
-    print(f"Knowledge-base search passed: {len(references)} Web IQ references from {len(calls)} MCP web calls.")
+    print(color(f"Knowledge-base search passed: {len(references)} Web IQ references from {len(calls)} MCP web calls.", "green"))
 
 
 def main(argv=None):
@@ -419,14 +431,14 @@ def main(argv=None):
             stage = "checking Azure access and the existing knowledge base"
             knowledge_base = check_targets(settings, request)
             if args.if_needed and webiq_is_configured(settings, knowledge_base, request):
-                print("Web IQ is already configured. No settings were changed or search checks run.")
+                print(color("Web IQ is already configured. No settings were changed or search checks run.", "green"))
                 return 0
             stage = "reading the Web IQ key"
             saved_key = settings.get("WEBIQ_API_KEY")
             if args.use_saved_key and not saved_key:
                 raise SetupError(
-                    "No saved WEBIQ_API_KEY in .env. Run scripts/setup_webiq.ps1 without "
-                    "-Force or -UseSavedKey to enter a key."
+                    "No saved WEBIQ_API_KEY in .env. Run uv run setup-webiq without "
+                    "--force or --use-saved-key to enter a key."
                 )
             key = validate_key(saved_key) if saved_key else capture_key(settings)
             if saved_key:
@@ -442,11 +454,11 @@ def main(argv=None):
                 "WEBIQ_CONNECTION_ID": settings["connection_id"],
                 "WEBIQ_KNOWLEDGE_SOURCE_NAME": settings["source_name"],
             })
-            print("Web IQ configuration saved. The existing index source and knowledge-base settings were preserved.")
+            print(color("Web IQ configuration saved. The existing index source and knowledge-base settings were preserved.", "green"))
             if args.no_run:
-                print("Search checks skipped (-NoRun). No web search was run.")
+                print("Search checks skipped (--no-run). No web search was run.")
             else:
-                print("Running billable search checks with a fixed public DOJ topic; no customer or case data is sent.")
+                print(color("Running billable search checks with a fixed public DOJ topic; no customer or case data is sent.", "yellow"))
                 stage = "testing the direct Web IQ MCP search"
                 check_webiq_search(key)
                 stage = "testing the knowledge-base Web IQ MCP search"
@@ -454,15 +466,16 @@ def main(argv=None):
         print("Use only approved public-topic queries, never customer data or full case prompts.")
         return 0
     except (KeyboardInterrupt, EOFError):
-        print("Web IQ setup cancelled. Rerun setup to finish any partially applied configuration.", file=sys.stderr)
+        print(color("Web IQ setup cancelled. Rerun setup to finish any partially applied configuration.",
+                    "yellow", stream=sys.stderr), file=sys.stderr)
     except SetupError as error:
-        print(f"Web IQ setup stopped while {stage}: {error}", file=sys.stderr)
+        print(color(f"Web IQ setup stopped while {stage}: {error}", "red", stream=sys.stderr), file=sys.stderr)
     except Exception:
-        print(
+        print(color(
             f"Web IQ setup stopped while {stage}. Check Azure sign-in and access, then rerun. "
             "Error details are withheld to protect the key.",
-            file=sys.stderr,
-        )
+            "red", stream=sys.stderr,
+        ), file=sys.stderr)
     return 1
 
 

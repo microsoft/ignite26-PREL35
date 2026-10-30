@@ -21,10 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.12'
-      - run: pip install -r requirements.txt
+      - run: uv sync --locked
 
       - uses: azure/login@v2
         with:
@@ -33,15 +33,16 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Connect to the environment
-        shell: pwsh
-        run: ./scripts/env.ps1 -ResourceGroup ${{ inputs.resource_group }}
+        env:
+          LAB_RESOURCE_GROUP: ${{ inputs.resource_group }}
+        run: uv run lab-env --resource-group "$LAB_RESOURCE_GROUP"
 
       - name: Publish the agents from this commit
-        run: python scripts/create_agents.py
+        run: uv run scripts/create_agents.py
 
       # Exits with 1 when a blocking threshold fails, which fails the job and blocks the release.
       - name: Release gate
-        run: python src/evaluate.py --foundry
+        run: uv run src/evaluate.py --foundry
 
       - name: Keep the Evidence Pack
         if: always()

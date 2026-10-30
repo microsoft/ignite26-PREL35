@@ -5,6 +5,9 @@
     "operatorPrincipalId": {
       "value": "${AZURE_PRINCIPAL_ID}"
     },
+    "learnerPrincipalId": {
+      "value": "${LEARNER_PRINCIPAL_ID=}"
+    },
     "investigatorSearchLocation": {
       "value": "${INVESTIGATOR_SEARCH_LOCATION=eastus}"
     }

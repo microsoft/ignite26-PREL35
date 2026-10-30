@@ -11,12 +11,12 @@ The standalone hosted evidence agent is deployed separately with azd, as describ
 
 ## Deploy
 
-The Skillable lifecycle action runs this for each learner. To test in your own subscription:
+Skillable provisions the ARM template before the learner starts. Then it executes lifecycle hooks to setup permissions. To test in your own subscription:
 
 ```powershell
 az group create --name rg-prel35-lab --location eastus2
-uv venv --python 3.12; uv pip install -r requirements.txt
-.\scripts\deploy.ps1 -ResourceGroup rg-prel35-lab -LearnerPrincipalId <learner-object-id>
+uv sync
+uv run deploy-lab --resource-group rg-prel35-lab --learner-principal-id <learner-object-id>
 ```
 
 To deploy with Azure Developer CLI into an existing resource group:
@@ -29,8 +29,9 @@ azd env set AZURE_RESOURCE_GROUP rg-prel35-lab
 azd up
 ```
 
-The `postprovision` hook writes the deployment outputs to `.env`, creates the Foundry agents and
-calls `scripts/deploy.ps1 -IndexOnly` to set up the research index and knowledge base.
+The Python `postprovision` hook writes deployment outputs to `.env`, creates the Foundry prompt agents,
+sets up the research index and knowledge base, and configures the hosted evidence deployment target.
+`deploy-lab` uses `azd provision`; it does not deploy Bicep through a separate Azure CLI path.
 
 The identity running it needs Owner or Role Based Access Control Administrator on the resource group, because the
 template assigns **Foundry User** to API Management's managed identity, the learner and itself.
@@ -75,20 +76,22 @@ the new role cleanup does not delete resources.
 Both role actions are maintained directly in `infra/skillable/`; there are no generated root copies or
 template-building steps.
 
-After the action finishes, the learner signs in to the lab subscription and runs this in **PowerShell 7**
+After the action finishes, the learner signs in to the lab subscription and runs this in a terminal
 from the repository root on the VM:
 
 ```powershell
-pwsh -File .\scripts\setup_lab.ps1 -ResourceGroup <lab-resource-group>
+uv run setup-lab --resource-group <lab-resource-group>
 ```
 
-[`setup_lab.ps1`](../scripts/setup_lab.ps1) reads [`data/investigator/schemes.json`](../data/investigator/schemes.json)
+[`setup_lab.py`](../scripts/setup_lab.py) reads [`data/investigator/schemes.json`](../data/investigator/schemes.json)
 from the local repository, creates `fincrime-schemes`, generates embeddings and uploads the eight synthetic
-notes, creates the knowledge source and `fincrime-research` knowledge base, and publishes the prompt agents.
+notes, and creates the knowledge source and `fincrime-research` knowledge base.
 It saves lab settings while preserving custom `.env` entries and configures the lab's azd environment.
 It discovers existing resources directly; successful ARM deployment-output records are not required.
 It never deploys infrastructure, assigns roles or changes gateway controls.
-Web IQ API-key setup remains separate. Newly assigned roles may need time to take effect; if setup reports
+It offers Web IQ setup after the knowledge base is ready. Accept to open the existing hidden-key workflow,
+or decline and run `uv run setup-webiq` later. Noninteractive runs print that command instead of waiting for input.
+Newly assigned roles may need time to take effect; if setup reports
 HTTP 403, wait for the permissions to take effect and rerun it.
 
 ## Deploy the evidence agent
@@ -99,10 +102,10 @@ After normal lab setup, run this from the repository root:
 azd deploy
 ```
 
-Learner `scripts/setup_lab.ps1`, normal `scripts/deploy.ps1` setup and `scripts/env.ps1` environment loading configure and select the lab's azd
+Learner `uv run setup-lab`, normal `uv run deploy-lab` setup and `uv run lab-env` environment loading configure and select the lab's azd
 environment automatically when azd is installed. No manual `azd env set` commands are needed. Existing environments
 that target another subscription, resource group or Foundry project are not overwritten. For an older lab, run
-`scripts/env.ps1 -ResourceGroup <your-lab-resource-group>` once to refresh its deployment settings.
+`uv run lab-env --resource-group <your-lab-resource-group>` once to refresh its deployment settings.
 
 Use azd 1.37.1 or later with `azure.ai.agents` 1.0.0-beta.17 or later and `azure.ai.connections` and
 `azure.ai.toolboxes` 1.0.0-beta.8 or later, signed in to the lab's subscription.
@@ -177,7 +180,7 @@ propagates. [Microsoft's guidance](https://learn.microsoft.com/en-us/azure/found
 is to allow at least 15 minutes for policy assignments to take effect. If the approved model is still rejected,
 retry the same provisioning command after that window; do not disable the policy or allow an entire publisher.
 
-The post-provision hook calls [scripts/deploy.ps1](../scripts/deploy.ps1) with `-IndexOnly`. That entry point creates
+The Python post-provision hook calls the shared [Search setup](../scripts/setup_lab.py). It creates
 the `fincrime-schemes` HNSW vector index and uploads the eight synthetic notes from
 [data/investigator/schemes.json](../data/investigator/schemes.json). Document embeddings are generated during setup;
 the index vectorizer uses Search's identity to embed text queries. Embedding calls are billable.
@@ -197,7 +200,7 @@ Index creation continues using the stable API. Retrieval incurs model and Search
 To repeat index and knowledge-base setup without deploying infrastructure, rewriting `.env` or publishing agent versions:
 
 ```powershell
-.\scripts\deploy.ps1 -ResourceGroup rg-prel35-lab -IndexOnly
+uv run deploy-lab --resource-group rg-prel35-lab --index-only
 ```
 
 Use this command if infrastructure provisioning succeeded but index setup failed. When infrastructure is unchanged,
@@ -209,7 +212,7 @@ except the retired built-in Bing source `fincrime-research-web`, which is detach
 A failed embedding, document upload or knowledge-base setup stops the command instead of reporting success.
 
 Search defaults to `eastus`, independently of the resource group's and Foundry's region.
-If Search needs a different region, pass `-InvestigatorSearchLocation <region>` to `scripts/deploy.ps1`.
+If Search needs a different region, pass `--investigator-search-location <region>` to `uv run deploy-lab`.
 For azd, set `INVESTIGATOR_SEARCH_LOCATION` to that region.
 
 ## Set up Web IQ
@@ -220,7 +223,7 @@ create Foundry project connections and has **Search Service Contributor** access
 The default knowledge-base check also requires **Search Index Data Reader** (or **Search Index Data Contributor**).
 
 ```powershell
-.\scripts\setup_webiq.ps1
+uv run setup-webiq
 ```
 
 If `.env` already contains `WEBIQ_API_KEY`, the script reuses it without opening a browser or prompting.
@@ -251,10 +254,10 @@ standard deployments preserve these settings and the key without printing them.
 To rerun setup without opening the browser or prompting, reuse the saved key and update both integrations:
 
 ```powershell
-.\scripts\setup_webiq.ps1 -Force
+uv run setup-webiq --force
 ```
 
-`-Force` is an alias for `-UseSavedKey` (Python: `--force` or `--use-saved-key`). Target and access checks still apply.
+`--force` is an alias for `--use-saved-key`. Target and access checks still apply.
 The flag requires a saved key; if none is saved, the script stops and asks you to run normal setup first.
 
 To rotate the key, create a replacement in the portal and update `WEBIQ_API_KEY` in `.env`, or remove that entry
@@ -271,12 +274,12 @@ No automatic search retries are made. The checks do not invoke a Foundry agent o
 To configure and verify the saved settings without running either search:
 
 ```powershell
-.\scripts\setup_webiq.ps1 -NoRun
+uv run setup-webiq --no-run
 # Or reuse the saved key explicitly:
-.\scripts\setup_webiq.ps1 -Force -NoRun
+uv run setup-webiq --force --no-run
 ```
 
-`-NoRun` (Python: `--no-run`) skips both search checks, not the configuration changes.
+`--no-run` skips both search checks, not the configuration changes.
 
 Once added, the knowledge base can select Web IQ for retrieval. Web research can incur charges and sends queries
 outside Azure geographic/compliance boundaries. Use only approved public-topic queries, never customer data or full
