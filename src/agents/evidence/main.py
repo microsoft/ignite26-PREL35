@@ -13,7 +13,11 @@ from research import EvidenceResearch, ResearchBudget
 
 async def main():
     with DefaultAzureCredential() as credential:
-        research = EvidenceResearch(os.environ["EVIDENCE_KNOWLEDGE_BASE_MCP_ENDPOINT"], credential)
+        research = EvidenceResearch(
+            os.environ["TOOLBOX_EVIDENCE_TOOLS_MCP_ENDPOINT"],
+            credential,
+            os.environ["FOUNDRY_PROJECT_ENDPOINT"],
+        )
 
         @agent_middleware
         async def research_budget(context: AgentContext, call_next):

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -7,7 +8,6 @@ from urllib.parse import urlsplit
 
 
 TOPICS = json.loads(Path(__file__).with_name("topics.json").read_text(encoding="utf-8"))
-SEARCH_SCOPE = "https://search.azure.com/.default"
 OFFICIAL_DOMAINS = ("justice.gov", "fincen.gov")
 
 
@@ -86,35 +86,45 @@ def extract_references(result, topic, phase="research"):
 
 
 class EvidenceResearch:
-    def __init__(self, endpoint, credential):
+    def __init__(self, endpoint, credential, project_endpoint):
         parsed = urlsplit(endpoint)
+        project = urlsplit(project_endpoint)
         if (
-            parsed.scheme != "https"
-            or not (parsed.hostname or "").endswith(".search.windows.net")
+            project.scheme != "https"
+            or not (project.hostname or "").endswith(".services.ai.azure.com")
+            or project.username or project.password or project.port not in (None, 443)
+            or not re.fullmatch(r"/api/projects/[A-Za-z0-9_-]+", project.path)
+            or project.query or project.fragment
+            or parsed.scheme != "https" or parsed.hostname != project.hostname
             or parsed.username or parsed.password or parsed.port not in (None, 443)
-            or not parsed.path.startswith("/knowledgebases/") or not parsed.path.endswith("/mcp")
-            or parsed.query != "api-version=2026-08-01-preview" or parsed.fragment
+            or not parsed.path.startswith(project.path + "/toolboxes/")
+            or not re.fullmatch(
+                r"/toolboxes/[A-Za-z0-9_-]+(?:/versions/[1-9][0-9]*)?/mcp",
+                parsed.path[len(project.path):],
+            )
+            or parsed.query != "api-version=v1" or parsed.fragment
         ):
-            raise ValueError("Evidence research requires the configured Azure Search knowledge-base MCP endpoint.")
+            raise ValueError("Evidence research requires a Toolbox MCP endpoint in the configured Foundry project.")
         self.endpoint = endpoint
         self.credential = credential
 
     async def retrieve(self, question):
-        from agent_framework import MCPStreamableHTTPTool
+        from agent_framework_foundry_hosting import FoundryToolbox
 
-        async with MCPStreamableHTTPTool(
-            name="evidence-knowledge-base",
+        async with FoundryToolbox(
+            self.credential,
             url=self.endpoint,
             load_tools=False,
             load_prompts=False,
-            request_timeout=65,
-            header_provider=lambda _: {
-                "Authorization": "Bearer " + self.credential.get_token(SEARCH_SCOPE).token,
-            },
+            timeout=65,
         ) as mcp:
+            tools = await mcp.session.list_tools()
+            matching = [tool.name for tool in tools.tools if tool.name == "fincrime___knowledge_base_retrieve"]
+            if len(matching) != 1:
+                raise RuntimeError("The evidence Toolbox must expose its configured knowledge-base retrieval tool.")
             # Use the session directly: the framework's call_tool wrapper retries disconnected calls.
             return await mcp.session.call_tool(
-                "knowledge_base_retrieve", arguments={"query_variants": [question]},
+                matching[0], arguments={"query_variants": [question]},
             )
 
     async def lookup(self, topic, budget):

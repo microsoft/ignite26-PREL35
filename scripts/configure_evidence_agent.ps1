@@ -1,10 +1,13 @@
 param(
     [Parameter(Mandatory)][string]$ResourceGroup,
     [string]$EnvironmentName = '',
+    [object]$DeploymentOutputs = $null,
     [switch]$ValidateOnly
 )
 $ErrorActionPreference = 'Stop'
-$outputs = & (Join-Path $PSScriptRoot 'env.ps1') -ResourceGroup $ResourceGroup -PassThru
+$outputs = if ($null -ne $DeploymentOutputs) { $DeploymentOutputs } else {
+    & (Join-Path $PSScriptRoot 'env.ps1') -ResourceGroup $ResourceGroup -PassThru
+}
 foreach ($key in @('FOUNDRY_PROJECT_ENDPOINT', 'FOUNDRY_NAME', 'FOUNDRY_PROJECT_NAME',
     'INVESTIGATOR_PLANNING_DEPLOYMENT', 'AZURE_SEARCH_ENDPOINT', 'AZURE_SEARCH_SERVICE_NAME',
     'AZURE_SEARCH_KNOWLEDGE_BASE_NAME')) {
@@ -24,7 +27,7 @@ $expected = [ordered]@{
     AZURE_SEARCH_SERVICE_NAME = $outputs.AZURE_SEARCH_SERVICE_NAME.value
     AZURE_SEARCH_ENDPOINT = $outputs.AZURE_SEARCH_ENDPOINT.value.TrimEnd('/')
     AZURE_SEARCH_KNOWLEDGE_BASE_NAME = $outputs.AZURE_SEARCH_KNOWLEDGE_BASE_NAME.value
-    EVIDENCE_KNOWLEDGE_BASE_MCP_ENDPOINT = "$($outputs.AZURE_SEARCH_ENDPOINT.value.TrimEnd('/'))/knowledgebases/$($outputs.AZURE_SEARCH_KNOWLEDGE_BASE_NAME.value)/mcp?api-version=2026-08-01-preview"
+    AZD_AGENT_SKIP_ROLE_ASSIGNMENTS = 'true'
 }
 if (-not $EnvironmentName) {
     $EnvironmentName = ($ResourceGroup.ToLowerInvariant() -replace '[^a-z0-9-]', '-')

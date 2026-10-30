@@ -5,11 +5,13 @@ import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT / "src/agents/evidence"
+PROJECT_ENDPOINT = "https://example.services.ai.azure.com/api/projects/fincrime"
+TOOLBOX_ENDPOINT = PROJECT_ENDPOINT + "/toolboxes/evidence-tools/versions/1/mcp?api-version=v1"
 spec = importlib.util.spec_from_file_location("evidence_research", PROJECT / "research.py")
 research = importlib.util.module_from_spec(spec)
 import sys
@@ -41,8 +43,9 @@ WEB = {"content": json.dumps({
 class EvidenceTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.client = research.EvidenceResearch(
-            "https://example.search.windows.net/knowledgebases/fincrime-research/mcp?api-version=2026-08-01-preview",
+            TOOLBOX_ENDPOINT,
             object(),
+            PROJECT_ENDPOINT,
         )
         self.client.retrieve = AsyncMock(return_value=result(LIBRARY, WEB))
 
@@ -120,9 +123,73 @@ class EvidenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(scenarios), 3)
         self.assertTrue(all(s["synthetic"] and s["expected_behavior"] for s in scenarios))
 
-    def test_rejects_non_search_endpoint_before_acquiring_a_token(self):
-        with self.assertRaises(ValueError):
-            research.EvidenceResearch("https://attacker.example/knowledgebases/test/mcp", object())
+    async def test_toolbox_transport_keeps_raw_tools_private_and_calls_once(self):
+        client = research.EvidenceResearch(TOOLBOX_ENDPOINT, object(), PROJECT_ENDPOINT)
+        session = SimpleNamespace(
+            list_tools=AsyncMock(return_value=SimpleNamespace(
+                tools=[SimpleNamespace(name="fincrime___knowledge_base_retrieve")],
+            )),
+            call_tool=AsyncMock(return_value=result(LIBRARY)),
+        )
+        transport = AsyncMock()
+        transport.__aenter__.return_value = SimpleNamespace(session=session)
+        factory = Mock(return_value=transport)
+        module = SimpleNamespace(FoundryToolbox=factory)
+        question = research.TOPICS["money-mule-recruitment"]["library"]
+        with patch.dict(sys.modules, {"agent_framework_foundry_hosting": module}):
+            raw = await client.retrieve(question)
+        self.assertFalse(raw.isError)
+        self.assertIs(factory.call_args.args[0], client.credential)
+        self.assertFalse(factory.call_args.kwargs["load_tools"])
+        self.assertFalse(factory.call_args.kwargs["load_prompts"])
+        session.call_tool.assert_awaited_once_with(
+            "fincrime___knowledge_base_retrieve", arguments={"query_variants": [question]},
+        )
+        transport.__aexit__.assert_awaited_once()
+
+    async def test_toolbox_does_not_retry_a_failed_retrieval_or_use_an_unexpected_tool(self):
+        session = SimpleNamespace(list_tools=AsyncMock(), call_tool=AsyncMock())
+        transport = AsyncMock()
+        transport.__aenter__.return_value = SimpleNamespace(session=session)
+        module = SimpleNamespace(FoundryToolbox=Mock(return_value=transport))
+        client = research.EvidenceResearch(TOOLBOX_ENDPOINT, object(), PROJECT_ENDPOINT)
+        with patch.dict(sys.modules, {"agent_framework_foundry_hosting": module}):
+            for names in ([], ["other___knowledge_base_retrieve"],
+                          ["fincrime___knowledge_base_retrieve"] * 2):
+                session.list_tools.return_value = SimpleNamespace(
+                    tools=[SimpleNamespace(name=name) for name in names],
+                )
+                with self.assertRaises(RuntimeError):
+                    await client.retrieve("fixed question")
+            session.call_tool.assert_not_awaited()
+            session.list_tools.return_value = SimpleNamespace(
+                tools=[SimpleNamespace(name="fincrime___knowledge_base_retrieve")],
+            )
+            session.call_tool.side_effect = RuntimeError("upstream failure")
+            with self.assertRaises(RuntimeError):
+                await client.retrieve("fixed question")
+            self.assertEqual(session.call_tool.await_count, 1)
+
+    def test_only_same_project_toolbox_endpoints_are_accepted(self):
+        credential = SimpleNamespace(get_token=Mock(side_effect=AssertionError("No token should be requested.")))
+        for endpoint in (
+            TOOLBOX_ENDPOINT,
+            PROJECT_ENDPOINT + "/toolboxes/evidence-tools/mcp?api-version=v1",
+        ):
+            research.EvidenceResearch(endpoint, credential, PROJECT_ENDPOINT)
+        for endpoint in (
+            "https://attacker.example/toolboxes/test/mcp?api-version=v1",
+            TOOLBOX_ENDPOINT.replace("example.services.ai.azure.com", "other.services.ai.azure.com"),
+            TOOLBOX_ENDPOINT.replace("/projects/fincrime/", "/projects/other/"),
+            TOOLBOX_ENDPOINT.replace("https://", "https://user:password@"),
+            TOOLBOX_ENDPOINT.replace("api-version=v1", "api-version=v1&extra=value"),
+            TOOLBOX_ENDPOINT.replace("/versions/1", "/versions/../other"),
+            TOOLBOX_ENDPOINT + "#fragment",
+            "https://example.search.windows.net/knowledgebases/fincrime-research/mcp?api-version=2026-08-01-preview",
+        ):
+            with self.subTest(endpoint=endpoint), self.assertRaises(ValueError):
+                research.EvidenceResearch(endpoint, credential, PROJECT_ENDPOINT)
+        credential.get_token.assert_not_called()
 
 
 if __name__ == "__main__":

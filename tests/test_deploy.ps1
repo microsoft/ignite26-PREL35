@@ -1,11 +1,18 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+$logFile = Join-Path ([System.IO.Path]::GetTempPath()) "prel35-deploy-$([guid]::NewGuid()).log"
 $global:mode = 'index'
 $global:deployments = 0
 $global:agents = 0
 $global:indexes = 0
 $global:writes = 0
 $global:failIndex = $false
+$global:operatorAccountType = 'user'
+$global:operatorLookup = '00000000-0000-0000-0000-000000000001'
+$global:operatorLookupExitCode = 0
+$global:accountExitCode = 0
+$global:identityLookups = 0
+$global:deploymentOperatorId = ''
 $envFile = Join-Path $root '.env'
 $before = if (Test-Path $envFile) { (Get-FileHash $envFile).Hash } else { $null }
 $fixtureKeyLine = 'WEBIQ_API_KEY="test-only-webiq-key"'
@@ -66,10 +73,26 @@ function global:az {
         return (@($baseline, $research) | ConvertTo-Json -Depth 10)
     }
     if ($global:mode -eq 'default') {
-        if ($command -eq 'account show') { return '{"user":{"type":"user"}}' }
-        if ($command -like 'ad signed-in-user show *') { return '00000000-0000-0000-0000-000000000001' }
+        if ($command -eq 'account show') {
+            $global:identityLookups++
+            $global:LASTEXITCODE = $global:accountExitCode
+            return (@{ user = @{ type = $global:operatorAccountType; name = 'fixture-client-id' } } | ConvertTo-Json)
+        }
+        if ($command -like 'ad signed-in-user show *' -or $command -like 'ad sp show *') {
+            if ($global:operatorAccountType -eq 'servicePrincipal' -and
+                $command -notlike 'ad sp show --id fixture-client-id *') {
+                throw 'Service principal lookup must use the signed-in client ID.'
+            }
+            if ($global:operatorAccountType -eq 'user' -and $command -notlike 'ad signed-in-user show *') {
+                throw 'User lookup must use the signed-in user.'
+            }
+            $global:identityLookups++
+            $global:LASTEXITCODE = $global:operatorLookupExitCode
+            return $global:operatorLookup
+        }
         if ($command -like 'deployment group create *') {
             if ($command -match '(?i)enableinvestigator') { throw 'Deployment must not require an enable flag.' }
+            $global:deploymentOperatorId = @($args | Where-Object { "$_" -like 'operatorPrincipalId=*' }) -join ''
             $global:deployments++
             return
         }
@@ -84,7 +107,13 @@ function global:uv {
             if ($args -notcontains $value) { throw "Missing setup argument $value." }
         }
         $global:indexes++
-        if ($global:failIndex) { $global:LASTEXITCODE = 1 }
+        if ($global:failIndex) {
+            Write-Warning 'fixture index warning'
+            & (Get-Process -Id $PID).Path -NoLogo -NoProfile -Command "Write-Output 'fixture index stdout'; [Console]::Error.WriteLine('fixture index stderr'); exit 1"
+            $global:LASTEXITCODE = $LASTEXITCODE
+        } else {
+            Write-Output 'fixture index output'
+        }
         return
     }
     if ($global:mode -eq 'default' -and @($args | Where-Object { "$_" -like '*create_agents.py' }).Count -eq 1) {
@@ -104,12 +133,12 @@ function global:Resolve-Path {
     return [System.IO.Path]::GetFullPath($Path)
 }
 
-& (Join-Path $root 'scripts/deploy.ps1') -ResourceGroup fixture -IndexOnly
+& (Join-Path $root 'scripts/deploy.ps1') -ResourceGroup fixture -IndexOnly -LogPath $logFile
 if ($global:indexes -ne 1 -or $global:deployments -ne 0 -or $global:agents -ne 0 -or $global:writes -ne 0) {
     throw 'Index-only mode performed unexpected work.'
 }
 $global:mode = 'default'
-$deploymentMessages = & (Join-Path $root 'scripts/deploy.ps1') -ResourceGroup fixture 6>&1
+$deploymentMessages = & (Join-Path $root 'scripts/deploy.ps1') -ResourceGroup fixture -LogPath $logFile 6>&1
 if ($global:indexes -ne 2 -or $global:deployments -ne 1 -or $global:agents -ne 1 -or $global:writes -ne 1) {
     throw 'The default deployment must set up the index and knowledge base too.'
 }
@@ -117,6 +146,58 @@ if ($global:writtenLines -notcontains $fixtureKeyLine -or $global:writtenLines -
     $global:writtenLines -notcontains '# organizer settings' -or
     ($deploymentMessages | Out-String) -match 'test-only-webiq-key') {
     throw 'Environment refresh must preserve organizer settings without printing the Web IQ key.'
+}
+$deploymentLog = [System.IO.File]::ReadAllText($logFile)
+foreach ($step in @('Starting deployment', 'IndexOnly: skipping', 'Resolving the operator object ID',
+    'Deploying infrastructure and role assignments', 'Writing environment settings',
+    'Publishing prompt agents', 'Reading and checking deployment outputs', 'Creating the Search index',
+    'fixture index output', 'Deployment completed successfully')) {
+    if (-not $deploymentLog.Contains($step)) { throw "Deployment log is missing step/output: $step." }
+}
+if ($deploymentLog.Contains('test-only-webiq-key')) { throw 'The deployment log must not expose the preserved Web IQ key.' }
+if ($global:deploymentOperatorId -ne "operatorPrincipalId=$($global:operatorLookup)") {
+    throw 'The discovered user object ID must be passed to Bicep for operator role assignments.'
+}
+$lookupsBefore = $global:identityLookups
+$explicitOperator = '00000000-0000-0000-0000-000000000002'
+& (Join-Path $root 'scripts/deploy.ps1') -ResourceGroup fixture -OperatorPrincipalId $explicitOperator -LogPath $logFile 6>$null
+if ($global:identityLookups -ne $lookupsBefore -or
+    $global:deploymentOperatorId -ne "operatorPrincipalId=$explicitOperator") {
+    throw 'An explicit operator object ID must skip CLI identity lookups and be passed to Bicep.'
+}
+$global:operatorAccountType = 'servicePrincipal'
+$global:operatorLookup = '00000000-0000-0000-0000-000000000003'
+& (Join-Path $root 'scripts/deploy.ps1') -ResourceGroup fixture -LogPath $logFile 6>$null
+if ($global:deploymentOperatorId -ne "operatorPrincipalId=$($global:operatorLookup)") {
+    throw 'The service principal object ID must be passed to Bicep instead of its client ID.'
+}
+$global:operatorAccountType = 'user'
+foreach ($scenario in @('empty', 'lookup-failed', 'account-failed')) {
+    $global:operatorLookup = if ($scenario -eq 'empty') { '' } else { '00000000-0000-0000-0000-000000000001' }
+    $global:operatorLookupExitCode = if ($scenario -eq 'lookup-failed') { 1 } else { 0 }
+    $global:accountExitCode = if ($scenario -eq 'account-failed') { 1 } else { 0 }
+    $deploymentsBefore = $global:deployments
+    $indexesBefore = $global:indexes
+    $writesBefore = $global:writes
+    $failed = $false
+    try {
+        & (Join-Path $root 'scripts/deploy.ps1') -ResourceGroup fixture -LogPath $logFile 6>$null
+    } catch {
+        if ($_.Exception.Message -notlike 'Could not *') { throw }
+        $failed = $true
+    }
+    if (-not $failed -or $global:deployments -ne $deploymentsBefore -or
+        $global:indexes -ne $indexesBefore -or $global:writes -ne $writesBefore) {
+        throw "Operator discovery failure ($scenario) must stop before deployment or setup."
+    }
+}
+$global:operatorLookupExitCode = 0
+$global:accountExitCode = 0
+$deploymentLog = [System.IO.File]::ReadAllText($logFile)
+if (-not $deploymentLog.Contains('ERROR:') -or
+    -not $deploymentLog.Contains('Could not find the operator object ID') -or
+    -not $deploymentLog.Contains('Could not read the Azure CLI account')) {
+    throw 'Early Azure CLI failures must be recorded before the deployment stops.'
 }
 $savedSubscription = $global:fixtureAzd.AZURE_SUBSCRIPTION_ID
 $global:fixtureAzd.AZURE_SUBSCRIPTION_ID = '00000000-0000-0000-0000-000000000099'
@@ -134,16 +215,24 @@ if (-not $failed -or $global:azdWrites -ne $writesBefore) {
 $global:fixtureAzd.AZURE_SUBSCRIPTION_ID = $savedSubscription
 & (Join-Path $root 'scripts/configure_evidence_agent.ps1') -ResourceGroup fixture -ValidateOnly
 if ($global:azdWrites -ne $writesBefore) { throw 'Predeploy validation must not rewrite azd settings.' }
+if ($global:fixtureAzd.AZD_AGENT_SKIP_ROLE_ASSIGNMENTS -ne 'true') {
+    throw 'Learner azd deployment must disable automatic role assignments.'
+}
 $global:mode = 'index'
 $global:failIndex = $true
 $failed = $false
 try {
-    & (Join-Path $root 'scripts/deploy.ps1') -ResourceGroup fixture -IndexOnly
+    & (Join-Path $root 'scripts/deploy.ps1') -ResourceGroup fixture -IndexOnly -LogPath $logFile
 } catch {
     if ($_.Exception.Message -notlike '*knowledge base setup failed*') { throw }
     $failed = $true
 }
 if (-not $failed) { throw 'Failed data-plane setup must stop deployment.' }
+$deploymentLog = [System.IO.File]::ReadAllText($logFile)
+foreach ($detail in @('fixture index stdout', 'fixture index stderr', 'fixture index warning',
+    'knowledge base setup failed (exit code 1)', 'deploy.ps1', 'Deployment failed. See log file:')) {
+    if (-not $deploymentLog.Contains($detail)) { throw "Failure log is missing detail: $detail." }
+}
 
 $global:mode = 'default'
 $global:failIndex = $false
@@ -175,6 +264,12 @@ $body = [regex]::Match($yaml, '(?ms)^    run: \|\r?\n(?<body>.*)$').Groups['body
 if (-not $body) { throw 'Postprovision hook not found.' }
 $hook = [scriptblock]::Create(($body -replace '(?m)^      ', ''))
 $hookMessages = & $hook 6>&1
+$hookLogPath = [regex]::Match(($hookMessages | Out-String), '(?m)^\[[^\]]+\] Log file: (.+)$').Groups[1].Value.Trim()
+if (-not $hookLogPath -or
+    (Split-Path $hookLogPath -Parent) -ne [System.IO.Path]::GetFullPath((Join-Path $root 'logs')) -or
+    -not [System.IO.File]::ReadAllText($hookLogPath).Contains('Deployment completed successfully')) {
+    throw 'The default deployment log must be saved under the repository logs directory.'
+}
 $actualNames = @($global:writtenLines | Where-Object { $_ -match '^\w+=' } |
     ForEach-Object { ($_ -split '=', 2)[0] })
 if (Compare-Object @($global:hookOutputNames + @('WEBIQ_API_KEY', 'OBO_SCOPE')) $actualNames) {
@@ -200,4 +295,5 @@ if (-not $failed -or $global:writes -ne $writesBefore -or $global:indexes -ne $i
 }
 $after = if (Test-Path $envFile) { (Get-FileHash $envFile).Hash } else { $null }
 if ($before -ne $after) { throw 'The real .env changed.' }
-'PASS: standard deployment sets up research; IndexOnly is isolated; the azd hook exports every output and stops on missing values or setup failure.'
+Remove-Item -LiteralPath $logFile, $hookLogPath
+'PASS: operator discovery, deployment and IndexOnly behavior, persistent step/output/error logs, secret preservation and azd output checks.'

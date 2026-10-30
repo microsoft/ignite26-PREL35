@@ -32,7 +32,7 @@ resource project 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' exis
   name: foundryProjectName
 }
 
-// The index and its documents are data-plane objects, populated by the organizer after provisioning.
+// The learner creates and seeds the index after provisioning using scripts/setup_lab.ps1.
 resource investigatorSearch 'Microsoft.Search/searchServices@2025-05-01' = {
   name: 'search-${token}'
   location: searchLocation
@@ -88,23 +88,14 @@ resource searchServiceContributors 'Microsoft.Authorization/roleAssignments@2022
   }
 }]
 
-resource learnerSearchReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(learnerPrincipalId)) {
+resource searchIndexDataContributors 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for id in searchSetupPrincipals: {
   scope: investigatorSearch
-  name: guid(investigatorSearch.id, learnerPrincipalId, searchIndexDataReaderRole)
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchIndexDataReaderRole)
-    principalId: learnerPrincipalId
-  }
-}
-
-resource operatorSearchIndexDataContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(operatorPrincipalId)) {
-  scope: investigatorSearch
-  name: guid(investigatorSearch.id, operatorPrincipalId, searchIndexDataContributorRole)
+  name: guid(investigatorSearch.id, id, searchIndexDataContributorRole)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchIndexDataContributorRole)
-    principalId: operatorPrincipalId
+    principalId: id
   }
-}
+}]
 
 // The hosted agent has a different identity from the project and gateway.
 resource investigatorSearchReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(investigatorPrincipalId)) {

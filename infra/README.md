@@ -36,12 +36,60 @@ The identity running it needs Owner or Role Based Access Control Administrator o
 template assigns **Foundry User** to API Management's managed identity, the learner and itself.
 Skillable can keep the learner at **Reader** on the resource group. When `learnerPrincipalId` is supplied,
 Bicep also grants **Cognitive Services Contributor** on the Foundry project, **Search Service Contributor**
-and **Search Index Data Reader** on the lab Search service, and **Contributor** on the Web IQ account.
+and **Search Index Data Contributor** on the lab Search service, and **Contributor** on the Web IQ account.
 The Foundry and Search roles let the learner save
 an existing Web IQ API key in both integrations and run the knowledge-base check, without resource-group
 Contributor or role-assignment permissions. The contributor roles permit management of those scoped resources,
 not just API-key updates. Creating a key in the Web IQ portal is separate; portal profile access must still
 be verified independently of the Azure role assignments. The deployment takes about 15 to 20 minutes, mostly API Management.
+
+## Skillable post-build setup
+
+After ARM has created the resources, paste
+[`infra/skillable/assign-learner.ps1`](skillable/assign-learner.ps1) into a blocking Skillable **Cloud Platform / Azure /
+PowerShell** post-build action. It runs with Skillable's provisioning credentials, not the learner's VM login.
+Run it after the resource deployment has finished.
+
+Replace the old Foundry-only setup action; do not run both. The script is standalone and needs no
+arguments in Skillable: the resource-group token and automatic learner discovery provide the defaults.
+
+The action **assigns roles only**. It discovers learners with subscription-level `LOD Reader` or
+`LOD Contributor` and grants **Foundry User** on Foundry, **Search Service Contributor** and
+**Search Index Data Contributor** on the lab Search service. These let learners create the index and upload
+its documents. It retains the project-scoped **Cognitive Services Contributor** and Web IQ account
+**Contributor** permissions used by the local setup. It also checks the Search and project managed identities'
+existing scoped permissions. It never gives learners permission to assign roles.
+
+No documents are bundled in the action, and it creates no index, knowledge base, Toolbox or agent.
+It needs no VM files, Python or azd. Its timestamped progress
+and errors are written to the action output and a transcript whose path is printed at startup.
+For the matching role cleanup, paste
+[`infra/skillable/remove-setup-roles.ps1`](skillable/remove-setup-roles.ps1) into a blocking **Cloud Platform / Azure /
+PowerShell** action on **Tearing Down**, before deleting resources. Replace the old Foundry-only role cleanup.
+The new setup marks assignments it creates; teardown removes only those marked assignments at their exact
+resource scopes. Permissions that already existed, including grants from the old script, are left alone.
+Teardown still works if the learner's LOD assignment has already been removed.
+Keep the separate Foundry deletion/purge action in [`infra/skillable/teardown.ps1`](skillable/teardown.ps1);
+the new role cleanup does not delete resources.
+
+Both role actions are maintained directly in `infra/skillable/`; there are no generated root copies or
+template-building steps.
+
+After the action finishes, the learner signs in to the lab subscription and runs this in **PowerShell 7**
+from the repository root on the VM:
+
+```powershell
+pwsh -File .\scripts\setup_lab.ps1 -ResourceGroup <lab-resource-group>
+```
+
+[`setup_lab.ps1`](../scripts/setup_lab.ps1) reads [`data/investigator/schemes.json`](../data/investigator/schemes.json)
+from the local repository, creates `fincrime-schemes`, generates embeddings and uploads the eight synthetic
+notes, creates the knowledge source and `fincrime-research` knowledge base, and publishes the prompt agents.
+It saves lab settings while preserving custom `.env` entries and configures the lab's azd environment.
+It discovers existing resources directly; successful ARM deployment-output records are not required.
+It never deploys infrastructure, assigns roles or changes gateway controls.
+Web IQ API-key setup remains separate. Newly assigned roles may need time to take effect; if setup reports
+HTTP 403, wait for the permissions to take effect and rerun it.
 
 ## Deploy the evidence agent
 
@@ -51,14 +99,15 @@ After normal lab setup, run this from the repository root:
 azd deploy
 ```
 
-Normal `scripts/deploy.ps1` setup and `scripts/env.ps1` environment loading configure and select the lab's azd
+Learner `scripts/setup_lab.ps1`, normal `scripts/deploy.ps1` setup and `scripts/env.ps1` environment loading configure and select the lab's azd
 environment automatically when azd is installed. No manual `azd env set` commands are needed. Existing environments
 that target another subscription, resource group or Foundry project are not overwritten. For an older lab, run
 `scripts/env.ps1 -ResourceGroup <your-lab-resource-group>` once to refresh its deployment settings.
 
-Use azd 1.37.1 or later with the `azure.ai.agents` extension 1.0.0-beta.17 or later, signed in to the lab's
-subscription. The deployer needs permission to create hosted agents in Foundry and assign a role on the Search
-service. Reader plus the setup roles above cannot grant that role; an organizer must handle this deployment step.
+Use azd 1.37.1 or later with `azure.ai.agents` 1.0.0-beta.17 or later and `azure.ai.connections` and
+`azure.ai.toolboxes` 1.0.0-beta.8 or later, signed in to the lab's subscription.
+The learner needs the scoped Foundry/project permissions granted during setup, not permission to assign roles.
+Environment loading sets `AZD_AGENT_SKIP_ROLE_ASSIGNMENTS=true` to disable azd's automatic role grants.
 
 Before deploying, azd checks the deployed Web IQ connection, knowledge source and knowledge-base attachment.
 If setup is missing or incomplete, it runs the interactive Web IQ setup automatically: reuse `WEBIQ_API_KEY`
@@ -70,15 +119,23 @@ without requiring a local key or running another search. This metadata check doe
 
 Deployment uploads the Python source and builds dependencies on the hosted platform; no local Python 3.13
 installation, Docker build, new registry or model deployment is required. It reuses the existing Foundry project
-and `gpt-5-mini`. The post-deploy hook grants the actual hosted agent identity **Search Index Data Reader** on
-the lab Search service only. Role propagation can delay the first successful research call.
+and `gpt-5-mini`. [`azure.yaml`](../azure.yaml) declares three services in dependency order:
+the `evidence-research` connection, `evidence-tools` Toolbox and hosted `evidence-agent`.
+The connection uses **ProjectManagedIdentity** with the Search token audience.
+The Toolbox exposes only `knowledge_base_retrieve`; its version-specific endpoint is passed to the agent.
+The project identity has **Search Index Data Reader** from privileged setup. The hosted agent needs no
+per-agent Search role, and there is no role-assignment post-deploy hook.
+Use `azd deploy` from the repository root to deploy all three services; a targeted `azd deploy evidence-agent`
+does not create or refresh its dependencies.
 `azd deploy` does not provision infrastructure, reset gateway controls, republish prompt agents or connect
 evidence to the triage/reviewer workflow.
 
 The [evidence prompt](../src/agents/evidence/instructions.md) is versioned alongside the other prompts and packaged
 inside each hosted agent version. Its nested directory keeps it out of the prompt-agent publisher. The source
 package includes only the agent code, prompt, fixed topics and requirements; it excludes `.env` and local environments.
-The hosted agent receives no Web IQ API key. It uses its own Entra identity to call the knowledge-base MCP endpoint;
+The hosted agent receives no Web IQ API key. It authenticates to Foundry Toolbox using its own Entra identity;
+Toolbox uses the project identity to call the knowledge-base MCP endpoint. `FoundryToolbox` forwards the
+hosting platform's request context without exposing the raw retrieval tool to the model.
 Search uses the independently configured Web IQ knowledge source.
 
 The research tool accepts only [approved topics](../src/agents/evidence/topics.json), not free-text queries.

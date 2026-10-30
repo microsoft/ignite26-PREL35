@@ -5,7 +5,7 @@ targetScope = 'resourceGroup'
 
 param location string = resourceGroup().location
 
-@description('Object ID of the learner. Gets Foundry User, project/Search setup roles and Web IQ account Contributor. Empty to skip.')
+@description('Object ID of the learner. Gets Foundry User, project setup, Search index/document contributor roles and Web IQ account Contributor. Empty to skip.')
 param learnerPrincipalId string = ''
 
 @description('Object ID of the identity that runs scripts/create_agents.py. Empty to skip.')

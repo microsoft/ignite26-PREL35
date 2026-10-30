@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $yaml = Get-Content (Join-Path $root 'azure.yaml') -Raw
-$section = [regex]::Match($yaml, '(?ms)^  predeploy:\r?\n(?<body>.*?)^  postdeploy:').Groups['body'].Value
+$section = [regex]::Match($yaml, '(?ms)^  predeploy:\r?\n(?<body>.*?)^  postprovision:').Groups['body'].Value
 if ($section -notmatch '(?m)^    interactive: true\r?$') {
     throw 'The predeploy hook must attach the terminal for hidden Web IQ key input.'
 }

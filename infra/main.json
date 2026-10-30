@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "15169819435154461204"
+      "templateHash": "16628199572919671570"
     }
   },
   "parameters": {
@@ -17,7 +17,7 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Object ID of the learner. Gets Foundry User, project/Search setup roles and Web IQ account Contributor. Empty to skip."
+        "description": "Object ID of the learner. Gets Foundry User, project setup, Search index/document contributor roles and Web IQ account Contributor. Empty to skip."
       }
     },
     "operatorPrincipalId": {
@@ -531,7 +531,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.45.15.27210",
-              "templateHash": "6784615965202014503"
+              "templateHash": "16263093856410985479"
             }
           },
           "parameters": {
@@ -666,28 +666,17 @@
               ]
             },
             {
-              "condition": "[not(empty(parameters('learnerPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]",
-              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token'))), parameters('learnerPrincipalId'), variables('searchIndexDataReaderRole'))]",
-              "properties": {
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataReaderRole'))]",
-                "principalId": "[parameters('learnerPrincipalId')]"
+              "copy": {
+                "name": "searchIndexDataContributors",
+                "count": "[length(variables('searchSetupPrincipals'))]"
               },
-              "dependsOn": [
-                "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]"
-              ]
-            },
-            {
-              "condition": "[not(empty(parameters('operatorPrincipalId')))]",
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
               "scope": "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]",
-              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token'))), parameters('operatorPrincipalId'), variables('searchIndexDataContributorRole'))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token'))), variables('searchSetupPrincipals')[copyIndex()], variables('searchIndexDataContributorRole'))]",
               "properties": {
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataContributorRole'))]",
-                "principalId": "[parameters('operatorPrincipalId')]"
+                "principalId": "[variables('searchSetupPrincipals')[copyIndex()]]"
               },
               "dependsOn": [
                 "[resourceId('Microsoft.Search/searchServices', format('search-{0}', variables('token')))]"

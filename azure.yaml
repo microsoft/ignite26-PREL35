@@ -7,6 +7,8 @@ requiredVersions:
   azd: '>=1.37.1'
   extensions:
     azure.ai.agents: '>=1.0.0-beta.17'
+    azure.ai.connections: '>=1.0.0-beta.8'
+    azure.ai.toolboxes: '>=1.0.0-beta.8'
 
 infra:
   provider: bicep
@@ -14,12 +16,35 @@ infra:
   module: main
 
 services:
+  evidence-research:
+    host: azure.ai.connection
+    category: RemoteTool
+    target: ${AZURE_SEARCH_ENDPOINT}/knowledgebases/${AZURE_SEARCH_KNOWLEDGE_BASE_NAME}/mcp?api-version=2026-08-01-preview
+    authType: ProjectManagedIdentity
+    audience: https://search.azure.com
+    env:
+      AZURE_SEARCH_ENDPOINT: ${AZURE_SEARCH_ENDPOINT}
+      AZURE_SEARCH_KNOWLEDGE_BASE_NAME: ${AZURE_SEARCH_KNOWLEDGE_BASE_NAME}
+  evidence-tools:
+    host: azure.ai.toolbox
+    uses:
+      - evidence-research
+    description: General financial-crime typology research through the lab knowledge base.
+    tools:
+      - type: mcp
+        server_label: fincrime
+        connection: evidence-research
+        allowed_tools:
+          - knowledge_base_retrieve
+        require_approval: never
   evidence-agent:
     name: evidence-agent
     host: azure.ai.agent
     kind: hosted
     language: python
     project: src/agents/evidence
+    uses:
+      - evidence-tools
     description: A standalone evidence brief grounded in the lab knowledge base.
     codeConfiguration:
       runtime: python_3_13
@@ -34,7 +59,7 @@ services:
         version: 2.0.0
     env:
       AZURE_AI_MODEL_DEPLOYMENT_NAME: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
-      EVIDENCE_KNOWLEDGE_BASE_MCP_ENDPOINT: ${EVIDENCE_KNOWLEDGE_BASE_MCP_ENDPOINT}
+      TOOLBOX_EVIDENCE_TOOLS_MCP_ENDPOINT: ${TOOLBOX_EVIDENCE_TOOLS_MCP_ENDPOINT}
       PYTHONNOUSERSITE: "1"
 
 hooks:
@@ -42,9 +67,6 @@ hooks:
     shell: pwsh
     interactive: true
     run: $ErrorActionPreference = 'Stop'; Set-Location (git rev-parse --show-toplevel); & ./scripts/configure_evidence_agent.ps1 -ResourceGroup $env:AZURE_RESOURCE_GROUP -EnvironmentName $env:AZURE_ENV_NAME -ValidateOnly; & ./scripts/setup_webiq.ps1 -IfNeeded
-  postdeploy:
-    shell: pwsh
-    run: Set-Location (git rev-parse --show-toplevel); & ./scripts/grant_evidence_access.ps1
   postprovision:
     shell: pwsh
     run: |

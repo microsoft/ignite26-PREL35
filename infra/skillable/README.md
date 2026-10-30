@@ -1,17 +1,22 @@
 # Skillable setup
 
 How the dev lab profile ([224908](https://labondemand.com/LabProfile/224908)) uses this repository.
-Each learner gets one Windows VM and one Azure resource group (Cloud Slice) where they are Contributor.
+Each learner gets one Windows VM and one Azure resource group (Cloud Slice). The role setup supports
+subscription-level `LOD Reader` and `LOD Contributor` learners; neither grants role-assignment permissions.
 
 | In Skillable Studio | From this repository |
 |---|---|
 | **Resource template** on the resource group | [infra/main.bicep](../main.bicep), compiled to ARM JSON (below). No parameters needed |
-| **Life cycle action**: Execute Script in Cloud Platform, PowerShell, after the template deploys, blocking | [assign-learner.ps1](assign-learner.ps1): gives the learner **Foundry User** on their resource group |
+| **Life cycle action**: Execute Script in Cloud Platform, PowerShell, after the template deploys, blocking | [assign-learner.ps1](assign-learner.ps1): grants scoped Foundry, project, Search and Web IQ access |
+| **Life cycle action**: Execute Script in Cloud Platform, PowerShell, on Tearing Down, blocking, before resource deletion | [remove-setup-roles.ps1](remove-setup-roles.ps1): removes only role assignments created by the matching setup; leaves pre-existing permissions unchanged |
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, on Tearing Down, blocking | [teardown.ps1](teardown.ps1): deletes and purges the Foundry account, which Skillable requires for `Microsoft.CognitiveServices/accounts` |
 | **Access control policy** | [acp-v4.json](acp-v4.json) |
 | **Instructions** | [instructions/skillable/content.md](../../instructions/skillable/content.md), linked from GitHub |
 | **Lab VM** | Azure CLI, PowerShell 7, [uv](https://docs.astral.sh/uv/), this repository cloned, and in it `uv venv --python 3.12; uv pip install -r requirements.txt` |
 | **Subscription** | Access to `gpt-5-mini` and `gpt-5-nano` (`GlobalStandard`). Without it the template fails with `SpecialFeatureOrQuotaIdRequired`; ask Skillable to enable both models |
+
+Replace the old Foundry-only setup and role-cleanup snippets with this pair. Keep the separate Foundry
+deletion/purge action. See [the setup sequence](../README.md#skillable-post-build-setup) for roles and learner commands.
 
 ## Resource template
 
