@@ -35,7 +35,7 @@ Fill in the sections below yourself, then:
 ## 🔥PREL35: Building a path to production for agents
 ### Session description
 
-Add your session description here. Keep it concise — 2-3 sentences about what attendees will learn and why it matters.
+Move beyond AI prototypes and learn how to operationalize agents for enterprise use. In this 4-hour hands-on lab, you'll apply Microsoft's Path to Production framework to assess readiness, implement governance and security controls, deploy with Azure AI Foundry, and establish monitoring and observability practices. Leave with a practical blueprint, reference architectures, and operational guidance to build, deploy, and manage AI agents at scale.
 
 ### 🚀 Getting started
 
