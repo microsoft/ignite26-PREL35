@@ -7,7 +7,9 @@ import unittest
 import urllib.error
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
+
+import pytest
 
 from scripts import setup_webiq as setup
 
@@ -109,7 +111,9 @@ class WebIqSetupTests(unittest.TestCase):
                     else:
                         self.assertEqual(capture.call_count, 0 if saved_key else 1)
                         configure.assert_called_once()
-                        web_search.assert_called_once_with(FIXTURE_KEY)
+                        self.assertEqual(web_search.call_args_list, [
+                            call(FIXTURE_KEY, validate_only=True), call(FIXTURE_KEY),
+                        ])
                         kb_search.assert_called_once()
                 self.assertNotIn(FIXTURE_KEY, output.getvalue())
 
@@ -326,6 +330,7 @@ class WebIqSetupTests(unittest.TestCase):
                 patch.object(setup, "AzureCliCredential"),
                 patch.object(setup, "check_targets", return_value={"knowledgeSources": [{"name": "schemes"}]}),
                 patch.object(setup, "capture_key", return_value=FIXTURE_KEY) as capture,
+                patch.object(setup, "check_webiq_search"),
                 patch.object(setup, "configure_webiq", side_effect=RuntimeError(FIXTURE_KEY)),
                 redirect_stdout(output), redirect_stderr(output),
             ):
@@ -362,10 +367,12 @@ class WebIqSetupTests(unittest.TestCase):
                 capture.assert_not_called()
                 configure.assert_called_once()
                 if "--no-run" in arguments:
-                    web_search.assert_not_called()
+                    web_search.assert_called_once_with(FIXTURE_KEY, validate_only=True)
                     kb_search.assert_not_called()
                 else:
-                    web_search.assert_called_once_with(FIXTURE_KEY)
+                    self.assertEqual(web_search.call_args_list, [
+                        call(FIXTURE_KEY, validate_only=True), call(FIXTURE_KEY),
+                    ])
                     kb_search.assert_called_once()
                 self.assertEqual(configure.call_args.args[:3], (settings, FIXTURE_KEY, knowledge_base))
                 self.assertEqual(setup.load_configuration(path)["WEBIQ_API_KEY"], FIXTURE_KEY)
@@ -557,6 +564,156 @@ class WebIqSetupTests(unittest.TestCase):
                 transaction["direction"] == "out" and transaction["counterparty_type"] == "business"
                 for transaction in case["transactions"]
             ))
+
+
+@pytest.fixture
+def webiq_main(tmp_path, monkeypatch):
+    path = tmp_path / ".env"
+    fixture_env(path)
+    monkeypatch.setattr(setup, "ROOT", tmp_path)
+    monkeypatch.setattr(setup.subprocess, "run", Mock(return_value=Mock(returncode=0)))
+    monkeypatch.setattr(setup, "AzureCliCredential", MagicMock())
+    monkeypatch.setattr(setup, "check_targets", Mock(return_value={
+        "knowledgeSources": [{"name": "schemes"}],
+    }))
+    configure = Mock()
+    monkeypatch.setattr(setup, "configure_webiq", configure)
+    return path, configure
+
+
+def test_hidden_prompt_retries_malformed_keys_without_echoing_them(monkeypatch, capsys):
+    monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: True)
+    browser = Mock()
+    monkeypatch.setattr(setup.webbrowser, "open", browser)
+    hidden = Mock(side_effect=["", "wrong key with spaces", "\x00private", FIXTURE_KEY])
+    monkeypatch.setattr(setup.getpass, "getpass", hidden)
+    assert setup.capture_key(FIXTURE_ENV) == FIXTURE_KEY
+    assert hidden.call_count == 4
+    browser.assert_called_once()
+    output = capsys.readouterr()
+    assert output.err.count("Try again") == 3
+    assert "wrong key" not in output.err
+    assert FIXTURE_KEY not in output.out + output.err
+
+
+@pytest.mark.parametrize("saved", [False, True])
+def test_interactive_setup_retries_rejected_keys_before_saving_or_configuring(
+    webiq_main, monkeypatch, capsys, saved,
+):
+    path, configure = webiq_main
+    if saved:
+        setup.save_settings(path, {"WEBIQ_API_KEY": "rejected-saved-key"})
+    monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: True)
+    capture = Mock(side_effect=(["rejected-paste", FIXTURE_KEY] if saved else [
+        "first-rejected-paste", "rejected-paste", FIXTURE_KEY,
+    ]))
+    monkeypatch.setattr(setup, "capture_key", capture)
+    checks = Mock(side_effect=[
+        setup.KeyValidationError("Web IQ rejected the key."),
+        setup.KeyValidationError("Web IQ rejected the key."),
+        None,
+    ])
+    monkeypatch.setattr(setup, "check_webiq_search", checks)
+
+    def configure_with_accepted_key(settings, key, *args):
+        assert key == FIXTURE_KEY
+        assert setup.load_configuration(path)["WEBIQ_API_KEY"] == FIXTURE_KEY
+        assert "rejected" not in path.read_text()
+
+    configure.side_effect = configure_with_accepted_key
+    assert setup.main(["--no-run"]) == 0
+    assert capture.call_count == (2 if saved else 3)
+    assert checks.call_count == 3
+    assert all(call.kwargs == {"validate_only": True} for call in checks.call_args_list)
+    configure.assert_called_once()
+    output = capsys.readouterr()
+    assert output.err.count("Paste another key") == 2
+    assert FIXTURE_KEY not in output.out + output.err
+    assert "rejected-paste" not in output.out + output.err
+
+
+def test_ctrl_c_cancels_key_retry_without_saving_or_configuring(webiq_main, monkeypatch, capsys):
+    path, configure = webiq_main
+    before = path.read_bytes()
+    monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(setup.webbrowser, "open", Mock())
+    hidden = Mock(side_effect=["bad key", "rejected-key", KeyboardInterrupt])
+    monkeypatch.setattr(setup.getpass, "getpass", hidden)
+    monkeypatch.setattr(setup, "check_webiq_search", Mock(side_effect=setup.KeyValidationError("Key rejected.")))
+    assert setup.main([]) == 1
+    assert hidden.call_count == 3
+    assert path.read_bytes() == before
+    configure.assert_not_called()
+    assert "cancelled" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("arguments,interactive", [
+    ([], False), (["--use-saved-key"], True), (["--force"], True),
+])
+def test_automated_saved_key_failures_do_not_prompt(webiq_main, monkeypatch, arguments, interactive):
+    path, configure = webiq_main
+    setup.save_settings(path, {"WEBIQ_API_KEY": FIXTURE_KEY})
+    before = path.read_bytes()
+    monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: interactive)
+    capture = Mock()
+    monkeypatch.setattr(setup, "capture_key", capture)
+    monkeypatch.setattr(setup, "check_webiq_search", Mock(side_effect=setup.KeyValidationError("Key rejected.")))
+    assert setup.main(arguments) == 1
+    capture.assert_not_called()
+    configure.assert_not_called()
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("failure_stage", ["key-check", "azure-configuration"])
+def test_unrelated_failures_do_not_trigger_key_retry(webiq_main, monkeypatch, failure_stage):
+    _, configure = webiq_main
+    monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: True)
+    capture = Mock(return_value=FIXTURE_KEY)
+    monkeypatch.setattr(setup, "capture_key", capture)
+    check = Mock()
+    monkeypatch.setattr(setup, "check_webiq_search", check)
+    failure = setup.SetupError("Service access failed.")
+    if failure_stage == "key-check":
+        check.side_effect = failure
+    else:
+        configure.side_effect = failure
+    assert setup.main([]) == 1
+    capture.assert_called_once()
+    check.assert_called_once_with(FIXTURE_KEY, validate_only=True)
+    assert configure.call_count == int(failure_stage == "azure-configuration")
+
+
+def test_key_preflight_checks_access_without_searching(monkeypatch):
+    opener = Mock()
+    opener.open.side_effect = mcp_responses({}, "application/json")[:3]
+    monkeypatch.setattr(setup.urllib.request, "build_opener", Mock(return_value=opener))
+    setup.check_webiq_search(FIXTURE_KEY, validate_only=True)
+    methods = [json.loads(call.args[0].data)["method"] for call in opener.open.call_args_list]
+    assert methods == ["initialize", "notifications/initialized", "tools/list"]
+
+
+@pytest.mark.parametrize("status", [401, 403, 429, 500])
+def test_only_direct_webiq_auth_failures_are_retryable(monkeypatch, status):
+    opener = Mock()
+    opener.open.side_effect = urllib.error.HTTPError(
+        setup.MCP_ENDPOINT, status, FIXTURE_KEY, {}, io.BytesIO(FIXTURE_KEY.encode()),
+    )
+    monkeypatch.setattr(setup.urllib.request, "build_opener", Mock(return_value=opener))
+    with pytest.raises(setup.SetupError) as raised:
+        setup.check_webiq_search(FIXTURE_KEY, validate_only=True)
+    assert isinstance(raised.value, setup.KeyValidationError) == (status in (401, 403))
+    assert FIXTURE_KEY not in str(raised.value)
+
+
+def test_key_without_web_access_is_retryable(monkeypatch):
+    responses = mcp_responses({}, "application/json")[:2]
+    response = io.BytesIO(json.dumps({"id": 2, "result": {"tools": []}}).encode())
+    response.headers = {"Content-Type": "application/json"}
+    opener = Mock()
+    opener.open.side_effect = [*responses, response]
+    monkeypatch.setattr(setup.urllib.request, "build_opener", Mock(return_value=opener))
+    with pytest.raises(setup.KeyValidationError, match="does not expose the web tool"):
+        setup.check_webiq_search(FIXTURE_KEY, validate_only=True)
 
 
 if __name__ == "__main__":

@@ -63,53 +63,12 @@ services:
       PYTHONNOUSERSITE: "1"
 
 hooks:
-  predeploy:
-    shell: pwsh
-    interactive: true
-    run: $ErrorActionPreference = 'Stop'; Set-Location (git rev-parse --show-toplevel); & ./scripts/configure_evidence_agent.ps1 -ResourceGroup $env:AZURE_RESOURCE_GROUP -EnvironmentName $env:AZURE_ENV_NAME -ValidateOnly; & ./scripts/setup_webiq.ps1 -IfNeeded
   postprovision:
-    shell: pwsh
-    run: |
-      $ErrorActionPreference = 'Stop'
-      Set-Location (git rev-parse --show-toplevel)
-      $outputNames = @(
-        "FOUNDRY_PROJECT_ENDPOINT"
-        "MODEL_DEPLOYMENT"
-        "APIM_GATEWAY_URL"
-        "APIM_NAME"
-        "AZURE_RESOURCE_GROUP"
-        "APPLICATIONINSIGHTS_CONNECTION_STRING"
-        "APPLICATIONINSIGHTS_NAME"
-        "FOUNDRY_NAME"
-        "FOUNDRY_PROJECT_NAME"
-        "AZURE_SEARCH_SERVICE_NAME"
-        "AZURE_SEARCH_ENDPOINT"
-        "AZURE_SEARCH_LOCATION"
-        "AZURE_SEARCH_INDEX_NAME"
-        "AZURE_SEARCH_CONNECTION_NAME"
-        "AZURE_SEARCH_CONNECTION_ID"
-        "AZURE_SEARCH_KNOWLEDGE_BASE_NAME"
-        "INVESTIGATOR_PLANNING_DEPLOYMENT"
-        "INVESTIGATOR_EMBEDDING_ENDPOINT"
-        "INVESTIGATOR_EMBEDDING_DEPLOYMENT"
-        "INVESTIGATOR_EMBEDDING_MODEL"
-        "INVESTIGATOR_EMBEDDING_DIMENSIONS"
-        "WEBIQ_RESOURCE_ID"
-        "WEBIQ_ACCOUNT_NAME"
-      )
-      $lines = foreach ($name in $outputNames) {
-        $value = azd env get-value $name
-        if ($LASTEXITCODE) { throw "Could not read azd environment value $name." }
-        "$name=$value"
-      }
-      $preserved = @(if (Test-Path .env) {
-        Get-Content .env | Where-Object {
-          $_ -notmatch '^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=' -or $Matches[1] -notin $outputNames
-        }
-      })
-      Set-Content -Path .env -Value ($preserved + $lines) -Encoding utf8
-      $lines | Where-Object { $_ -notmatch "^APPLICATIONINSIGHTS" } | ForEach-Object { Write-Host $_ }
-      python ./scripts/create_agents.py
-      if ($LASTEXITCODE) { throw 'Agent creation failed.' }
-      & ./scripts/deploy.ps1 -ResourceGroup $env:AZURE_RESOURCE_GROUP -IndexOnly
-      & ./scripts/configure_evidence_agent.ps1 -ResourceGroup $env:AZURE_RESOURCE_GROUP -EnvironmentName $env:AZURE_ENV_NAME
+    windows:
+      shell: pwsh
+      run: |
+        uv run lab-hook postprovision
+        exit $LASTEXITCODE
+    posix:
+      shell: sh
+      run: uv run lab-hook postprovision

@@ -110,7 +110,7 @@ Apply it, publish it, and run the red team:
 
 ```powershell
 Copy-Item src/agents/variants/triage.helpful.md src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 uv run src/redteam.py
 ```
 
@@ -127,7 +127,7 @@ Every request already passes through API Management. Switch on its Prompt Shield
 Prompt Shields in your Foundry resource and refuses it when an injected instruction is found:
 
 ```powershell
-.\scripts\set_gateway.ps1 prompt-shields on
+uv run set-gateway prompt-shields on
 ```
 
 Wait a minute for the gateway to apply it, then run the red team again, still on the "helpful" prompt:
@@ -163,7 +163,7 @@ Restore the approved prompt, publish, and run the red team with Prompt Shields s
 
 ```powershell
 git checkout src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 uv run src/redteam.py
 ```
 

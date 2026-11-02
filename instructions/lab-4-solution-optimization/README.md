@@ -60,7 +60,7 @@ lists, is cached and costs a tenth. Prompt caching happens on its own; nothing i
 has the same instructions on the smaller model. Turn it on, wait a minute, and run the gate:
 
 ```powershell
-.\scripts\set_gateway.ps1 model-routing on
+uv run set-gateway model-routing on
 uv run src/evaluate.py
 ```
 
@@ -77,7 +77,7 @@ Compare the result with step 1:
 The gate turns "is the cheaper model good enough?" into numbers anyone can check. Turn routing off again:
 
 ```powershell
-.\scripts\set_gateway.ps1 model-routing off
+uv run set-gateway model-routing off
 ```
 
 ### 3. Limit tokens per caller (8 min)
@@ -86,7 +86,7 @@ A single runaway script can use the capacity every team shares. The gateway limi
 per minute; the default is high. Set it below what one alert needs:
 
 ```powershell
-.\scripts\set_gateway.ps1 token-limit 3000
+uv run set-gateway token-limit 3000
 ```
 
 Wait a minute, then run one alert with the client's retries shown:
@@ -102,7 +102,7 @@ The triage call uses most of the 3,000 tokens. The reviewer call gets HTTP 429 f
 the limit protects everyone else's capacity, not the caller's deadline. Restore the default:
 
 ```powershell
-.\scripts\set_gateway.ps1 token-limit 200000
+uv run set-gateway token-limit 200000
 ```
 
 ### 4. Attribute the cost (12 min)

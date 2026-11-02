@@ -78,7 +78,7 @@ Apply it, publish it as a new version of the agent, and run the gate:
 
 ```powershell
 Copy-Item src/agents/variants/triage.concise.md src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 uv run src/evaluate.py
 ```
 
@@ -97,7 +97,7 @@ Restore the prompt from source control, publish, and run the gate again:
 
 ```powershell
 git checkout src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 uv run src/evaluate.py
 ```
 
@@ -110,7 +110,7 @@ Model versions are retired on a schedule, so sooner or later the agents must mov
 answers whether a replacement is good enough. Publish both agents on `gpt-5-nano` and run it:
 
 ```powershell
-uv run scripts/create_agents.py gpt-5-nano
+uv run create-agents gpt-5-nano
 uv run src/evaluate.py
 ```
 
@@ -118,7 +118,7 @@ Read the result. The smaller model is close to the accuracy threshold, so you ma
 way, the decision is made by the scores, not by opinion. Then go back to the approved model:
 
 ```powershell
-uv run scripts/create_agents.py
+uv run create-agents
 ```
 
 ### 5. Open the Evidence Pack (4 min)
@@ -167,7 +167,7 @@ match, so it should be closed. Edit [src/agents/triage.md](../../src/agents/tria
 `gpt-5-nano` and run the gate:
 
 ```powershell
-uv run scripts/create_agents.py gpt-5-nano
+uv run create-agents gpt-5-nano
 uv run src/evaluate.py
 ```
 
@@ -176,7 +176,7 @@ restore the prompt and the approved model, as Lab 2 starts from them:
 
 ```powershell
 git checkout src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 ```
 
 ## Next

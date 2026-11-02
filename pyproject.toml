@@ -11,7 +11,28 @@ dependencies = [
 ]
 
 [project.scripts]
-agents = "agents:main"
+create-agents = "scripts.create_agents:main"
+setup-lab = "scripts.setup_lab:main"
+lab-env = "scripts.env:main"
+configure-evidence-agent = "scripts.configure_evidence_agent:main"
+setup-webiq = "scripts.setup_webiq:main"
+setup-obo = "scripts.setup_obo:main"
+set-gateway = "scripts.set_gateway:main"
+deploy-lab = "scripts.deploy:main"
+lab-hook = "scripts.hooks:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4",
+    "pyyaml>=6.0",
+]
+
+[tool.uv.build-backend]
+module-name = "scripts"
+module-root = ""
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [build-system]
 requires = ["uv_build>=0.13.1,<0.14.0"]

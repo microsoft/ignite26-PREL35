@@ -46,8 +46,8 @@ investigate.py  ──(your Entra ID token)──►  API Management  ──(its
 
 ## Prerequisites
 
-Provided on the lab VM: Azure CLI, PowerShell 7, uv with a Python 3.12 environment holding the packages in
-[requirements.txt](../../requirements.txt), and this repository. Your resource group and sign-in details are on the
+Provided on the lab VM: Azure CLI, PowerShell 7 for the terminal examples, uv with Python 3.12, and this repository.
+The Python packages and setup commands are defined in [pyproject.toml](../../pyproject.toml). Your resource group and sign-in details are on the
 **Resources** tab of the lab instructions.
 
 ## Steps
@@ -61,19 +61,15 @@ Open a terminal in the repository folder and sign in. Use the username `<lab-use
 az login
 ```
 
-Write your environment's values to `.env`, using your resource group name:
+Prepare the existing lab using your resource group name:
 
 ```powershell
-.\scripts\env.ps1 -ResourceGroup <your-resource-group>
+uv run setup-lab --resource-group <your-resource-group>
 ```
 
-You see the project endpoint, the model deployment and the gateway URL.
-
-Install python dependencies:
-
-```powershell
-uv sync
-```
+uv installs the Python dependencies automatically. Setup saves `.env`, creates and seeds the Search index,
+and creates its knowledge base. It does not deploy infrastructure, assign roles or publish prompt agents.
+Setup uses colored progress messages in a terminal; set `NO_COLOR=1` to disable colors.
 
 ### 2. Publish the agents (2 min)
 
@@ -81,7 +77,7 @@ Each agent is a Markdown file of instructions in [src/agents](../../src/agents).
 each agent in Foundry:
 
 ```powershell
-uv run scripts/create_agents.py
+uv run create-agents
 ```
 
 You see three agents:

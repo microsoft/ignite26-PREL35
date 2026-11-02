@@ -12,7 +12,7 @@ subscription-level `LOD Reader` and `LOD Contributor` learners; neither grants r
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, on Tearing Down, blocking | [teardown.ps1](teardown.ps1): deletes and purges the Foundry account, which Skillable requires for `Microsoft.CognitiveServices/accounts` |
 | **Access control policy** | [acp-v4.json](acp-v4.json) |
 | **Instructions** | [instructions/skillable/content.md](../../instructions/skillable/content.md), linked from GitHub |
-| **Lab VM** | Azure CLI, PowerShell 7, [uv](https://docs.astral.sh/uv/), this repository cloned, and in it `uv venv --python 3.12; uv pip install -r requirements.txt` |
+| **Lab VM** | Azure CLI, PowerShell 7 for the lab's terminal examples, [uv](https://docs.astral.sh/uv/), this repository cloned, and in it `uv sync` |
 | **Subscription** | Access to `gpt-5-mini` and `gpt-5-nano` (`GlobalStandard`). Without it the template fails with `SpecialFeatureOrQuotaIdRequired`; ask Skillable to enable both models |
 
 Replace the old Foundry-only setup and role-cleanup snippets with this pair. Keep the separate Foundry
@@ -65,7 +65,7 @@ the new policy before asking to publish.
 **No lab creates an app registration**, so Skillable has nothing to tear down here. On-Behalf-Of is described in Lab 2
 under "Consider when moving to production", and isn't hands-on.
 
-The repository keeps [scripts/setup_obo.ps1](../../scripts/setup_obo.ps1) for a future version. If a lab ever runs it,
+The repository keeps [scripts/setup_obo.py](../../scripts/setup_obo.py) (`uv run setup-obo`) for a future version. If a lab ever runs it,
 it creates one Entra ID app registration, and Skillable would need these details to tear it down:
 
 | | |

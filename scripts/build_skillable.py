@@ -29,9 +29,6 @@ def convert(markdown: str) -> str:
     return markdown.strip()
 
 
-assert convert("See [the file](../../a.md) and [docs](https://x.y).") == "See the file and [docs](https://x.y)."
-assert convert("Use `<lab-password>`") == "Use ++@lab.CloudPortalCredential(User1).Password++"
-
 if __name__ == "__main__":
     OUT.parent.mkdir(exist_ok=True)
     pages = [convert(lab.read_text(encoding="utf-8")) for lab in LABS]

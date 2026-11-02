@@ -158,26 +158,21 @@ Optionally, open the repository in VS Code:
 code .
 ```
 
-- [] Write your environment's values to `.env`, using your resource group name:
+- [] Prepare the existing lab using your resource group name:
 
 ```powershell
-.\scripts\env.ps1 -ResourceGroup @lab.CloudResourceGroup(PREL35).Name
+uv run setup-lab --resource-group @lab.CloudResourceGroup(PREL35).Name
 ```
 
-You see the project endpoint, the model deployment and the gateway URL.
-
-- [] Install python dependencies:
-
-```powershell
-uv sync
-```
+uv installs the Python dependencies automatically. Setup saves `.env`, creates and seeds the Search index,
+and creates its knowledge base.
 
 ### 2. Publish the agents \(2 min\)
 
 Each agent is a Markdown file of instructions in src/agents. Publishing creates a new version of each agent in Foundry:
 
 ```powershell
-uv run scripts/create_agents.py
+uv run create-agents
 ```
 
 > To disable colors in the terminal output, set the environment variable `UV_NO_COLOR` to `1` using  
@@ -201,7 +196,7 @@ agent and publish version 2 the same way.
 
 - [] Open the **Azure portal** +++@lab.CloudPortal.Url+++. Login using +++@lab.CloudPortalCredential(User1).Username+++ and the access token +++@lab.CloudPortalCredential(User1).AccessToken+++.
 
-Find your resource group and deployed resources:
+Find your resource group @lab.CloudResourceGroup(PREL35).Name and deployed resources:
 
 | Resource | Look for |
 | -------- | -------- |
@@ -337,7 +332,7 @@ git diff --no-index src/agents/triage.md src/agents/variants/triage.concise.md
 
 ```powershell
 Copy-Item src/agents/variants/triage.concise.md src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 uv run src/evaluate.py
 ```
 
@@ -359,7 +354,7 @@ The command ended with exit code 1 (check with `$LASTEXITCODE`). In a pipeline, 
 
 ```powershell
 git checkout src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 uv run src/evaluate.py
 ```
 
@@ -372,7 +367,7 @@ Model versions are retired on a schedule, so sooner or later the agents must mov
 - [] Publish both agents on `gpt-5-nano` and run it:
 
 ```powershell
-uv run scripts/create_agents.py gpt-5-nano
+uv run create-agents gpt-5-nano
 uv run src/evaluate.py
 ```
 
@@ -381,7 +376,7 @@ Read the result. The smaller model is close to the accuracy threshold, so you ma
 - [] Then go back to the approved model:
 
 ```powershell
-uv run scripts/create_agents.py
+uv run create-agents
 ```
 
 ### 5. Open the Evidence Pack \(4 min\)
@@ -430,7 +425,7 @@ Open .github/workflows/release-gate.yml. It runs the commands you ran: connect, 
 Make the smaller model good enough. Open the `report.md` of the `gpt-5-nano` run from step 4 and pick an alert it got wrong. If it got all of them right, take ALT-1006: a sanctions name match where the date of birth doesn't match, so it should be closed. Edit src/agents/triage.md, then publish on `gpt-5-nano` and run the gate:
 
 ```powershell
-uv run scripts/create_agents.py gpt-5-nano
+uv run create-agents gpt-5-nano
 uv run src/evaluate.py
 ```
 
@@ -438,7 +433,7 @@ Did you fix it without breaking another alert? Run the gate twice: one correct r
 
 ```powershell
 git checkout src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 ```
 
 ## Next
@@ -551,7 +546,7 @@ git diff --no-index src/agents/triage.md src/agents/variants/triage.helpful.md
 
 ```powershell
 Copy-Item src/agents/variants/triage.helpful.md src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 uv run src/redteam.py
 ```
 
@@ -572,7 +567,7 @@ Every request already passes through API Management. Switch on its Prompt Shield
 - [] Turn on Prompt Shields at the gateway:
 
 ```powershell
-.\scripts\set_gateway.ps1 prompt-shields on
+uv run set-gateway prompt-shields on
 ```
 
 Wait a minute for the gateway to apply it, then run the red team again, still on the "helpful" prompt:
@@ -603,7 +598,7 @@ Restore the approved prompt, publish, and run the red team with Prompt Shields s
 
 ```powershell
 git checkout src/agents/triage.md
-uv run scripts/create_agents.py
+uv run create-agents
 uv run src/redteam.py
 ```
 
@@ -809,7 +804,7 @@ The cost comes from the tokens each call used and evals/prices.json. Output toke
 `gpt-5-nano` costs a fifth of `gpt-5-mini`. The gateway can send alerts with a low risk score to `triage-lite`, which has the same instructions on the smaller model. Turn it on, wait a minute, and run the gate:
 
 ```powershell
-.\scripts\set_gateway.ps1 model-routing on
+uv run set-gateway model-routing on
 uv run src/evaluate.py
 ```
 
@@ -822,7 +817,7 @@ Compare the result with step 1:
 The gate turns "is the cheaper model good enough?" into numbers anyone can check. Turn routing off again:
 
 ```powershell
-.\scripts\set_gateway.ps1 model-routing off
+uv run set-gateway model-routing off
 ```
 
 ### 3. Limit tokens per caller \(8 min\)
@@ -830,7 +825,7 @@ The gate turns "is the cheaper model good enough?" into numbers anyone can check
 A single runaway script can use the capacity every team shares. The gateway limits the tokens each caller can use per minute; the default is high. Set it below what one alert needs:
 
 ```powershell
-.\scripts\set_gateway.ps1 token-limit 3000
+uv run set-gateway token-limit 3000
 ```
 
 Wait a minute, then run one alert with the client's retries shown:
@@ -844,7 +839,7 @@ Remove-Item Env:OPENAI_LOG
 The triage call uses most of the 3,000 tokens. The reviewer call gets HTTP 429 from the gateway, with a `Retry-After` header, and the client waits and retries until the minute resets. The work still finishes, slowly: the limit protects everyone else's capacity, not the caller's deadline. Restore the default:
 
 ```powershell
-.\scripts\set_gateway.ps1 token-limit 200000
+uv run set-gateway token-limit 200000
 ```
 
 ### 4. Attribute the cost \(12 min\)
@@ -883,3 +878,93 @@ would do to quality (from the gate, with routing on).
 ## Next
 
 You've completed all the labs.
+
+===
+
+# Temporary lab - hosted evidence agent
+
+## What this exercise covers
+
+Configure public-web research and deploy the standalone **evidence-agent** into your existing Foundry project.
+This temporary setup walkthrough is separate from Labs 0 to 4. It does not connect the evidence agent to the
+triage/reviewer workflow or run an investigation.
+
+Unlike the Markdown prompt agents published earlier, this hosted agent runs Python code in Foundry.
+Its research tool uses the Search knowledge base created during Lab 0.
+
+## Prerequisites
+
+- Complete the setup step in Lab 0: the repository has a populated `.env`,
+  a seeded Search index, and the `fincrime-research` knowledge base.
+- Keep Azure CLI signed in to the lab account and subscription.
+- Use a terminal in the repository root, with Azure Developer CLI (`azd`) and the extensions required by
+  azure.yaml available.
+
+The lab's infrastructure and scoped permissions are already provisioned. You do not need permission to assign roles.
+
+## 1. Understand Web IQ
+
+**Web IQ** supplies public-web context through an MCP service. The Search knowledge base combines that context
+with the synthetic typology notes already in the index. Public context is not evidence about a customer.
+
+Web IQ requires an API key from a profile linked to the lab's existing Web IQ billing resource.
+The preparation command guides you through the profile portal and hidden key input; you do not need to
+configure the Foundry and Search integrations by hand.
+
+**Cost and data boundary:** first-time preparation runs billable Web IQ and knowledge-base checks using a fixed,
+public DOJ topic. Do not send customer data, identifiers, or full case prompts to public-web research.
+
+## 2. Configure Web IQ and the deployment environment
+
+Sign in to azd with the same lab account used for Azure CLI:
+
+```powershell
+azd auth login
+```
+
+Run the combined preparation command:
+
+```powershell
+uv run configure-evidence-agent
+```
+
+The command reads the resource group and deployment settings from `.env`; do not enter the resource group again.
+It configures the azd environment and disables automatic role assignments, then sets up Web IQ if needed.
+
+If prompted for a key:
+
+1. In the Web IQ profile portal opened by the command, select the profile linked to the billing resource ID
+   shown in the terminal.
+2. Create an API key with the **web** service enabled.
+3. Paste it into the hidden terminal prompt, not into chat or the lab instructions.
+
+Invalid or rejected keys trigger another prompt; press Ctrl+C to cancel. The key is saved in the ignored `.env`
+and configured separately in the Foundry connection and Search knowledge source. Treat it as a shared lab credential.
+If both integrations are already configured, the command reuses them without asking for a key or running another search.
+
+Continue only when the command reports that Web IQ and the evidence-agent environment are ready.
+If `.env` is missing or incomplete, return to Lab 0 setup. For an access error or a target mismatch, stop and ask
+the proctor; do not grant roles or retarget another lab.
+
+## 3. Deploy the hosted agent
+
+From the repository root, run:
+
+```powershell
+azd deploy
+```
+
+Deploy all services, not just `azd deploy evidence-agent`. The configuration creates or updates the
+**evidence-research** connection, **evidence-tools** Toolbox, and hosted **evidence-agent**, in dependency order.
+Foundry builds the Python dependencies remotely; you do not need a local container build.
+
+This command does not provision infrastructure, assign roles, republish the prompt agents, or change gateway controls.
+There is no predeploy setup hook: finish the preparation command before deploying.
+
+## 4. Confirm deployment
+
+Wait for `azd deploy` to report success. Open the [Foundry portal](https://ai.azure.com), select the existing
+`fincrime` project, and confirm that **evidence-agent** appears as a hosted agent.
+
+Stop here for this temporary exercise. Configuration and deployment are complete; invoking the agent and connecting
+it to the investigation workflow are outside this walkthrough.
