@@ -33,12 +33,6 @@ public DOJ topic. Do not send customer data, identifiers, or full case prompts t
 
 ## 2. Configure Web IQ and the deployment environment
 
-Sign in to azd with the same lab account used for Azure CLI:
-
-```powershell
-azd auth login
-```
-
 Run the combined preparation command:
 
 ```powershell
