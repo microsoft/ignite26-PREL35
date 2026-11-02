@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-Resets the current Windows user's lab checkout and Edge profiles for a fresh learner.
+Resets the current Windows user's lab checkout and clears Edge browsing data.
 .EXAMPLE
 .\scripts\reset-lab-vm.ps1 -WhatIf
 .EXAMPLE
@@ -11,6 +11,9 @@ Resets the current Windows user's lab checkout and Edge profiles for a fresh lea
 .NOTES
 Run as the learner, not as another administrator. Close other terminals, VS Code,
 and lab processes first. Sign out of personal Edge sync before running.
+Edge profiles, settings, extensions and favorites are preserved. Cookies, cache,
+history, site storage, saved sessions, passwords and autofill data are removed.
+Profiles without a favorites file receive Azure portal and Microsoft Foundry favorites.
 This is local cleanup, not a Windows factory reset or Azure resource teardown.
 #>
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
@@ -53,8 +56,26 @@ function Invoke-Logout {
     if (-not (Get-Command $Command -ErrorAction SilentlyContinue)) {
         throw "$Command is missing; sign-out cannot be verified."
     }
-    & $Command @Arguments
-    if ($LASTEXITCODE -ne 0) {
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell wraps native stderr as error records, even for this benign response.
+        $ErrorActionPreference = 'Continue'
+        $PSNativeCommandUseErrorActionPreference = $false
+        $output = @(& $Command @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    $message = ($output | ForEach-Object { $_.ToString() }) -join "`n"
+    if ($exitCode -ne 0 -and $Command -eq 'az' -and
+        $Arguments.Count -eq 1 -and $Arguments[0] -eq 'logout' -and
+        $message.Trim() -match '^(?:ERROR:\s*)?There are no active accounts\.$') {
+        Write-Host 'Azure CLI is already signed out.'
+        return
+    }
+    $output | ForEach-Object { Write-Host $_ }
+    if ($exitCode -ne 0) {
         throw "$Command sign-out failed. Resolve it and rerun before saving the image."
     }
 }
@@ -87,6 +108,30 @@ if (-not $env:LOCALAPPDATA) {
 $edgeRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\Edge\User Data'
 Assert-NoReparsePoints -Path $gitDirectory
 Assert-NoReparsePoints -Path $edgeRoot
+$edgeDataPaths = @()
+if (Test-Path -LiteralPath $edgeRoot) {
+    foreach ($profile in Get-ChildItem -LiteralPath $edgeRoot -Directory -Force) {
+        if ($profile.Name -notmatch '^(Default|Profile \d+|Guest Profile|System Profile)$' -and
+            -not (Test-Path -LiteralPath (Join-Path $profile.FullName 'Preferences'))) {
+            continue
+        }
+        foreach ($relativePath in @(
+            'Network\Cookies', 'Network\Cookies-journal', 'Cookies', 'Cookies-journal',
+            'Cache', 'Code Cache', 'GPUCache', 'DawnCache',
+            'Service Worker', 'Local Storage', 'Session Storage', 'IndexedDB',
+            'WebStorage', 'File System', 'Storage', 'blob_storage',
+            'Sessions', 'Current Session', 'Current Tabs', 'Last Session', 'Last Tabs',
+            'History', 'History-journal', 'Visited Links', 'Top Sites', 'Top Sites-journal',
+            'Login Data', 'Login Data-journal', 'Login Data For Account',
+            'Login Data For Account-journal', 'Web Data', 'Web Data-journal'
+        )) {
+            $edgeDataPaths += Join-Path $profile.FullName $relativePath
+        }
+    }
+    foreach ($relativePath in @('ShaderCache', 'GrShaderCache', 'GraphiteDawnCache')) {
+        $edgeDataPaths += Join-Path $edgeRoot $relativePath
+    }
+}
 foreach ($item in Get-ChildItem -LiteralPath $LabRoot -Force) {
     if ($item.Name -notin @('.git', '.venv')) {
         Assert-NoReparsePoints -Path $item.FullName
@@ -100,7 +145,8 @@ Write-Host "Restore tracked files to: $baseline"
 Write-Host 'Remove untracked/ignored files (including .env, .azure, evidence and logs):'
 Invoke-Git @('clean', '-ndx', '-e', '.venv/', '-e', 'scripts/reset-lab-vm.ps1') |
     ForEach-Object { Write-Host $_ }
-Write-Host "Erase all Edge profiles, passwords, cookies, cache and history at: $edgeRoot"
+Write-Host "Clear Edge cookies, cache, history, site storage, sessions, passwords and autofill at: $edgeRoot"
+Write-Host 'Preserve Edge profiles, settings, extensions and favorites; seed Azure favorites only if missing.'
 Write-Host 'Sign out az/azd; clear clipboard and PowerShell history for this user.'
 Write-Warning 'Close other terminals, VS Code and lab processes. Sign out of Edge sync first; otherwise sync may restore personal data.'
 
@@ -130,8 +176,10 @@ foreach ($process in Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'"
     }
 }
 
-if (Test-Path -LiteralPath $edgeRoot) {
-    Remove-Item -LiteralPath $edgeRoot -Recurse -Force
+foreach ($path in $edgeDataPaths) {
+    if (Test-Path -LiteralPath $path) {
+        Remove-Item -LiteralPath $path -Recurse -Force
+    }
 }
 Invoke-Git @('reset', '--hard', $baseline) | ForEach-Object { Write-Host $_ }
 Invoke-Git $cleanArguments | ForEach-Object { Write-Host $_ }
@@ -155,14 +203,48 @@ foreach ($edition in @('PowerShell', 'WindowsPowerShell')) {
     }
 }
 Clear-History
-Set-Clipboard -Value ''
+& powershell.exe -NoProfile -NonInteractive -STA -Command {
+    $ErrorActionPreference = 'Stop'
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.Clipboard]::Clear()
+}
+if ($LASTEXITCODE -ne 0) {
+    throw 'Clipboard cleanup failed. Clear it manually before saving the image.'
+}
 
-if (Test-Path -LiteralPath $edgeRoot) {
-    throw 'Edge data was recreated. Close Edge/background startup and rerun.'
+foreach ($path in $edgeDataPaths) {
+    if (Test-Path -LiteralPath $path) {
+        throw "Edge browsing data remains or was recreated: $path. Close Edge/background startup and rerun."
+    }
 }
 $remaining = @(Invoke-Git @('clean', '-ndx', '-e', '.venv/', '-e', 'scripts/reset-lab-vm.ps1'))
 if ($remaining.Count -gt 0 -or (Invoke-Git @('diff', '--name-only', 'HEAD'))) {
     throw 'Some lab files remain modified or could not be removed. Do not save the image yet.'
 }
+
+$bookmarks = @{
+    version = 1
+    roots = @{
+        bookmark_bar = @{
+            id = '1'; name = 'Favorites bar'; type = 'folder'
+            children = @(
+                @{ id = '4'; name = 'Azure portal'; type = 'url'; url = 'https://portal.azure.com/' },
+                @{ id = '5'; name = 'Microsoft Foundry'; type = 'url'; url = 'https://ai.azure.com/' }
+            )
+        }
+        other = @{ id = '2'; name = 'Other favorites'; type = 'folder'; children = @() }
+        synced = @{ id = '3'; name = 'Mobile favorites'; type = 'folder'; children = @() }
+    }
+}
+$profileDirectory = Join-Path $edgeRoot 'Default'
+if (-not (Test-Path -LiteralPath (Join-Path $profileDirectory 'Bookmarks'))) {
+    New-Item -ItemType Directory -Path $profileDirectory -Force | Out-Null
+    [IO.File]::WriteAllText(
+        (Join-Path $profileDirectory 'Bookmarks'),
+        ($bookmarks | ConvertTo-Json -Depth 8),
+        (New-Object System.Text.UTF8Encoding($false))
+    )
+    Write-Host 'Added Edge favorites: https://portal.azure.com/ and https://ai.azure.com/'
+}
 Write-Host 'Local lab reset complete. Installed tools and .venv were preserved; no Azure resources were deleted.'
-Write-Warning 'Close this terminal. Verify sign-out, other browsers/apps and Windows clipboard history (Win+V) before using Skillable commit/save VM image. This script does not reset Windows accounts, other app credentials or remote sessions.'
+Write-Warning 'Close this terminal. Verify website and Edge profile sign-out, other browsers/apps and Windows clipboard history (Win+V) before using Skillable commit/save VM image. Windows SSO can sign you back in; this script does not reset Windows accounts, Edge profile identity, other app credentials or remote sessions.'
