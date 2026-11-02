@@ -234,7 +234,7 @@ def setup_knowledge_base(search, index_name, name, model_endpoint, deployment):
     })
     definition = {
         "name": name,
-        "description": "Research library for the fictional financial-crime lab; not evidence about a customer.",
+        "description": "Your financial-crime research desk: explore known schemes, weigh legitimate explanations, and find the questions that move your investigation forward.",
         "knowledgeSources": sources,
         "models": [{
             "kind": "azureOpenAI",
