@@ -21,6 +21,7 @@ $roleNames = @{
     '1407120a-92aa-4202-b7e9-c0e197c71c8f' = 'Search Index Data Reader'
     '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd' = 'Cognitive Services OpenAI User'
     'b24988ac-6180-42a0-ab88-20f7382dd24c' = 'Contributor'
+    '312a565d-c81f-4fd8-895a-4e21e48d571c' = 'API Management Service Contributor'
 }
 
 function Write-SetupStep([string]$Message) {
@@ -115,6 +116,7 @@ try {
             }
             'Microsoft.Search/searchServices' { Remove-SetupRoles $resource.id }
             'Microsoft.WebIQ/accounts' { Remove-SetupRoles $resource.id }
+            'Microsoft.ApiManagement/service' { Remove-SetupRoles $resource.id }
         }
     }
     Write-SetupStep 'Role cleanup completed. Pre-existing permissions and Azure resources were left unchanged.'

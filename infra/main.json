@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.45.15.27210",
-      "templateHash": "16628199572919671570"
+      "version": "0.48.1.52935",
+      "templateHash": "9241149801739746202"
     }
   },
   "parameters": {
@@ -17,7 +17,7 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Object ID of the learner. Gets Foundry User, project setup, Search index/document contributor roles and Web IQ account Contributor. Empty to skip."
+        "description": "Object ID of the learner. Gets Foundry User, project setup, Search index/document contributor roles, Web IQ account Contributor and API Management Service Contributor. Empty to skip."
       }
     },
     "operatorPrincipalId": {
@@ -83,6 +83,15 @@
           "version": "1",
           "capacity": 10,
           "sku": "Standard"
+        },
+        {
+          "name": "Microsoft-Decision-1",
+          "deploymentName": "decision-1",
+          "format": "Microsoft",
+          "registry": "azureml-msr",
+          "version": "1",
+          "capacity": 10,
+          "sku": "DataZoneStandard"
         }
       ],
       "metadata": {
@@ -98,6 +107,7 @@
     },
     "foundryUserRole": "53ca6127-db72-4b80-b1b0-d745d6d5456d",
     "cognitiveServicesContributorRole": "25fbc0a9-bd7c-42a3-aa1a-3b75d497ee68",
+    "apimServiceContributorRole": "312a565d-c81f-4fd8-895a-4e21e48d571c",
     "namedValues": [
       {
         "name": "tenant-id",
@@ -239,12 +249,12 @@
       },
       "type": "Microsoft.CognitiveServices/accounts/deployments",
       "apiVersion": "2025-06-01",
-      "name": "[format('{0}/{1}', format('aif-{0}', variables('token')), parameters('models')[copyIndex()].name)]",
+      "name": "[format('{0}/{1}', format('aif-{0}', variables('token')), coalesce(tryGet(parameters('models')[copyIndex()], 'deploymentName'), parameters('models')[copyIndex()].name))]",
       "sku": {
         "name": "[coalesce(tryGet(parameters('models')[copyIndex()], 'sku'), 'GlobalStandard')]",
         "capacity": "[parameters('models')[copyIndex()].capacity]"
       },
-      "properties": "[shallowMerge(createArray(createObject('model', createObject('format', 'OpenAI', 'name', parameters('models')[copyIndex()].name, 'version', parameters('models')[copyIndex()].version)), if(equals(parameters('models')[copyIndex()].name, 'text-embedding-3-small'), createObject(), createObject('raiPolicyName', 'Microsoft.DefaultV2'))))]",
+      "properties": "[shallowMerge(createArray(createObject('model', createObject('format', coalesce(tryGet(parameters('models')[copyIndex()], 'format'), 'OpenAI'), 'name', parameters('models')[copyIndex()].name, 'version', parameters('models')[copyIndex()].version)), if(equals(parameters('models')[copyIndex()].name, 'text-embedding-3-small'), createObject(), createObject('raiPolicyName', 'Microsoft.DefaultV2'))))]",
       "dependsOn": [
         "[resourceId('Microsoft.CognitiveServices/accounts/projects/connections', format('aif-{0}', variables('token')), 'fincrime', 'appinsights')]",
         "[resourceId('Microsoft.Resources/deployments', 'approved-models')]",
@@ -432,6 +442,20 @@
       ]
     },
     {
+      "condition": "[not(empty(parameters('learnerPrincipalId')))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.ApiManagement/service', format('apim-{0}', variables('token')))]",
+      "name": "[guid(resourceId('Microsoft.ApiManagement/service', format('apim-{0}', variables('token'))), parameters('learnerPrincipalId'), variables('apimServiceContributorRole'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('apimServiceContributorRole'))]",
+        "principalId": "[parameters('learnerPrincipalId')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', format('apim-{0}', variables('token')))]"
+      ]
+    },
+    {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "approved-models",
@@ -441,8 +465,8 @@
         },
         "mode": "Incremental",
         "parameters": {
-          "modelNames": {
-            "value": "[map(parameters('models'), lambda('m', lambdaVariables('m').name))]"
+          "modelAssetIds": {
+            "value": "[map(parameters('models'), lambda('m', format('azureml://registries/{0}/models/{1}/', coalesce(tryGet(lambdaVariables('m'), 'registry'), 'azure-openai'), lambdaVariables('m').name)))]"
           }
         },
         "template": {
@@ -451,12 +475,12 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "7480916233181010556"
+              "version": "0.48.1.52935",
+              "templateHash": "12224475076897753287"
             }
           },
           "parameters": {
-            "modelNames": {
+            "modelAssetIds": {
               "type": "array"
             }
           },
@@ -474,13 +498,7 @@
                     "value": "Deny"
                   },
                   "allowedAssetIds": {
-                    "copy": [
-                      {
-                        "name": "value",
-                        "count": "[length(parameters('modelNames'))]",
-                        "input": "[format('azureml://registries/azure-openai/models/{0}/', parameters('modelNames')[copyIndex('value')])]"
-                      }
-                    ]
+                    "value": "[parameters('modelAssetIds')]"
                   }
                 }
               }
@@ -530,8 +548,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "16263093856410985479"
+              "version": "0.48.1.52935",
+              "templateHash": "14000290192745054848"
             }
           },
           "parameters": {
@@ -807,7 +825,7 @@
     },
     "MODEL_DEPLOYMENT": {
       "type": "string",
-      "value": "[parameters('models')[0].name]"
+      "value": "[coalesce(tryGet(parameters('models')[0], 'deploymentName'), parameters('models')[0].name)]"
     },
     "APIM_GATEWAY_URL": {
       "type": "string",
