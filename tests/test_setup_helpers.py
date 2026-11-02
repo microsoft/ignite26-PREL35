@@ -20,7 +20,22 @@ def test_gateway_updates_only_requested_switch(name, value, lab_root, monkeypatc
     update.assert_called_once_with([
         "az", "apim", "nv", "update", "--resource-group", "fixture", "--service-name", "apim-fixture",
         "--named-value-id", name, "--value", value, "--output", "none",
-    ])
+    ], show=False)
+
+
+@pytest.mark.parametrize("debug", [False, True])
+def test_gateway_reports_azure_failure_only_in_debug_mode(debug, lab_root, monkeypatch, capsys):
+    (lab_root / ".env").write_text("AZURE_RESOURCE_GROUP=fixture\nAPIM_NAME=apim-fixture\n")
+    diagnostic = "ERROR: (AuthorizationFailed) Cannot update this named value."
+    monkeypatch.setattr(common.subprocess, "run", lambda *args, **kwargs: CompletedProcess(
+        args[0], 1, "", diagnostic,
+    ))
+    args = ["prompt-shields", "on"] + (["--debug"] if debug else [])
+    assert set_gateway.main(args) == 1
+    captured = capsys.readouterr()
+    assert (diagnostic in captured.err) is debug
+    assert "az apim nv failed (exit code 1)" in captured.err
+    assert "The gateway applies it" not in captured.out
 
 
 @pytest.mark.parametrize("args", [["unknown", "on"], ["token-limit", "-1"], ["model-routing", "on; echo bad"]])

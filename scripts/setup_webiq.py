@@ -179,7 +179,34 @@ def azure_request(credential, method, url, scope, body=None, *, allow_not_found=
             return None
         if error.code == 412:
             raise SetupError("The knowledge base changed during setup. Rerun to merge the latest settings.") from None
-        # Service error bodies can echo a submitted key; never include them in terminal output.
+        # Service error bodies can echo a submitted key. Display only recognized codes and fixed guidance.
+        service_code = None
+        try:
+            payload = json.loads(error.read(65536))
+            service_error = payload.get("error") if isinstance(payload, dict) else None
+            if isinstance(service_error, dict) and isinstance(service_error.get("code"), str):
+                service_code = service_error["code"]
+        except (OSError, ValueError):
+            pass
+        if scope == ARM_SCOPE:
+            policy_hint = (
+                "A lab administrator must allow Microsoft.CognitiveServices/accounts/projects/connections "
+                "in every applicable Skillable policy, including inherited management-group policies."
+            )
+            access_hint = "Verify Cognitive Services Contributor on the Foundry project with the lab administrator."
+        else:
+            policy_hint = "Ask the lab administrator to review the applicable Search policy restrictions."
+            access_hint = "Verify Search Service Contributor on the lab Search service with the lab administrator."
+        hints = {
+            "RequestDisallowedByPolicy": policy_hint,
+            "AuthorizationFailed": access_hint,
+            "AuthorizationPermissionMismatch": access_hint,
+        }
+        if service_code in hints:
+            raise SetupError(
+                f"Azure {method} failed (HTTP {error.code}, {service_code}). {hints[service_code]} "
+                "Changing the Web IQ key will not fix this Azure access failure."
+            ) from None
         raise SetupError(
             f"Azure {method} failed (HTTP {error.code}). Check sign-in, resource access and API support, then rerun."
         ) from None

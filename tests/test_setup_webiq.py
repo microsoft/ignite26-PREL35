@@ -319,6 +319,54 @@ class WebIqSetupTests(unittest.TestCase):
                 self.assertNotIn(FIXTURE_KEY, str(raised.exception))
                 self.assertNotIn("test-access-token", str(raised.exception))
 
+    def test_azure_access_errors_expose_only_known_codes_and_targeted_guidance(self):
+        for service_code, scope, expected in (
+            ("RequestDisallowedByPolicy", setup.ARM_SCOPE, "Microsoft.CognitiveServices/accounts/projects/connections"),
+            ("AuthorizationFailed", setup.ARM_SCOPE, "Cognitive Services Contributor"),
+            ("RequestDisallowedByPolicy", setup.SEARCH_SCOPE, "Search policy restrictions"),
+            ("AuthorizationPermissionMismatch", setup.SEARCH_SCOPE, "Search Service Contributor"),
+        ):
+            with self.subTest(service_code=service_code, scope=scope):
+                credential = Mock()
+                credential.get_token.return_value.token = "test-access-token"
+                body = {"error": {
+                    "code": service_code, "message": FIXTURE_KEY,
+                    "details": [{"message": "test-access-token"}],
+                }}
+                opener = Mock()
+                opener.open.side_effect = urllib.error.HTTPError(
+                    "https://management.azure.com/test", 403, FIXTURE_KEY, {},
+                    io.BytesIO(json.dumps(body).encode()),
+                )
+                with patch.object(setup.urllib.request, "build_opener", return_value=opener):
+                    with self.assertRaises(setup.SetupError) as raised:
+                        setup.azure_request(credential, "PUT", "https://management.azure.com/test", scope)
+                message = str(raised.exception)
+                self.assertIn(service_code, message)
+                self.assertIn(expected, message)
+                self.assertNotIn(FIXTURE_KEY, message)
+                self.assertNotIn("test-access-token", message)
+
+    def test_unrecognized_or_malformed_error_responses_stay_private(self):
+        for body in (
+            json.dumps({"error": {"code": FIXTURE_KEY, "message": FIXTURE_KEY}}).encode(),
+            json.dumps({"error": [FIXTURE_KEY]}).encode(),
+            json.dumps([FIXTURE_KEY]).encode(),
+            FIXTURE_KEY.encode(),
+        ):
+            with self.subTest(body=body):
+                credential, opener = Mock(), Mock()
+                credential.get_token.return_value.token = "test-access-token"
+                opener.open.side_effect = urllib.error.HTTPError(
+                    "https://management.azure.com/test", 403, FIXTURE_KEY, {}, io.BytesIO(body),
+                )
+                with patch.object(setup.urllib.request, "build_opener", return_value=opener):
+                    with self.assertRaises(setup.SetupError) as raised:
+                        setup.azure_request(credential, "PUT", "https://management.azure.com/test", setup.ARM_SCOPE)
+                self.assertIn("HTTP 403", str(raised.exception))
+                self.assertNotIn(FIXTURE_KEY, str(raised.exception))
+                self.assertNotIn("test-access-token", str(raised.exception))
+
     def test_main_keeps_saved_key_after_partial_failure_without_disclosing_it(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
