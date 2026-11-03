@@ -84,6 +84,39 @@ class RunnerChecks(unittest.TestCase):
         with self.assertRaisesRegex(lab.WalkthroughError, "instructions changed"):
             lab.Runner(self.root)
 
+    def test_live_preflight_accepts_source_only_folder_without_running_setup_or_git(self):
+        for accepted in (False, True):
+            with (self.subTest(accepted=accepted),
+                  patch.object(sys.stdin, "isatty", return_value=True),
+                  patch.object(lab.shutil, "which", return_value="fixture-tool"),
+                  patch.object(lab, "confirm", return_value=accepted),
+                  patch.object(self.runner, "process", return_value=(0, "")) as process):
+                if accepted:
+                    self.runner.preflight()
+                else:
+                    with self.assertRaises(lab.Cancelled):
+                        self.runner.preflight()
+                process.assert_not_called()
+
+    def test_git_check_follows_successful_guide_setup_without_extra_setup_command(self):
+        step = next(step for step in self.runner.steps if "setup-lab" in step.args)
+        for setup_code, git_code in ((0, 0), (0, 1), (1, None)):
+            results = [(setup_code, "")]
+            if git_code is not None:
+                results.append((git_code, ""))
+            with (self.subTest(setup_code=setup_code, git_code=git_code),
+                  patch.object(self.runner, "process", side_effect=results) as process):
+                if setup_code or git_code:
+                    with self.assertRaises(lab.WalkthroughError):
+                        self.runner.command(step)
+                else:
+                    self.assertEqual(self.runner.command(step), "PASS")
+                self.assertEqual(process.call_args_list[0].args[0],
+                                 ["uv", "run", "setup-lab", "--resource-group", "fixture"])
+                if git_code is not None:
+                    self.assertEqual(process.call_args_list[1].args[0][:4], ["git", "diff", "--quiet", "HEAD"])
+                self.assertEqual(process.call_count, len(results))
+
     def test_windows_line_endings_do_not_count_as_source_drift(self):
         path = self.root / lab.GUIDE
         # The checkout may already be CRLF (core.autocrlf), so normalize before converting.

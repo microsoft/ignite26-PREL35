@@ -40,19 +40,10 @@ Assert-LabDestination
 if ([string]::IsNullOrWhiteSpace($GitHubToken)) {
     throw 'Replace PASTE_YOUR_PAT_HERE in the Skillable action copy, or supply -GitHubToken / GITHUB_TOKEN with read-only Contents access to microsoft/ignite26-PREL35.'
 }
-Get-Command git -ErrorAction Stop | Out-Null
-
 $parent = Split-Path $TargetPath -Parent
 [IO.Directory]::CreateDirectory($parent) | Out-Null
 $temporary = Join-Path $parent ("ignite26-PREL35-download-" + [guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($temporary) | Out-Null
-$identity = @{
-    GIT_AUTHOR_NAME = 'Lab baseline'
-    GIT_AUTHOR_EMAIL = 'lab@example.invalid'
-    GIT_COMMITTER_NAME = 'Lab baseline'
-    GIT_COMMITTER_EMAIL = 'lab@example.invalid'
-}
-$previousIdentity = @{}
 
 try {
     $zip = Join-Path $temporary 'repo.zip'
@@ -89,31 +80,6 @@ try {
             throw "The source ZIP contains unexpected local state: $forbidden."
         }
     }
-    $hooks = Join-Path $temporary 'no-hooks'
-    [IO.Directory]::CreateDirectory($hooks) | Out-Null
-    $excludes = Join-Path $temporary 'no-excludes'
-    [IO.File]::WriteAllText($excludes, '')
-    foreach ($name in $identity.Keys) {
-        $previousIdentity[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
-        [Environment]::SetEnvironmentVariable($name, $identity[$name], 'Process')
-    }
-    function Invoke-LabGit([string[]]$Arguments) {
-        & git -C $source -c "core.hooksPath=$hooks" -c "core.excludesFile=$excludes" -c commit.gpgsign=false @Arguments
-        if ($LASTEXITCODE -ne 0) { throw "Git baseline setup failed: $($Arguments[0])." }
-    }
-    Invoke-LabGit -Arguments @('init', '--initial-branch=main', '--template=') | Out-Null
-    Invoke-LabGit -Arguments @('config', 'core.autocrlf', 'false')
-    Invoke-LabGit -Arguments @('config', 'core.filemode', 'false')
-    # Source ZIP entries are tracked source files, even if their names match .gitignore.
-    Invoke-LabGit -Arguments @('add', '--all', '--force')
-    Invoke-LabGit -Arguments @('commit', '-m', 'Initial lab baseline') | Out-Null
-    if ((Invoke-LabGit -Arguments @('status', '--porcelain')) -or
-        (Invoke-LabGit -Arguments @('rev-list', '--count', 'HEAD')) -ne '1' -or
-        (Invoke-LabGit -Arguments @('remote'))) {
-        throw 'The downloaded lab did not produce a clean, single-commit Git baseline without remotes.'
-    }
-    Invoke-LabGit -Arguments @('config', '--global', '--add', 'safe.directory', $TargetPath)
-
     Assert-LabDestination
     if (Test-Path -LiteralPath $TargetPath) {
         foreach ($entry in Get-ChildItem -LiteralPath $source -Force) {
@@ -127,11 +93,8 @@ try {
     } else {
         [IO.Directory]::Move($source, $TargetPath)
     }
-    Write-Host "Lab ready at $TargetPath (main, one clean baseline commit, no remotes)."
-    Write-Host 'Run uv sync in that directory before following the lab instructions.'
+    Write-Host "Lab sources ready at $TargetPath."
+    Write-Host 'Run uv run setup-lab as LabUser, following the lab instructions, to initialize Git and prepare the lab.'
 } finally {
-    foreach ($name in $previousIdentity.Keys) {
-        [Environment]::SetEnvironmentVariable($name, $previousIdentity[$name], 'Process')
-    }
     Remove-Item -LiteralPath $temporary -Recurse -Force
 }
