@@ -317,7 +317,8 @@ class RunnerChecks(unittest.TestCase):
     def test_policy_denial_is_distinct_from_missing_permission_or_success(self):
         step = lab.Step(734, 738, "fixture", expect="policy-deny")
         with self.assertRaises(lab.WalkthroughError):
-            self.runner.check_result(step, 1, "AuthorizationFailed", None)
+            self.runner.check_result(step, 1, "ResourceGroupNotFound", None)
+        self.assertEqual(self.quiet(self.runner.check_result, step, 1, "AuthorizationFailed", None), "REVIEW NEEDED")
         self.assertEqual(self.runner.check_result(
             step, 1, "RequestDisallowedByPolicy: approved-ai-models policy denied this request", None
         ), "EXPECTED FAIL")

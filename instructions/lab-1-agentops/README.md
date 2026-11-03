@@ -160,8 +160,9 @@ You see one row per agent version: the concise prompt was the fastest version, a
 Traces take a few minutes to arrive. If your latest versions are missing, run the query again shortly.
 
 Then open the [Foundry portal](https://ai.azure.com), select the `fincrime` project, and open **Evaluations**.
-Open **Triage task adherence** and the run from step 1: the AI judge's score and its reasoning for each alert. If
-the run still shows as running, come back to it at the end of the lab.
+Open the run named **Release gate** with the date and time of step 1; its **Agent ID** is `triage`. The
+**Task adherence** column shows the AI judge's verdict for each alert, and **Task adherence.reason** its reasoning.
+If the run still shows as running, come back to it at the end of the lab.
 
 ### 7. The same gate in a pipeline (3 min)
 
@@ -171,18 +172,24 @@ job, so the change can't be merged or released.
 
 ### If you have time
 
-Make the smaller model good enough. Open the `report.md` of the `gpt-5-nano` run from step 4 and pick an alert it
-got wrong. If it got all of them right, take ALT-1006: a sanctions name match where the date of birth doesn't
-match, so it should be closed. Edit [src/agents/triage.md](../../src/agents/triage.md), then publish on
-`gpt-5-nano` and run the gate:
+Try to make `gpt-5-nano` good enough by changing only its instructions.
 
-```powershell
-uv run create-agents gpt-5-nano
-uv run src/evaluate.py
-```
+1. Open the `report.md` of the `gpt-5-nano` run from step 4 and find an alert whose recommendation differs from
+   the expected one. If there isn't one, use ALT-1006: Daniel Reyes's name matches a sanctions list, but his date
+   of birth doesn't, so the expected answer is `close_false_positive`.
+2. In [src/agents/triage.md](../../src/agents/triage.md), add one rule that would have led to the right answer.
+   For ALT-1006, for example: a name match is a false positive when the date of birth or nationality differs.
+3. Publish triage on `gpt-5-nano` and run the gate:
 
-Did you fix it without breaking another alert? Run the gate twice: one correct run can be luck. When you're done,
-restore the prompt and the approved model, as Lab 2 starts from them:
+   ```powershell
+   uv run create-agents gpt-5-nano
+   uv run src/evaluate.py
+   ```
+
+4. Check that the alert is now right and that no other alert got worse. Run the gate a second time: one correct
+   run can be luck.
+
+When you're done, restore the prompt and the approved model, as Lab 2 starts from them:
 
 ```powershell
 git checkout src/agents/triage.md

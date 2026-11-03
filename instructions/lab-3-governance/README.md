@@ -181,8 +181,17 @@ az cognitiveservices account deployment create -g <your-resource-group> -n $acco
     --sku-name GlobalStandard --sku-capacity 1
 ```
 
-The deployment is refused, and the error names the policy assignment `approved-ai-models` that denied it. It may also name the lab environment's own policy, which limits what any lab can deploy. Nobody
-needs to remember the approved list: the platform enforces it, whoever deploys and however they do it.
+The deployment is refused. The error code depends on what your lab account may do:
+
+- **`RequestDisallowedByPolicy`:** your account can deploy models, and Azure Policy stopped this one. The error
+  names the policy assignment `approved-ai-models`. It may also name the lab environment's own policy, which limits
+  what any lab can deploy.
+- **`AuthorizationFailed`:** your account can't deploy models at all, so Azure refused the request before it
+  checked any policy.
+
+These are two separate controls. Role-based access decides *who* can deploy; Azure Policy decides *what* can be
+deployed, even by someone who is allowed to deploy. Nobody needs to remember the approved list: the platform
+enforces it, whoever deploys and however they do it.
 
 ## Next
 
