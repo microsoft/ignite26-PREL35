@@ -732,8 +732,7 @@ Intake governs a use case. Azure Policy governs the platform underneath it, for 
 Try to deploy a model that isn't approved:
 
 ```powershell
-$account = az cognitiveservices account list -g @lab.CloudResourceGroup(PREL35).Name --query "[0].name" -o tsv
-az cognitiveservices account deployment create -g @lab.CloudResourceGroup(PREL35).Name -n $account `
+az cognitiveservices account deployment create -g @lab.CloudResourceGroup(PREL35).Name -n @lab.CloudResourceTemplate(PREL35Ignite).Outputs[FOUNDRY_NAME] `
     --deployment-name unapproved --model-name gpt-4.1-mini --model-version 2025-04-14 --model-format OpenAI `
     --sku-name GlobalStandard --sku-capacity 1
 ```
@@ -915,12 +914,6 @@ configure the Foundry and Search integrations by hand.
 public DOJ topic. Do not send customer data, identifiers, or full case prompts to public-web research.
 
 ## 2. Configure Web IQ and the deployment environment
-
-Sign in to azd with the same lab account used for Azure CLI:
-
-```powershell
-azd auth login
-```
 
 Run the combined preparation command:
 

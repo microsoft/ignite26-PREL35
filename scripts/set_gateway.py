@@ -12,6 +12,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("name", choices=NAMES)
     parser.add_argument("value")
+    parser.add_argument("--debug", action="store_true", help="Show Azure CLI output for troubleshooting.")
     args = parser.parse_args(argv)
     if not re.fullmatch(r"(?:on|off|gateway|obo|[0-9]+)", args.value):
         parser.error("value must be on, off, gateway, obo or a nonnegative integer")
@@ -22,7 +23,7 @@ def main(argv=None):
     command([
         "az", "apim", "nv", "update", "--resource-group", settings["AZURE_RESOURCE_GROUP"],
         "--service-name", settings["APIM_NAME"], "--named-value-id", args.name, "--value", args.value, "--output", "none",
-    ])
+    ], show=args.debug)
     message(f"{args.name} = {args.value}. The gateway applies it within about a minute.", "green")
 
 

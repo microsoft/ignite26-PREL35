@@ -1,7 +1,7 @@
 # Infrastructure
 
 [main.bicep](main.bicep) deploys the lab landing zone into one resource group: Foundry (account, project,
-gpt-5-mini and gpt-5-nano deployments), API Management (Basic v2) as the gateway in front of the agents, Log
+gpt-5-mini, gpt-5-nano and decision-1 deployments), API Management (Basic v2) as the gateway in front of the agents, Log
 Analytics and Application Insights. It also includes Azure AI Search, Web IQ, an embedding deployment and the
 research connections and roles. [agents-api-policy.xml](agents-api-policy.xml) is the gateway policy.
 
@@ -38,7 +38,9 @@ The identity running it needs Owner or Role Based Access Control Administrator o
 template assigns **Foundry User** to API Management's managed identity, the learner and itself.
 Skillable can keep the learner at **Reader** on the resource group. When `learnerPrincipalId` is supplied,
 Bicep also grants **Cognitive Services Contributor** on the Foundry project, **Search Service Contributor**
-and **Search Index Data Contributor** on the lab Search service, and **Contributor** on the Web IQ account.
+and **Search Index Data Contributor** on the lab Search service, **Contributor** on the Web IQ account,
+and **API Management Service Contributor** on the lab APIM service. The APIM role allows gateway switch
+updates through `uv run set-gateway`; it permits management of that APIM service, not just named values.
 The Foundry and Search roles let the learner save
 an existing Web IQ API key in both integrations and run the knowledge-base check, without resource-group
 Contributor or role-assignment permissions. The contributor roles permit management of those scoped resources,
@@ -59,7 +61,10 @@ The action **assigns roles only**. It discovers learners with subscription-level
 `LOD Contributor` and grants **Foundry User** on Foundry, **Search Service Contributor** and
 **Search Index Data Contributor** on the lab Search service. These let learners create the index and upload
 its documents. It retains the project-scoped **Cognitive Services Contributor** and Web IQ account
-**Contributor** permissions used by the local setup. It also checks the Search and project managed identities'
+**Contributor** permissions used by the local setup, and grants **API Management Service Contributor**
+on the lab APIM service for gateway updates. For existing labs, rerun the updated post-build action with
+Skillable's provisioning credentials; the learner cannot grant this role from the VM. Allow time for RBAC
+to take effect, then retry `uv run set-gateway prompt-shields on`. It also checks the Search and project managed identities'
 existing scoped permissions. It never gives learners permission to assign roles.
 
 No documents are bundled in the action, and it creates no index, knowledge base, Toolbox or agent.
@@ -180,9 +185,14 @@ azd deployment is needed. Its internal [investigator.bicep](investigator.bicep) 
 on the Search service. Search has its own managed identity with **Cognitive Services OpenAI User** access on Foundry
 for query vectorization and knowledge-base query planning. These Search integrations use managed identities, not API keys.
 
-The `models` list in `main.bicep` deploys and approves all three models, including
+The `models` list in `main.bicep` deploys and approves all four models, including
 `text-embedding-3-small` version 1 (Standard, capacity 10). The two GPT decision models retain GlobalStandard.
 Embeddings use 1,536 dimensions.
+
+`Microsoft-Decision-1` version 1 is deployed as `decision-1` (DataZoneStandard, capacity 10).
+This preview model uses the Microsoft format and the `azureml-msr` registry for its policy allowlist entry.
+It accepts typed decision questions at `/providers/microsoft/v1/systemone`; it does not replace the agents'
+default GPT deployment or support free-form text generation.
 
 When adding a model to an existing allowlist, Foundry may temporarily reject it while the policy update
 propagates. [Microsoft's guidance](https://learn.microsoft.com/en-us/azure/foundry/how-to/model-deployment-policy)

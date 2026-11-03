@@ -5,7 +5,7 @@ targetScope = 'resourceGroup'
 
 param location string = resourceGroup().location
 
-@description('Object ID of the learner. Gets Foundry User, project setup, Search index/document contributor roles and Web IQ account Contributor. Empty to skip.')
+@description('Object ID of the learner. Gets Foundry User, project setup, Search index/document contributor roles, Web IQ account Contributor and API Management Service Contributor. Empty to skip.')
 param learnerPrincipalId string = ''
 
 @description('Object ID of the identity that runs scripts/create_agents.py. Empty to skip.')
@@ -30,12 +30,14 @@ param models array = [
   { name: 'gpt-5-mini', version: '2025-08-07', capacity: 60, sku: 'GlobalStandard' }
   { name: 'gpt-5-nano', version: '2025-08-07', capacity: 30, sku: 'GlobalStandard' } // Lab 1: the replacement in the model swap
   { name: 'text-embedding-3-small', version: '1', capacity: 10, sku: 'Standard' }
+  { name: 'Microsoft-Decision-1', deploymentName: 'decision-1', format: 'Microsoft', registry: 'azureml-msr', version: '1', capacity: 10, sku: 'DataZoneStandard' }
 ]
 
 var token = toLower(uniqueString(resourceGroup().id))
 var tags = { workload: 'fincrime-triage' }
 var foundryUserRole = '53ca6127-db72-4b80-b1b0-d745d6d5456d'
 var cognitiveServicesContributorRole = '25fbc0a9-bd7c-42a3-aa1a-3b75d497ee68'
+var apimServiceContributorRole = '312a565d-c81f-4fd8-895a-4e21e48d571c'
 
 // ---------------------------------------------------------------- monitoring
 resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
@@ -106,10 +108,10 @@ resource appInsightsConnection 'Microsoft.CognitiveServices/accounts/projects/co
 @batchSize(1)
 resource deployments 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = [for m in models: {
   parent: foundry
-  name: m.name
+  name: m.?deploymentName ?? m.name
   sku: { name: m.?sku ?? 'GlobalStandard', capacity: m.capacity }
   properties: {
-    model: { format: 'OpenAI', name: m.name, version: m.version }
+    model: { format: m.?format ?? 'OpenAI', name: m.name, version: m.version }
     ...(m.name == 'text-embedding-3-small' ? {} : { raiPolicyName: 'Microsoft.DefaultV2' })
   }
   dependsOn: [project, appInsightsConnection, approvedModels]
@@ -119,7 +121,7 @@ resource deployments 'Microsoft.CognitiveServices/accounts/deployments@2025-06-0
 module approvedModels './model-policy.bicep' = {
   name: 'approved-models'
   params: {
-    modelNames: map(models, m => m.name)
+    modelAssetIds: map(models, m => 'azureml://registries/${m.?registry ?? 'azure-openai'}/models/${m.name}/')
   }
 }
 
@@ -266,6 +268,15 @@ resource learnerProjectContributor 'Microsoft.Authorization/roleAssignments@2022
   name: guid(project.id, learnerPrincipalId, cognitiveServicesContributorRole)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesContributorRole)
+    principalId: learnerPrincipalId
+  }
+}
+
+resource learnerApimContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(learnerPrincipalId)) {
+  scope: apim
+  name: guid(apim.id, learnerPrincipalId, apimServiceContributorRole)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', apimServiceContributorRole)
     principalId: learnerPrincipalId
   }
 }

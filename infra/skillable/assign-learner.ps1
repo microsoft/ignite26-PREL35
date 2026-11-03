@@ -24,6 +24,7 @@ $roleNames = @{
     '1407120a-92aa-4202-b7e9-c0e197c71c8f' = 'Search Index Data Reader'
     '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd' = 'Cognitive Services OpenAI User'
     'b24988ac-6180-42a0-ab88-20f7382dd24c' = 'Contributor'
+    '312a565d-c81f-4fd8-895a-4e21e48d571c' = 'API Management Service Contributor'
 }
 
 function Write-SetupStep([string]$Message) {
@@ -125,6 +126,7 @@ try {
     $foundry = Select-SetupResource $resources 'Microsoft.CognitiveServices/accounts' $FoundryName
     $search = Select-SetupResource $resources 'Microsoft.Search/searchServices' $SearchName
     $webIq = Select-SetupResource $resources 'Microsoft.WebIQ/accounts'
+    $apim = Select-SetupResource $resources 'Microsoft.ApiManagement/service'
     $projectId = "$($foundry.id)/projects/fincrime"
     $project = Invoke-SetupRequest GET "https://management.azure.com${projectId}?api-version=2025-06-01"
     $searchDetails = Invoke-SetupRequest GET "https://management.azure.com$($search.id)?api-version=2025-05-01"
@@ -152,6 +154,7 @@ try {
         Set-SetupRole $search.id $learner '7ca78c08-252a-4471-8644-bb5ff32d4ba0' 'User'
         Set-SetupRole $search.id $learner '8ebe5a00-799e-43f5-93ac-243d3dce84a7' 'User'
         Set-SetupRole $webIq.id $learner 'b24988ac-6180-42a0-ab88-20f7382dd24c' 'User'
+        Set-SetupRole $apim.id $learner '312a565d-c81f-4fd8-895a-4e21e48d571c' 'User'
     }
     Write-SetupStep 'Checking the managed-identity permissions used by Search and Toolbox.'
     Set-SetupRole $foundry.id $searchDetails.identity.principalId '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd' 'ServicePrincipal'
