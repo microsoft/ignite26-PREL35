@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
+import openai
 from azure.ai.projects import AIProjectClient
 
 import investigate as platform
@@ -86,8 +87,18 @@ def markdown_table(headers: list[str], rows: list[list]) -> list[str]:
 
 def run_one(row: dict) -> dict:
     start = time.time()
-    result = investigate(row["alert_id"])
-    return score(row, {**result, "seconds": round(time.time() - start, 1)})
+    blocked_by = ""
+    try:
+        result = investigate(row["alert_id"])
+    except openai.BadRequestError as error:
+        if error.code != "prompt_attack_detected":
+            raise
+        blocked_by = "prompt_attack_detected"
+        result = {"triage": "", "review": "", "tokens": 0}
+    scored = score(row, {**result, "seconds": round(time.time() - start, 1)})
+    if blocked_by:
+        scored["blocked_by"] = blocked_by
+    return scored
 
 
 def published(project: AIProjectClient) -> dict:
@@ -174,12 +185,13 @@ if __name__ == "__main__":
     with ThreadPoolExecutor(max_workers=7) as pool:
         rows = list(pool.map(run_one, golden))
 
+    blocked = [r for r in rows if r.get("blocked_by")]
     values = metrics(rows)
     checks = [
         {"metric": name, "value": round(values[name], 2), **rule, "passed": values[name] >= rule["min"]}
         for name, rule in thresholds.items()
     ]
-    passed = all(c["passed"] for c in checks if c["blocking"])
+    passed = not blocked and all(c["passed"] for c in checks if c["blocking"])
 
     # The Evidence Pack: everything an approver or auditor needs to see what was tested and how it scored.
     pack = ROOT / "evidence" / datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -196,6 +208,7 @@ if __name__ == "__main__":
         "checks": checks,
         "tokens": sum(r["tokens"] for r in rows),
         "cost_usd": round(sum(r["cost"] for r in rows), 4),
+        "blocked_alerts": [{"alert_id": r["alert_id"], "by": r["blocked_by"]} for r in blocked],
         "foundry_evaluation": foundry,
     }
     (pack / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -213,14 +226,22 @@ if __name__ == "__main__":
         ),
         "",
         *markdown_table(
-            ["Alert", "Expected", "Recommended", "Reviewer", "Invalid citations", "Triage model"],
+            ["Alert", "Expected", "Recommended", "Reviewer", "Invalid citations", "Triage model", "Blocked by"],
             [[r["alert_id"], r["expected"], f"{r['disposition']}{'' if r['correct'] else ' ✗'}",
-              r["reviewer"], ", ".join(r["invalid_citations"]) or "-", r["model"]] for r in rows],
+              r["reviewer"], ", ".join(r["invalid_citations"]) or "-", r["model"],
+              r.get("blocked_by", "-")] for r in rows],
         ),
         "",
         f"Tokens used: {manifest['tokens']}. Cost: ${manifest['cost_usd']:.4f}, ${manifest['cost_usd'] / len(rows):.4f} per alert.",
         *([f"Foundry evaluation (AI judge): {foundry['evaluation']}, run {foundry['run']}"] if foundry else []),
     ]
+    if blocked:
+        report.extend([
+            "",
+            "FAIL: Prompt Shields blocked legitimate golden alerts: "
+            + ", ".join(r["alert_id"] for r in blocked) + ". These are failed evaluations, not passing controls.",
+            "Token and cost totals exclude blocked investigations, including any calls completed before the block.",
+        ])
     (pack / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
 
     for line in report[:4 + 2 + len(checks)]:
@@ -230,6 +251,9 @@ if __name__ == "__main__":
             print(re.sub(r"(?<=\| )(PASS|FAIL)(?= +\|)",
                          lambda match: color(match[0], "green" if match[0] == "PASS" else "red"), line))
     print(f"\n{color('Cost:', 'cyan')} ${manifest['cost_usd']:.4f}, ${manifest['cost_usd'] / len(rows):.4f} per alert ({manifest['tokens']} tokens)")
+    if blocked:
+        print(color("Prompt Shields blocked golden alerts: " + ", ".join(r["alert_id"] for r in blocked), "red"))
+        print("Token and cost totals exclude blocked investigations, including any calls completed before the block.")
     print(f"\n{color('Evidence Pack:', 'cyan')} {pack.relative_to(ROOT)}")
     if foundry:
         print(f"{color('Foundry evaluation started:', 'cyan')} {foundry['run']}. See it in the Foundry portal, under Evaluations.")
