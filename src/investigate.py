@@ -76,6 +76,15 @@ COST_CENTER = "financial-crime-operations"
 
 
 def ask(agent: str, text: str):
+    # JSON mode requires a format hint in the input; keep case fields at the root for gateway routing.
+    try:
+        content = json.loads(text)
+    except ValueError:
+        content = None
+    if isinstance(content, dict):
+        text = json.dumps({**content, "response_format": "json"})
+    else:
+        text += "\n\nResponse format: JSON."
     # After uv run setup-obo, the token is for the gateway's own API instead of for Foundry.
     token = credential.get_token(env.get("OBO_SCOPE", "https://ai.azure.com/.default")).token
     # The gateway limits calls per minute; retries wait for the limit to reset.
