@@ -15,7 +15,7 @@ execute Azure commands only when the user explicitly requests a live run.
 - Put all new runner code and runner-specific checks under `tests/e2e/`.
   Name the entry point `run_lab.py`, not `test_*.py`, so pytest does not collect it.
 - Use only the standard library and local helpers under `tests/e2e/`.
-  Do not import `scripts`, `src`, pytest, conftest, or skill-bundled helpers.
+  Do not import `scripts`, `src`, pytest, conftest, or skill-bundled helpers in the runner.
   Call existing lab commands as subprocesses instead of reimplementing agents,
   evaluation, intake, Web IQ setup, or deployment.
 - Keep formatting in `walkthrough_console.py`, independent of the guide's text,
@@ -25,6 +25,12 @@ execute Azure commands only when the user explicitly requests a live run.
   for compatibility. Create the helper only if it is missing, not on every refresh.
 - Do not change `pyproject.toml`, `uv.lock`, pytest configuration, application code,
   infrastructure, or the instructions to accommodate the runner.
+  Scripted decisions/intake must go through the tester-only
+  `tests/e2e/decision_driver.py` subprocess. That adapter may import the existing
+  decision/intake entry functions and use standard-library test patches for
+  fixture input, simulated identity, and isolated output paths. Keep all test
+  flags, patches, provenance labels, and test artifacts under `tests/e2e/`;
+  never add test-only options or modes to learner commands.
 - Keep any additional runner-specific files in the same directory. Make removing
   `tests/e2e/` sufficient to remove the harness, without unregistering entry points.
   Preserve unrelated files already there.
@@ -60,6 +66,7 @@ Support these invocations from the repository root:
 uv run --no-sync tests/e2e/run_lab.py --plan
 uv run --no-sync tests/e2e/run_lab.py --execute --resource-group <lab-resource-group>
 uv run --no-sync tests/e2e/run_lab.py --execute --resource-group <lab-resource-group> --optional tuning
+uv run --no-sync tests/e2e/run_lab.py --execute --resource-group <lab-resource-group> --interactive-decisions
 ```
 
 Default to plan mode when no execution flag is supplied. Make `--plan` and
@@ -73,8 +80,12 @@ pass unresolved `@lab...` tokens to a command, guess resource names, or print th
 contents of `.env`. Allow a plan to show unresolved values; require them before
 executing the affected action.
 
-Minimize prompts: retain one startup authorization, required sign-ins/secrets and
-real analyst inputs, completion of an explicitly selected prompt edit, and the
+Default the testing runner to scripted lab-test decisions and intake approval.
+Offer `--interactive-decisions` to use real analyst input and ordinary intake.
+Do not ask for confirmation on each scripted decision.
+
+Minimize prompts: retain one startup authorization, required sign-ins/secrets,
+analyst inputs only with `--interactive-decisions`, completion of an explicitly selected prompt edit, and the
 specific confirmation before the real model-create policy test. Do not pause
 just to acknowledge explanatory text, read a report, inspect a portal, or run a
 Kusto query. Display those actions and mark them `REVIEW NEEDED`; never claim
@@ -174,7 +185,7 @@ Treat this as a coverage checklist, not a frozen command manifest:
 | Lab 0 | Use real sign-in; run setup and agent publication; run `configure-evidence-agent` with real hidden key input if requested, then `azd deploy`; list the portal tour for review; investigate ALT-1001 twice; validate the 401 and 404 gateway probes. |
 | Lab 1 | Run the Foundry-backed gate; compare/apply the concise prompt; publish and observe its failed gate; restore/publish/retest; evaluate gpt-5-nano and restore the approved model; inspect Evidence Packs and traces. Offer the optional prompt-tuning exercise and its repeated gate runs, then restore. |
 | Lab 2 | Run the Foundry-backed red team and individual attacks; list guardrail inspection for review; compare/apply/publish the helpful prompt; rerun the documented attacks; enable Prompt Shields, wait, rerun red team and gate; restore/publish/retest and list report reviews. |
-| Lab 3 | Observe initial intake refusal; set only the data policy's `enforce` field to true; regenerate gate/red-team evidence; invoke the hosted evidence agent with the guide's PII-free scenario; run both real analyst decisions (ALT-1008, ALT-1014) interactively; run intake again; demonstrate Azure Policy denial only after a specific confirmation. |
+| Lab 3 | Observe initial intake refusal; set only the data policy's `enforce` field to true; regenerate gate/red-team evidence; invoke the hosted evidence agent with the guide's PII-free scenario; test both decision branches (ALT-1008 approval, ALT-1014 override) using labeled automation by default; run matching lab-test intake; demonstrate Azure Policy denial only after a specific confirmation. |
 | Lab 4 | Measure baseline cost; enable routing, wait and reevaluate, then disable routing; lower token limit, wait and investigate with scoped `OPENAI_LOG`; restore the limit and environment; list retry observations, the cost-attribution query, and wrap-up for review. |
 
 Expose optional sections explicitly in CLI help. Record an unselected optional
@@ -207,16 +218,51 @@ Do not use a blanket "exit 1 is acceptable" rule.
   Authentication, authorization, quota, and network errors do not prove policy.
   If creation succeeds, stop and report it; do not delete resources automatically.
 
-## Preserve real human participation
+## Automate tests without claiming human approval
+
+The runner tests the decision workflow; it does not need a person to supply the
+same fixture answers on every run. Keep the learner's interactive path unchanged.
+Default runner execution to these explicit test-only commands:
+
+```text
+uv run tests/e2e/decision_driver.py approve ALT-1008
+uv run tests/e2e/decision_driver.py override ALT-1014
+uv run tests/e2e/decision_driver.py intake UC-001
+```
+
+Use the current guide's alert IDs when refreshing the flow, not historical
+ALT-1001 references. Show scripted arguments in the plan and execution preview.
+Match initial and subsequent intake checks to the selected decision mode.
+Before proceeding, verify one new decision per command, its alert ID,
+`mode: lab-test`, actor `lab-test-automation`, disposition, approval/override flag,
+nonempty reason, and published versions. Verify that the subsequent approval is
+also labeled `mode: lab-test` and `approved_by: lab-test-automation`.
+Store these records only in `tests/e2e/artifacts/decisions.jsonl` and
+`tests/e2e/artifacts/use-cases.json`. Redirect the application's writes to a
+temporary tester-only workspace and publish only labeled test artifacts after
+success. Never write automated decisions to `evidence/decisions.jsonl` or approval
+to `governance/use-cases.json`; never copy human records into the test ledger.
+Never let an automated record satisfy the ordinary human-approval path.
+Label these results as successful automation tests, not human-verified decisions.
+Keep real release-gate, red-team, policy and version checks; test mode is not
+permission to force intake to pass or weaken any approval prerequisite.
+
+With `--interactive-decisions`, run the original guide commands with inherited
+stdin. Accept either valid human approval or valid override as a completed
+decision; the guide's suggested branch is not a reason to fail a successfully
+recorded user choice. Validate the recorded disposition and required reasons,
+but never replace or alter the person's decision.
 
 Pause only for required Azure/browser sign-ins, selected prompt edits, and real
 Web IQ key input. Show portal observations and the Web IQ billing explanation
 without acknowledgment prompts. Never enter a test key or manufacture
-an account, a decision, an analyst, a reason, or an approval.
+an account or an unlabeled human decision/approval.
 
-Run `src/decide.py` with inherited terminal input. Explain the guide's approve
-and overrule exercises, but let the signed-in person make both decisions and
-provide their own reason. Never pipe canned answers into either command.
+Keep fixture input and simulated identity inside the tester-only adapter. Call
+the real decision/intake workflows rather than duplicating their business logic.
+Announce simulated identity explicitly; retain real agent calls, published
+version checks, and all evidence/policy checks. Do not import the adapter from
+application code or send fixture answers to an ordinary learner subprocess.
 
 Require an interactive terminal for live execution. Let the user cancel a
 required checkpoint or interrupt execution; print an incomplete report with
@@ -225,7 +271,8 @@ nonzero exit and mark every remaining action `NOT RUN`.
 Track runner-owned transient prompt and environment changes. Restore those local
 changes on failure or cancellation without erasing preexisting edits. Preserve
 Evidence Packs and decisions. On success retain the guide's intended final
-state, including enforced data policy and approval. If cloud state remains
+state, including enforced data policy and the isolated test approval (or actual
+human approval only with `--interactive-decisions`). If cloud state remains
 partway through an exercise, print the precise recovery commands; do not conceal
 it, republish agents automatically, or reset all lab state.
 
@@ -235,6 +282,8 @@ it, republish agents automatically, or reset all lab state.
    no subprocess calls or local/cloud changes and covers every inventoried action.
 2. Check orchestration offline with temporary files and fake commands: command
    ordering, source drift, expected versus genuine failures, existing user edits,
+   scripted approvals/overrides without prompts, strict separation of test and
+   human approval records, acceptance of either valid interactive decision,
    cancelled checkpoints, deferred manual reviews, optional opt-ins, final reports,
    and local restoration. Keep durable runner checks in
    `tests/e2e/`; do not run project-wide test suites or live lab commands.

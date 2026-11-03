@@ -41,7 +41,7 @@ def ask_until(question: str, valid) -> str:
 _token = "x." + base64.urlsafe_b64encode(json.dumps({"upn": "ana@contoso.example"}).encode()).decode().rstrip("=") + ".y"
 assert claims(_token)["upn"] == "ana@contoso.example"
 
-if __name__ == "__main__":
+def main():
     alert_id = sys.argv[1] if len(sys.argv) > 1 else sys.exit(
         color("Usage: python src/decide.py ALERT_ID", "red", stream=sys.stderr)
     )
@@ -85,3 +85,7 @@ if __name__ == "__main__":
     with DECISIONS.open("a", encoding="utf-8") as f:
         f.write(json.dumps(decision) + "\n")
     print("\n" + color(f"Recorded: {alert_id} {disposition}, decided by {analyst}. See {DECISIONS.relative_to(ROOT)}.", "green"))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

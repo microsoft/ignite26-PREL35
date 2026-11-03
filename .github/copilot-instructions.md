@@ -48,6 +48,15 @@ Plus:
 
 Attendee guidance can remain in `docs/` for intentional MkDocs or docs-site patterns when the root README links clearly to the entry point.
 
+## Lab code and test boundaries
+
+- Keep optional AI-generated walkthrough runners, their helpers, and test-only automation under `tests/e2e/`. Lab code must not depend on this harness.
+- When using the walkthrough skill, generate or refresh runners only. Reuse stable helpers without modifying them.
+- Give helpers standard, pytest-discoverable unit tests, even though the live runners are optional.
+- Keep unit tests for `src/` lab code, including `decide.py`, under `tests/`.
+- Use `test_*.py` names for unit tests so `uv run pytest` collects both helper and lab-code tests. Do not use those names for live runners or automatically execute live lab actions during unit tests.
+- Keep simulated input/identity and generated test artifacts isolated under `tests/e2e/`; never write automated approvals into learner decision or approval records.
+
 ## Session code prefixes
 
 Accept: `BRK`, `WRK`, `LAB`, `ILL`, `LTG`, `THR`, `DEM`, `INV`, `PREL`, `PREB` followed by digits.

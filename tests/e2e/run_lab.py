@@ -7,6 +7,7 @@ Uses only the standard library. Remove tests/e2e/ to remove this harness.
 Live execution is interactive, billable, and changes the lab's agents and settings.
 Optional exercises are skipped unless selected with --optional EXERCISE.
 Read-only/manual checks are listed for review at the end, without pausing.
+Decisions and intake use labeled lab-test automation unless --interactive-decisions is supplied.
 """
 
 import argparse
@@ -202,19 +203,19 @@ def build_steps():
             "employer contract or sales records are supplied. Provide a cited evidence brief with alternatives "
             "and missing evidence, not a decision.",
             "--protocol", "responses", "--new-session")),
-        manual(819, 823, "Prepare a real analyst approval",
-               "The next command uses your Entra identity. Review the recommendation and make your own decision; "
-               "the exercise asks you to approve ALT-1008 if triage recommends escalate. "
-               "No answers are supplied by the runner."),
-        uv(825, 827, "Decide ALT-1008 interactively", "src/decide.py", "ALT-1008",
+        manual(819, 823, "Review the decision acceptance exercise",
+               "Default mode scripts a labeled lab-test acceptance for ALT-1008. With --interactive-decisions, "
+               "review the recommendation and choose yourself under your Entra identity."),
+        uv(825, 827, "Decide ALT-1008", "src/decide.py", "ALT-1008",
            expect="decision-approve", interactive=True),
-        manual(831, 831, "Prepare a real analyst override",
-               "For ALT-1014, exercise the override: answer n, choose a different decision, try an empty reason, "
-               "then supply your own meaningful reason. The runner never fabricates a decision."),
-        uv(833, 835, "Decide ALT-1014 interactively", "src/decide.py", "ALT-1014",
+        manual(831, 831, "Review the decision override exercise",
+               "Default mode scripts a labeled lab-test override to request_info for ALT-1014 with a test reason. "
+               "With --interactive-decisions, the guide suggests n and a reason, but either valid choice is accepted."),
+        uv(833, 835, "Decide ALT-1014", "src/decide.py", "ALT-1014",
            expect="decision-override", interactive=True),
         manual(839, 839, "Inspect recorded decisions",
-               "Open evidence/decisions.jsonl; verify identity, reasons, timestamps and published versions."),
+               "Scripted records are in tests/e2e/artifacts/decisions.jsonl; interactive records are in "
+               "evidence/decisions.jsonl. Verify actor, reasons, timestamps and published versions."),
         uv(843, 845, "Request use-case approval again", "src/intake.py", "UC-001", expect="intake-approve"),
         manual(851, 853, "Inspect Azure Policy",
                "Inspect approved-ai-models in the portal and read its approved list without changing it."),
@@ -355,13 +356,15 @@ def confirm(message, *, word=None):
 
 
 class Runner:
-    def __init__(self, root=ROOT, resource_group="", *, optional=()):
+    def __init__(self, root=ROOT, resource_group="", *, optional=(), interactive_decisions=False):
         self.root = root.resolve()
         self.resource_group = resource_group
         self.guide = Guide(self.root / GUIDE)
         self.steps = build_steps()
         self.guide.check_coverage(self.steps)
         self.outcomes = []
+        self.interactive_decisions = interactive_decisions
+        self.tested_agents = None
         self.optional_groups = frozenset(optional)
         if self.optional_groups - set(OPTIONAL_GROUPS):
             raise WalkthroughError("Unknown optional exercise; see --help for the supported groups.")
@@ -486,7 +489,9 @@ class Runner:
             f"Target resource group: {settings['resource_group']}\n"
             "This runs billable evaluations/research/deployment and changes the lab. "
             "Use the learner account and confirm the Skillable APIM policy/roles are fixed. "
-            "Existing Evidence Packs and decisions will be retained.", word="RUN"
+            "Existing Evidence Packs and decisions will be retained. "
+            + ("Decisions and approval use real human input." if self.interactive_decisions else
+               "Decisions and approval use labeled lab-test automation, not human review."), word="RUN"
         ):
             raise Cancelled("Live execution was not confirmed.")
 
@@ -534,6 +539,7 @@ class Runner:
             if len(rows) != len(expected) or {row.get("alert_id") for row in rows} != expected or not manifest.get("checks"):
                 raise WalkthroughError("The release Evidence Pack does not cover every golden alert and metric.")
         self.say(f"Evidence: {path.parent.relative_to(self.root)} ({verdict})")
+        self.tested_agents = manifest["agents"]
         if expect == "pack-pass" and verdict != "PASS":
             raise WalkthroughError("The required gate failed. Inspect its evidence; the runner will not weaken thresholds.")
         if expect == "pack-fail" and verdict != "FAIL":
@@ -554,8 +560,9 @@ class Runner:
                     and code == (outcomes[-1] == "SUCCEEDED")):
                 return "OBSERVED FAIL" if code else "PASS"
         elif step.expect == "intake-deny":
+            decision_check = "A named analyst decided alerts on the published agents"
             checks = ("Release gate passed on the published agents", "Red team passed on the published agents",
-                      "Data policy enforced", "A named analyst decided alerts on the published agents")
+                      "Data policy enforced", decision_check)
             if code == 1 and all(check in output for check in checks) and "Not approved. Fix the failures" in output:
                 return "EXPECTED FAIL"
         elif step.expect == "policy-deny":
@@ -570,22 +577,38 @@ class Runner:
             if code == 0:
                 raise WalkthroughError("The unapproved deployment was CREATED. Stop and notify the organizer; no automatic deletion was attempted.")
         elif step.expect.startswith("decision-") and code == 0:
-            path = self.root / "evidence/decisions.jsonl"
+            path = self.safe_path(self.decision_path())
             lines = path.read_text(encoding="utf-8").splitlines()
             if len(lines) == before + 1:
                 decision = json.loads(lines[-1])
-                approval = step.expect == "decision-approve"
+                approved = decision.get("approved_recommendation")
+                valid = ("escalate", "close_false_positive", "request_info")
+                mode = "human" if self.interactive_decisions else "lab-test"
+                scripted_valid = self.interactive_decisions or (
+                    decision.get("analyst") == "lab-test-automation"
+                    and approved is (step.expect == "decision-approve")
+                    and (approved or decision.get("decision") == "request_info")
+                    and bool(decision.get("reason", "").strip())
+                )
                 if (decision.get("alert") == step.args[-1] and decision.get("analyst")
-                        and decision.get("approved_recommendation") is approval
-                        and (approval or decision.get("reason", "").strip())):
+                        and isinstance(approved, bool)
+                        and decision.get("decision") in valid
+                        and (not approved or decision.get("decision") == decision.get("recommendation"))
+                        and (approved and decision.get("reviewer") == "agree" or decision.get("reason", "").strip())
+                        and decision.get("mode", "human") == mode
+                        and decision.get("agents")
+                        and (self.tested_agents is None or decision["agents"] == self.tested_agents)
+                        and scripted_valid):
                     return "PASS"
-            raise WalkthroughError("The recorded human decision did not complete the guide's approve/override exercise. It was not altered.")
+            raise WalkthroughError("The decision record is missing, invalid, or does not match the selected mode/versions. It was not altered.")
         elif step.expect == "intake-approve" and code == 0:
-            path = self.root / REGISTER
+            path = self.safe_path(self.register_path())
             register = checked_json(path)
             approval = next(item for item in register if item["id"] == "UC-001").get("approval")
             if (path.read_bytes() != before and approval and approval.get("approved_by")
-                    and approval.get("agents") and approval.get("evidence")):
+                    and approval.get("agents") and approval.get("evidence")
+                    and approval.get("mode", "human") == ("human" if self.interactive_decisions else "lab-test")
+                    and (self.interactive_decisions or approval["approved_by"] == "lab-test-automation")):
                 return "PASS"
         elif step.expect == "success" and code == 0:
             return "PASS"
@@ -631,8 +654,22 @@ class Runner:
             self.say(f"Gateway propagation: {remaining}s remaining...", "WAIT")
             time.sleep(10)
 
+    def decision_path(self):
+        return Path("evidence/decisions.jsonl" if self.interactive_decisions else "tests/e2e/artifacts/decisions.jsonl")
+
+    def register_path(self):
+        return REGISTER if self.interactive_decisions else Path("tests/e2e/artifacts/use-cases.json")
+
+    def command_arguments(self, step):
+        if not self.interactive_decisions:
+            if step.expect.startswith("decision-"):
+                return ("uv", "run", "tests/e2e/decision_driver.py", step.expect.removeprefix("decision-"), step.args[-1])
+            if step.expect.startswith("intake-"):
+                return ("uv", "run", "tests/e2e/decision_driver.py", "intake", step.args[-1])
+        return step.args
+
     def command(self, step):
-        args = self.resolve(step.args)
+        args = self.resolve(self.command_arguments(step))
         if step.expect == "policy-deny" and not confirm(
             "This sends a REAL model-create request, expected to be denied. "
             "If policy is misconfigured it can create a billable deployment.", word="TEST DENY"
@@ -642,10 +679,11 @@ class Runner:
         if step.expect.startswith("pack-"):
             before = self.pack_snapshot()
         elif step.expect.startswith("decision-"):
-            path = self.safe_path("evidence/decisions.jsonl")
+            path = self.safe_path(self.decision_path())
             before = len(path.read_text(encoding="utf-8").splitlines()) if path.exists() else 0
         elif step.expect == "intake-approve":
-            before = self.safe_path(REGISTER).read_bytes()
+            path = self.safe_path(self.register_path())
+            before = path.read_bytes() if path.exists() else b""
         if "create-agents" in args and (args[-1] == "gpt-5-nano" or self.owned_prompt is not None):
             self.recovery["approved agents"] = "Restore the approved local prompt, then: uv run create-agents"
         if "set-gateway" in args:
@@ -653,7 +691,8 @@ class Runner:
             if name in ("model-routing", "token-limit"):
                 default = "off" if name == "model-routing" else "200000"
                 self.recovery[name] = f"uv run set-gateway {name} {default}"
-        code, output = self.process(args, interactive=step.interactive)
+        interactive = step.interactive and (not step.expect.startswith("decision-") or self.interactive_decisions)
+        code, output = self.process(args, interactive=interactive)
         status = self.check_result(step, code, output, before)
         if "create-agents" in args and args[-1] != "gpt-5-nano" and self.owned_prompt is None:
             self.recovery.pop("approved agents", None)
@@ -713,7 +752,7 @@ class Runner:
 
     def preview(self, step):
         if step.args and step.kind in ("command", "logged-investigation"):
-            return " ".join(step.args)
+            return shlex.join(self.command_arguments(step))
         return {
             "cwd": "Python: run all children with cwd=repository root",
             "copy": f"Python file copy: {step.args[0]} -> {PROMPT}" if step.args else "",
@@ -734,6 +773,8 @@ class Runner:
             self.console.heading("PREL35 | full guided walkthrough")
             self.say("LIVE EXECUTION - interactive, billable, changes lab state." if execute
                      else "PLAN ONLY - no commands or changes.", "NOTE" if execute else "PLAN")
+            self.say("Decision mode: real interactive analyst decisions." if self.interactive_decisions else
+                     "Decision mode: LAB TEST automation; decisions and intake are not human approvals.", "NOTE")
             for note in NOTES:
                 self.say(note, "NOTE")
             if execute:
@@ -765,6 +806,8 @@ class Runner:
                     raise
                 elapsed = time.monotonic() - started
                 detail = ""
+                if not self.interactive_decisions and (step.expect.startswith("decision-") or step.expect.startswith("intake-")):
+                    detail = "LAB TEST automation; not a human decision or use-case approval."
                 if status == "REVIEW NEEDED":
                     detail = step.detail or "Review the actual retry/429 behavior in this command's output."
                 self.outcomes.append(Outcome(index, lab, step, status, elapsed, detail))
@@ -839,9 +882,12 @@ def main(argv=None):
     parser.add_argument("--resource-group", default="", help="Existing lab resource group; must match .env if present.")
     parser.add_argument("--optional", action="append", choices=OPTIONAL_GROUPS, default=[],
                         help="Include an optional exercise; repeat to select several. Default: skip all.")
+    parser.add_argument("--interactive-decisions", action="store_true",
+                        help="Use real analyst prompts instead of scripted lab-test decisions and approval.")
     args = parser.parse_args(argv)
     try:
-        return Runner(resource_group=args.resource_group, optional=args.optional).run(execute=args.execute)
+        return Runner(resource_group=args.resource_group, optional=args.optional,
+                      interactive_decisions=args.interactive_decisions).run(execute=args.execute)
     except (WalkthroughError, OSError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1

@@ -46,7 +46,7 @@ def check_pack(name: str, pack, agents: dict) -> list:
 # Self-check of the pack checks, with no calls to Azure.
 assert check_pack("release gate", None, {}) == ["No release gate Evidence Pack. Run it."]
 
-if __name__ == "__main__":
+def main():
     use_case_id = sys.argv[1] if len(sys.argv) > 1 else sys.exit(
         color("Usage: python src/intake.py USE_CASE_ID", "red", stream=sys.stderr)
     )
@@ -85,3 +85,7 @@ if __name__ == "__main__":
     }
     REGISTER.write_text(json.dumps(register, indent=2) + "\n", encoding="utf-8")
     print("\n" + color(f"Approved. Recorded in {REGISTER.relative_to(ROOT)}.", "green"))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
