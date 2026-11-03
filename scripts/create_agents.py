@@ -37,7 +37,8 @@ def main(argv=None):
     for name, path, agent_model in agents:
         # Low reasoning effort keeps calls short; the release gate checks accuracy.
         definition = PromptAgentDefinition(
-            model=agent_model, instructions=path.read_text(encoding="utf-8"), reasoning=Reasoning(effort="low")
+            model=agent_model, instructions=path.read_text(encoding="utf-8"), reasoning=Reasoning(effort="low"),
+            text={"format": {"type": "json_object"}},
         )
         # New role assignments can take a few minutes to reach the Foundry data plane.
         for attempt in range(10):

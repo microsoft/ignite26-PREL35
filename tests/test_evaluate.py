@@ -60,6 +60,18 @@ def test_other_bad_requests_are_not_misclassified_as_prompt_shields(evaluation):
     assert raised.value is error
 
 
+def test_malformed_model_json_is_not_repaired_or_scored_as_a_valid_answer(evaluation):
+    evaluation.investigate.return_value = {
+        "triage": '{"disposition":"escalate","reasons":["New relationship [T-00108]"].}',
+        "review": '{"verdict":"agree"}',
+        "tokens": 42,
+    }
+    result = evaluation.run_one({"alert_id": "ALT-1010", "expected_disposition": "request_info"})
+    assert result["disposition"] is None
+    assert result["correct"] is False
+    assert result["cited"] is False
+
+
 def test_successful_compound_document_citation_keeps_usage_and_score(evaluation):
     evaluation.investigate.return_value = {
         "triage": '{"disposition":"escalate","reasons":["Recruitment evidence [DOC-1008-01]"]}',

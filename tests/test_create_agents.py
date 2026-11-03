@@ -57,6 +57,7 @@ def test_publishes_only_top_level_prompts_and_preserves_triage_lite(publisher, a
         "reviewer instructions", "triage instructions", "triage instructions",
     ]
     assert all(call.kwargs["definition"].reasoning.effort == "low" for call in calls)
+    assert all(call.kwargs["definition"].as_dict()["text"]["format"] == {"type": "json_object"} for call in calls)
 
 
 @pytest.mark.parametrize("status,exhausted", [(403, False), (403, True), (401, False), (500, False)])
