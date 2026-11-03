@@ -112,6 +112,7 @@ try {
         (Invoke-LabGit -Arguments @('remote'))) {
         throw 'The downloaded lab did not produce a clean, single-commit Git baseline without remotes.'
     }
+    Invoke-LabGit -Arguments @('config', '--global', '--add', 'safe.directory', $TargetPath)
 
     Assert-LabDestination
     if (Test-Path -LiteralPath $TargetPath) {

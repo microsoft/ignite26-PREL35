@@ -328,13 +328,21 @@ class RunnerChecks(unittest.TestCase):
         with self.assertRaisesRegex(lab.WalkthroughError, "CREATED"):
             self.runner.check_result(step, 0, "", None)
 
-    def test_policy_create_is_never_sent_without_specific_confirmation(self):
+    def test_policy_create_runs_without_extra_confirmation_and_stops_on_unexpected_success(self):
         step = next(step for step in self.runner.steps if step.expect == "policy-deny")
         self.write(".env", b"AZURE_RESOURCE_GROUP=fixture\nFOUNDRY_NAME=foundry-fixture\n")
-        with patch.object(lab, "confirm", return_value=False), patch.object(self.runner, "process") as process:
-            with self.assertRaises(lab.Cancelled):
-                self.runner.command(step)
-        process.assert_not_called()
+        for code, output in ((1, "RequestDisallowedByPolicy: denied by policy"), (0, "Created")):
+            with (self.subTest(code=code),
+                  patch.object(lab, "confirm", side_effect=AssertionError("Unexpected extra confirmation")),
+                  patch.object(self.runner, "process", return_value=(code, output)) as process):
+                if code:
+                    self.assertEqual(self.quiet(self.runner.command, step), "EXPECTED FAIL")
+                else:
+                    with self.assertRaisesRegex(lab.WalkthroughError, "CREATED"):
+                        self.quiet(self.runner.command, step)
+                process.assert_called_once()
+                self.assertEqual(process.call_args.args[0][:5],
+                                 ["az", "cognitiveservices", "account", "deployment", "create"])
 
     def test_intake_exit_one_requires_completed_governance_checks(self):
         step = lab.Step(667, 669, "fixture", expect="intake-deny")
