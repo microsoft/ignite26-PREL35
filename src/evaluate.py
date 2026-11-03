@@ -23,7 +23,7 @@ from investigate import ROOT, case_file, cases, credential, data, env, investiga
 
 GOLDEN = ROOT / "data" / "golden.jsonl"
 THRESHOLDS = ROOT / "evals" / "thresholds.json"
-CITATION = re.compile(r"\b[A-Z]{1,4}-\d{3,5}\b")
+CITATION = re.compile(r"\b[A-Z]{1,4}-\d{3,5}(?:-\d+)*\b")
 
 
 def parse(text: str) -> dict:
@@ -149,6 +149,17 @@ _bad = {"triage": 'Sure! {"disposition": "close_false_positive", "reasons": ["Fi
 assert score(_row, _good)["correct"] and not score(_row, _good)["invalid_citations"]
 assert not score(_row, _bad)["correct"] and score(_row, _bad)["invalid_citations"] == ["T-99999"]
 assert metrics([score(_row, _good), score(_row, _bad)])["escalation_recall"] == 0.5
+_document_row = {"alert_id": "ALT-1008", "expected_disposition": "escalate"}
+for _document_id, _invalid in (
+    ("DOC-1008-01", []),
+    ("DOC-1008-02", ["DOC-1008-02"]),
+    ("DOC-1008-01-99", ["DOC-1008-01-99"]),
+):
+    _document_result = {**_good, "triage": json.dumps({
+        "disposition": "escalate", "reasons": [f"Remote-job recruitment message [{_document_id}]"],
+    })}
+    _document_score = score(_document_row, _document_result)
+    assert _document_score["cited"] and _document_score["invalid_citations"] == _invalid
 
 if __name__ == "__main__":
     platform.COST_CENTER = "model-validation"  # the release gate's tokens are charged to model validation
