@@ -1628,7 +1628,7 @@
           "type": "customer_correspondence",
           "source": "customer_upload",
           "classification": 2,
-          "content": "The customer supplied a message advertising a part-time remote payment-assistant role. It asks the recipient to receive payments into a personal account and convert the funds to virtual currency for onward transfer, keeping a commission. The message describes no underlying goods or services. The sender's identity, employment relationship and source of the payments have not been independently verified. This is a fictional training document, not a quotation from or evidence about a real employer."
+          "content": "Customer-uploaded correspondence describes a remote payment-assistant vacancy with a commission-based fee. The advertised duties involve personal-account receipt of third-party payments, conversion to virtual currency and onward remittance. No underlying goods or services are identified. The claimed employer, employment relationship and source of funds remain unverified."
         }
       ]
     },
