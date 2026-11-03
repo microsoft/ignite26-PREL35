@@ -30,19 +30,17 @@ from walkthrough_console import Console
 
 ROOT = Path(__file__).resolve().parents[2]
 GUIDE = Path("instructions/skillable/content.md")
-SOURCE_SHA256 = "09d8255baf232ddec38f971bf0ea2a90fc034d623b64705baa13b21afcba3d36"
+SOURCE_SHA256 = "9b94456428d1c7cf32b7ad7dbae08874dcb20ad187fad5e19d3423a05a127b2e"
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 PROMPT = Path("src/agents/triage.md")
 DATA_POLICY = Path("governance/data-policy.json")
 REGISTER = Path("governance/use-cases.json")
-OPTIONAL_GROUPS = ("editor", "colors", "tuning", "stale-evidence")
+OPTIONAL_GROUPS = ("editor", "colors", "tuning")
 NOTES = (
     "Azure must already be provisioned. The runner never assigns roles or bypasses policy.",
     "Gateway updates need APIM permissions AND a Skillable policy allowing "
     "Microsoft.ApiManagement/service/namedValues at every inherited scope.",
-    "Guide line 730 mentions two approved models; current infrastructure also approves "
-    "the embedding and decision-1 models. The unapproved-model test is unchanged.",
-    "The guide's caller-cost query variation (line 867) drops Caller during earlier "
+    "The guide's caller-cost query variation (line 990) drops Caller during earlier "
     "aggregation. Review that variation with the proctor; do not claim it ran unchanged.",
 )
 
@@ -105,155 +103,147 @@ def build_steps():
     return [
         manual(3, 5, "Sign in to the VM",
                "Use the Resources tab credentials on the lab VM; do not enter credentials here."),
-        Step(142, 144, "Use the checkout as the working directory", "cwd"),
-        manual(146, 154, "Prepare Azure sign-in",
+        Step(180, 182, "Use the checkout as the working directory", "cwd"),
+        manual(184, 191, "Prepare Azure sign-in",
                "Sign in as the learner for this lab, not a personal account. The next command is interactive."),
-        Step(148, 150, "Sign in to Azure", args=("az", "login"), interactive=True),
-        Step(157, 159, "Open VS Code", args=("code", "."), optional="editor"),
-        uv(163, 165, "Prepare the existing lab", "setup-lab", "--resource-group", "{resource_group}"),
-        publish(174, 176),
-        Step(180, 182, "Demonstrate color opt-out for child commands", "colors", optional="colors"),
-        manual(194, 208, "Tour Azure and Foundry",
+        Step(186, 188, "Sign in to Azure", args=("az", "login"), interactive=True),
+        Step(195, 197, "Open VS Code", args=("code", "."), optional="editor"),
+        uv(201, 203, "Prepare the existing lab", "setup-lab", "--resource-group", "{resource_group}"),
+        publish(212, 214),
+        Step(218, 220, "Demonstrate color opt-out for child commands", "colors", optional="colors"),
+        uv(241, 243, "Configure Web IQ and the hosted-agent environment",
+           "configure-evidence-agent", interactive=True),
+        Step(251, 253, "Deploy the hosted evidence agent", args=("azd", "deploy"), interactive=True),
+        manual(258, 272, "Tour Azure and Foundry",
                "Inspect keyless Foundry, gateway operations/policy and monitoring; read triage's instructions "
                "in the fincrime project. Confirm the selected subscription and resource group."),
-        uv(215, 217, "Investigate ALT-1001", "src/investigate.py", "ALT-1001"),
-        uv(219, 221, "Repeat the investigation as requested in prose", "src/investigate.py", "ALT-1001"),
-        Step(228, 230, "Expect HTTP 401 without a token", "probe", args=("triage", "401")),
-        Step(236, 239, "Acquire a token privately; expect HTTP 404", "probe", args=("unpublished", "404")),
-        manual(243, 247, "Check your understanding",
+        uv(281, 283, "Investigate ALT-1001", "src/investigate.py", "ALT-1001"),
+        uv(289, 289, "Repeat the investigation as requested in prose", "src/investigate.py", "ALT-1001"),
+        Step(296, 298, "Expect HTTP 401 without a token", "probe", args=("triage", "401")),
+        Step(304, 307, "Acquire a token privately; expect HTTP 404", "probe", args=("unpublished", "404")),
+        manual(311, 318, "Check your understanding",
                "Explain the gateway's downstream identity, how agent changes are published, and who decides alerts."),
-        gate(306, 308, "pack-pass", "--foundry"),
-        manual(314, 320, "Inspect baseline release evidence",
+        gate(384, 386, "pack-pass", "--foundry"),
+        manual(392, 398, "Inspect baseline release evidence",
                "Open the new report.md and compare every blocking metric with its threshold."),
-        Step(325, 327, "Compare the concise prompt", args=(
+        Step(403, 405, "Compare the concise prompt", args=(
             "git", "--no-pager", "diff", "--no-index",
             "src/agents/triage.md", "src/agents/variants/triage.concise.md"), expect="diff"),
-        Step(333, 337, "Apply the concise prompt", "copy", args=("src/agents/variants/triage.concise.md",)),
-        publish(333, 337),
-        gate(333, 337, "pack-fail"),
-        Step(343, 343, "Open reports in VS Code", args=("code", "."), optional="editor"),
-        manual(339, 349, "Review the failed gate and its exit code",
+        Step(411, 415, "Apply the concise prompt", "copy", args=("src/agents/variants/triage.concise.md",)),
+        publish(411, 415),
+        gate(411, 415, "pack-fail"),
+        Step(421, 421, "Open reports in VS Code", args=("code", "."), optional="editor"),
+        manual(417, 427, "Review the failed gate and its exit code",
                "Inspect citation validity, escalation recall and token savings. The preceding gate verified "
                "exit code 1 (the guide's $LASTEXITCODE check) against its new Evidence Pack."),
-        restore(355, 359),
-        publish(355, 359),
-        gate(355, 359),
-        publish(369, 372, "gpt-5-nano"),
-        gate(369, 372, "pack-observe"),
-        publish(378, 380),
-        manual(382, 396, "Inspect a passing Evidence Pack",
+        restore(433, 437),
+        publish(433, 437),
+        gate(433, 437),
+        publish(447, 450, "gpt-5-nano"),
+        gate(447, 450, "pack-observe"),
+        publish(456, 458),
+        manual(460, 472, "Inspect a passing Evidence Pack",
                "Open report.md, manifest.json and results.json; inspect versions, model, hashes and source commit."),
-        manual(398, 417, "Inspect traces and the Foundry AI judge",
+        manual(474, 496, "Inspect traces and the Foundry AI judge",
                "Run the displayed Kusto query in Application Insights Logs, then inspect Triage task adherence "
                "in Foundry Evaluations. This is a human-verified portal step."),
-        manual(419, 421, "Review the release pipeline",
+        manual(498, 500, "Review the release pipeline",
                "Read .github/workflows/release-gate.yml. Do not execute a deployment pipeline."),
-        Step(425, 425, "Edit the smaller-model prompt yourself", "edit", optional="tuning",
+        Step(504, 504, "Edit the smaller-model prompt yourself", "edit", optional="tuning",
              detail="Review the nano report; edit only src/agents/triage.md for the optional exercise."),
-        publish(427, 430, "gpt-5-nano", optional="tuning"),
-        gate(427, 430, "pack-observe", optional="tuning"),
-        gate(432, 432, "pack-observe", optional="tuning"),
-        restore(434, 437, optional="tuning"),
-        publish(434, 437, optional="tuning"),
-        manual(493, 498, "Read the attack cases",
+        publish(506, 509, "gpt-5-nano", optional="tuning"),
+        gate(506, 509, "pack-observe", optional="tuning"),
+        gate(511, 511, "pack-observe", optional="tuning"),
+        restore(513, 516, optional="tuning"),
+        publish(513, 516, optional="tuning"),
+        manual(581, 585, "Read the attack cases",
                "Open evals/attacks.json and identify document-borne versus caller-borne attacks."),
-        team(502, 504, "pack-observe", "--foundry"),
-        team(512, 516, "attack", "JB-01"),
-        team(512, 516, "attack", "HRM-01"),
-        team(512, 516, "attack", "HRM-02"),
-        manual(524, 531, "Inspect the Foundry guardrail",
+        team(587, 589, "pack-observe", "--foundry"),
+        team(597, 601, "attack", "JB-01"),
+        team(597, 601, "attack", "HRM-01"),
+        team(597, 601, "attack", "HRM-02"),
+        manual(609, 616, "Inspect the Foundry guardrail",
                "Read Microsoft.DefaultV2 on gpt-5-mini: content categories, severity and jailbreak detection."),
-        Step(540, 542, "Compare the helpful prompt", args=(
+        Step(625, 627, "Compare the helpful prompt", args=(
             "git", "--no-pager", "diff", "--no-index",
             "src/agents/triage.md", "src/agents/variants/triage.helpful.md"), expect="diff"),
-        Step(547, 551, "Apply the helpful prompt", "copy", args=("src/agents/variants/triage.helpful.md",)),
-        publish(547, 551),
-        team(547, 551, "pack-fail"),
-        team(555, 559, "attack", "JB-02"),
-        switch(569, 571, "prompt-shields", "on"),
-        team(575, 577),
-        manual(579, 585, "Inspect layered protections",
+        Step(632, 636, "Apply the helpful prompt", "copy", args=("src/agents/variants/triage.helpful.md",)),
+        publish(632, 636),
+        team(632, 636, "pack-fail"),
+        team(642, 644, "attack", "JB-02"),
+        switch(654, 656, "prompt-shields", "on"),
+        team(660, 662),
+        manual(664, 670, "Inspect layered protections",
                "Compare prompt_attack_detected blocks with IPI-02, IPI-04 and JB-02. "
                "Record the outcomes actually observed, not the guide's illustrative outcomes."),
-        gate(589, 591),
-        restore(599, 603),
-        publish(599, 603),
-        team(599, 603),
-        manual(607, 613, "Review red-team evidence and the Foundry scan",
+        gate(674, 676),
+        restore(684, 688),
+        publish(684, 688),
+        team(684, 688),
+        manual(692, 698, "Review red-team evidence and the Foundry scan",
                "Read the latest red-team report/results and the Foundry scan by category/disguise. "
                "Wait for the Foundry scan to complete; starting it does not prove it finished."),
-        manual(663, 665, "Review use-case intake",
+        manual(757, 759, "Review use-case intake",
                "Read UC-001 in governance/use-cases.json before requesting approval."),
-        uv(667, 669, "Observe the initial intake refusal", "src/intake.py", "UC-001", expect="intake-deny"),
-        manual(685, 691, "Review the confidential-field policy",
-               "Read governance/data-policy.json and explain which agents may receive each field. "
+        uv(761, 763, "Observe the initial intake refusal", "src/intake.py", "UC-001", expect="intake-deny"),
+        manual(776, 787, "Review the data policy",
+               "Read governance/data-policy.json and explain which agents may receive each field and document. "
                "The next action sets only enforce to true."),
-        Step(691, 691, "Enforce the data policy", "enforce"),
-        gate(693, 696),
-        team(693, 696),
-        manual(700, 702, "Prepare a real analyst approval",
+        Step(787, 787, "Enforce the data policy", "enforce"),
+        gate(789, 792),
+        team(789, 792),
+        manual(796, 805, "Review the evidence agent's data boundary",
+               "Research goes by approved topic only, to official sources. The next command sends a fictional, "
+               "PII-free scenario to the hosted agent; Web IQ calls are billable."),
+        Step(807, 809, "Ask the hosted evidence agent for a brief", args=(
+            "azd", "ai", "agent", "invoke", "evidence-agent",
+            "Review this fictional, PII-free scenario: unfamiliar incoming transfers are forwarded to a "
+            "cryptocurrency exchange; the holder says a remote payment-assistant job requires this, but no "
+            "employer contract or sales records are supplied. Provide a cited evidence brief with alternatives "
+            "and missing evidence, not a decision.",
+            "--protocol", "responses", "--new-session")),
+        manual(813, 817, "Prepare a real analyst approval",
                "The next command uses your Entra identity. Review the recommendation and make your own decision; "
-               "the exercise asks you to approve ALT-1001. No answers are supplied by the runner."),
-        uv(704, 706, "Decide ALT-1001 interactively", "src/decide.py", "ALT-1001",
+               "the exercise asks you to approve ALT-1008 if triage recommends escalate. "
+               "No answers are supplied by the runner."),
+        uv(819, 821, "Decide ALT-1008 interactively", "src/decide.py", "ALT-1008",
            expect="decision-approve", interactive=True),
-        manual(708, 710, "Prepare a real analyst override",
+        manual(825, 825, "Prepare a real analyst override",
                "For ALT-1014, exercise the override: answer n, choose a different decision, try an empty reason, "
                "then supply your own meaningful reason. The runner never fabricates a decision."),
-        uv(712, 714, "Decide ALT-1014 interactively", "src/decide.py", "ALT-1014",
+        uv(827, 829, "Decide ALT-1014 interactively", "src/decide.py", "ALT-1014",
            expect="decision-override", interactive=True),
-        manual(716, 718, "Inspect recorded decisions",
+        manual(833, 833, "Inspect recorded decisions",
                "Open evidence/decisions.jsonl; verify identity, reasons, timestamps and published versions."),
-        uv(722, 724, "Request use-case approval again", "src/intake.py", "UC-001", expect="intake-approve"),
-        manual(726, 726, "Optionally demonstrate stale evidence",
-               "Republishing invalidates evidence. This optional experiment repeats the gate, red team, "
-               "a REAL analyst decision and intake afterward to restore the approved state; these runs are billable.",
-               optional="stale-evidence"),
-        publish(726, 726, optional="stale-evidence"),
-        uv(726, 726, "Observe intake rejecting stale evidence", "src/intake.py", "UC-001",
-           expect="intake-deny", optional="stale-evidence"),
-        gate(726, 726, optional="stale-evidence"),
-        team(726, 726, optional="stale-evidence"),
-        uv(726, 726, "Refresh the human decision on the new versions", "src/decide.py", "ALT-1001",
-           expect="decision-approve", interactive=True, optional="stale-evidence"),
-        uv(726, 726, "Refresh use-case approval after the optional experiment", "src/intake.py", "UC-001",
-           expect="intake-approve", optional="stale-evidence"),
-        manual(726, 730, "Inspect Azure Policy",
-               "Inspect approved-ai-models in the portal. The guide's two-model description is stale; "
-               "read the actual approved list without changing it."),
-        Step(734, 738, "Verify Azure Policy denies the unapproved model", args=(
+        uv(837, 839, "Request use-case approval again", "src/intake.py", "UC-001", expect="intake-approve"),
+        manual(845, 847, "Inspect Azure Policy",
+               "Inspect approved-ai-models in the portal and read its approved list without changing it."),
+        Step(851, 855, "Verify Azure Policy denies the unapproved model", args=(
             "az", "cognitiveservices", "account", "deployment", "create",
             "-g", "{resource_group}", "-n", "{FOUNDRY_NAME}", "--deployment-name", "unapproved",
             "--model-name", "gpt-4.1-mini", "--model-version", "2025-04-14", "--model-format", "OpenAI",
             "--sku-name", "GlobalStandard", "--sku-capacity", "1"), expect="policy-deny"),
-        gate(793, 795),
-        manual(797, 799, "Read the cost baseline",
+        gate(916, 918),
+        manual(920, 922, "Read the cost baseline",
                "Inspect the new Evidence Pack's total and per-alert cost and evals/prices.json."),
-        switch(805, 808, "model-routing", "on"),
-        gate(805, 808, "pack-observe"),
-        manual(810, 816, "Compare routed cost and quality",
+        switch(928, 931, "model-routing", "on"),
+        gate(928, 931, "pack-observe"),
+        manual(933, 939, "Compare routed cost and quality",
                "Compare the new report with the baseline, including triage-lite alerts and reviewer agreement."),
-        switch(818, 820, "model-routing", "off"),
-        switch(826, 828, "token-limit", "3000"),
-        Step(832, 836, "Investigate with scoped OPENAI_LOG=info", "logged-investigation",
+        switch(941, 943, "model-routing", "off"),
+        switch(949, 951, "token-limit", "3000"),
+        Step(955, 959, "Investigate with scoped OPENAI_LOG=info", "logged-investigation",
              args=("uv", "run", "src/investigate.py", "ALT-1001")),
-        switch(840, 842, "token-limit", "200000"),
-        manual(846, 865, "Attribute cost by cost center",
+        switch(963, 965, "token-limit", "200000"),
+        manual(969, 988, "Attribute cost by cost center",
                "Run the displayed Kusto query in Application Insights Logs and inspect unassigned costs."),
-        manual(867, 869, "Review the caller-attribution query discrepancy",
+        manual(990, 990, "Review the caller-attribution query discrepancy",
                "The suggested one-line Caller substitution loses customDimensions during aggregation. "
                "Ask the proctor for the corrected caller-preserving query and verify it in the portal. "
                "If unavailable, leave this review item unresolved; it is not an automatic pass."),
-        manual(874, 879, "Wrap up Labs 0-4",
-               "Explain cost per alert, cost attribution and the cost/quality tradeoff from your actual results."),
-        manual(906, 914, "Understand Web IQ and its cost/data boundary",
-               "First-time preparation runs billable checks using a fixed public DOJ topic. "
-               "Do not send customer data. Prepare the real Web IQ profile/key privately when prompted."),
-        uv(920, 922, "Configure Web IQ and the hosted-agent environment",
-           "configure-evidence-agent", interactive=True),
-        Step(946, 948, "Deploy all hosted-agent services", args=("azd", "deploy"), interactive=True),
-        manual(957, 962, "Confirm hosted evidence-agent deployment",
-               "In the existing fincrime project, verify evidence-agent is hosted. "
-               "Do not invoke it or connect it to investigation in this exercise."),
+        manual(994, 1014, "Wrap up Labs 0-4",
+               "Explain cost per alert, cost attribution and the cost/quality tradeoff from your actual results, "
+               "then answer each stakeholder from the evidence you produced."),
     ]
 
 
@@ -268,7 +258,7 @@ class Guide:
         self.context = {}
         lab, heading, opened = "Welcome", "", None
         for number, line in enumerate(self.lines, 1):
-            if line.startswith("# Lab ") or line.startswith("# Temporary"):
+            if line.startswith("# Lab "):
                 lab = line[2:]
             if line.startswith("##"):
                 heading = line.lstrip("# ").strip()

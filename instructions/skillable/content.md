@@ -18,8 +18,8 @@ An agent that works in a demo is a long way from an agent a bank lets near real 
 will ask: is it good enough, and how do you know? What happens when someone attacks it? Who approved it, and on what
 evidence? What does it cost, and who pays?
 
-In this lab you build the path that answers those questions, one stage at a time, for two agents that help a bank
-investigate financial crime alerts. Each stage produces something the next one relies on.
+In this lab you build the path that answers those questions, one stage at a time, for the agents that help Contoso
+Bank investigate financial crime alerts. Each stage produces something the next one relies on.
 
 | Stage | Lab | Question it answers | What it produces |
 | ----- | --- | ------------------- | ---------------- |
@@ -31,14 +31,41 @@ investigate financial crime alerts. Each stage produces something the next one r
 
 ## The use case
 
-A bank's transaction monitoring system raises alerts: activity that might be money laundering, sanctions evasion or
-fraud. An analyst investigates each one, and most are false positives. Two agents help:
+**Contoso Bank** is a retail and commercial bank operating in several countries. Its transaction monitoring system
+raises alerts every day: activity that might be money laundering, sanctions evasion or fraud. A financial crime
+analyst investigates each one, most turn out to be false positives, and the queue keeps growing.
 
-- **Triage** reads the case file and recommends what to do with the alert, citing the evidence.
-- **Reviewer** checks the recommendation before a person sees it.
+This morning the queue holds 14 alerts. You meet these four again in the labs:
 
-**The agents recommend. A named analyst decides.** That rule holds in every lab. The data is synthetic: 14 alerts
-for a fictional bank.
+| Alert | Customer | What happened |
+| ----- | -------- | ------------- |
+| ALT-1001 | Harbour Lane Bakery Ltd | Cash deposits just under the reporting threshold, every few days |
+| ALT-1006 | Daniel Reyes | His name matches a sanctions list, but his date of birth doesn't |
+| ALT-1005 | Nordwind Trading Ltd | A payment to a counterparty on a sanctions list |
+| ALT-1008 | Lukas Weber | Dozens of small payments in, forwarded to a crypto exchange within hours |
+
+Three agents help the analyst:
+
+| Agent | What it does |
+| ----- | ------------ |
+| **Triage** | Reads the case file and recommends what to do with the alert, citing the evidence |
+| **Evidence** | Researches what a pattern usually means, from the bank's typology notes and official public sources, without ever seeing who the customer is |
+| **Reviewer** | Checks the triage recommendation before a person sees it, and disagrees if the evidence doesn't support it |
+
+**The agents recommend. A named analyst decides.** No agent closes a case or files a report. That rule holds in
+every lab. The data is synthetic.
+
+### Who's asking
+
+Each lab starts with a question from someone at Contoso Bank who has to sign off before the agents go live:
+
+| Lab | Asked by | Their question |
+| --- | -------- | -------------- |
+| 0 | Head of Financial Crime Operations | Can the agents just close these alerts? |
+| 1 | Model Risk Management | The model we validated is being retired. How do we know a change is still good enough? |
+| 2 | Chief Information Security Officer | A customer uploaded a letter telling the agent to mark their case low risk. What stops that? |
+| 3 | Money Laundering Reporting Officer and Data Protection Officer | Who approved this, what does each agent see, and is a person really deciding? |
+| 4 | Finance Controller | What does each alert cost, and who pays? |
 
 ## What you work with
 
@@ -49,6 +76,10 @@ your scripts  ──►  API Management (gateway)  ──►  Foundry project  �
                    cost metrics                        │
                                                        ▼
                                           Application Insights: traces, token metrics
+
+azd ai agent invoke  ──►  evidence agent (hosted in Foundry)  ──►  AI Search knowledge base
+                                                                  typology notes + Web IQ
+                                                                  (approved topics only)
 ```
 
 Everything is deployed in your own resource group before you start. You work from a terminal on the lab VM, in the
@@ -92,22 +123,29 @@ Start with Lab 0 - Setup.
 
 ## What this lab covers
 
-You connect to your lab environment, tour it as a small AI landing zone, and run your first alert through two
-agents. Everything you deploy, measure and protect in Labs 1 to 4 builds on this.
+> **Contoso Bank's Head of Financial Crime Operations asks:** "Most of these alerts are false positives. Can the
+> agents just close them?"
+>
+> No. The agents recommend; a named analyst decides. In this lab you set up the platform that holds that line, and
+> run the first alert in the queue: Harbour Lane Bakery.
+
+You connect to your lab environment, tour it as a small AI landing zone, deploy the agents, and run your first
+alert. Everything you deploy, measure and protect in Labs 1 to 4 builds on this.
 
 ### The use case
 
-A bank's transaction monitoring system raises **alerts**: activity that might be money laundering, sanctions
-evasion or fraud. An analyst investigates every alert, and most turn out to be false positives. Two agents help:
+Contoso Bank's transaction monitoring system raises **alerts**: activity that might be money laundering, sanctions
+evasion or fraud. An analyst investigates every alert, and most turn out to be false positives. Three agents help:
 
 | Agent | What it does |
 | ----- | ------------ |
 | **Triage** | Reads the case file and recommends a disposition (escalate, close as a false positive, or request more information), citing the evidence |
 | **Reviewer** | Checks the triage recommendation before a human sees it, and disagrees if the evidence doesn't support it |
+| **Evidence** | Researches what a pattern usually means, using only approved topics, never the customer's identity. You use it in Lab 3 |
 
 **The agents recommend. A named analyst decides.** No agent can close a case.
 
-The data is synthetic: 14 alerts for a fictional bank, in data/cases.json.
+The data is synthetic: 14 alerts in data/cases.json, introduced in the introduction.
 
 ### What's deployed in your resource group
 
@@ -131,13 +169,13 @@ investigate.py  ──(your Entra ID token)──►  API Management  ──(its
 
 ## Prerequisites
 
-Provided on the lab VM: Azure CLI, PowerShell 7, uv with a Python 3.12 environment holding the packages in `pyproject.toml`, and this repository. Your resource group and sign-in details are on the **Resources** tab of the lab instructions.
+Provided on the lab VM: Azure CLI, Azure Developer CLI (`azd`) with the extensions listed in `azure.yaml`, PowerShell 7, uv with a Python 3.12 environment holding the packages in `pyproject.toml`, and this repository. Your resource group and sign-in details are on the **Resources** tab of the lab instructions.
 
 ## Steps
 
 ### 1. Sign in and connect \(3 min\)
 
-- [] Open a PowerShell terminal (Click Start -> type `Terminal`) and navigate to the repository folder:
+- [] Open a PowerShell terminal (Click Start -> type `Terminal`). Make sure it's **PowerShell 7**: type +++pwsh+++ if the prompt doesn't already start with `PS 7`. Windows PowerShell 5.1 can't run the setup. Navigate to the repository folder, where every command in these labs runs:
 
 ```powershell
 cd C:\Users\LabUser\Desktop\ignite26-PREL35
@@ -192,7 +230,32 @@ triage-lite version 1 (gpt-5-nano)
 `triage-lite` has the same instructions as triage on a smaller model; you use it in Lab 4. In Lab 1 you change an
 agent and publish version 2 the same way.
 
-### 3. Tour the landing zone \(5 min\)
+### 3. Deploy the evidence agent \(4 min\)
+
+Triage and the reviewer are prompt agents: instructions only. The evidence agent is a **hosted agent**: Python code
+in `src/agents/evidence` that Foundry runs for you. It researches through the Search knowledge base you created in
+step 1, which combines the bank's typology notes with official public sources from **Web IQ**.
+
+- [] Connect Web IQ and prepare the deployment:
+
+```powershell
+uv run configure-evidence-agent
+```
+
+If you're asked for a key, the command opens the Web IQ profile portal. Select the profile linked to the billing
+resource shown in the terminal, create an API key with the **web** service enabled, and paste it into the hidden
+prompt. The key is saved in `.env`, which Git ignores.
+
+- [] When the command reports that Web IQ and the evidence-agent environment are ready, deploy:
+
+```powershell
+azd deploy
+```
+
+Foundry builds the agent remotely, which takes a few minutes. Leave it running, open a second terminal in the
+repository folder, and carry on with step 4. You use the evidence agent in Lab 3.
+
+### 4. Tour the landing zone \(3 min\)
 
 - [] Open the **Azure portal** +++@lab.CloudPortal.Url+++. Login using +++@lab.CloudPortalCredential(User1).Username+++ and the access token +++@lab.CloudPortalCredential(User1).AccessToken+++.
 
@@ -201,14 +264,17 @@ Find your resource group @lab.CloudResourceGroup(PREL35).Name and deployed resou
 | Resource | Look for |
 | -------- | -------- |
 | Foundry (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[FOUNDRY_NAME]`) | **Resource Management > Keys and Endpoint**: local (key) authentication is disabled |
-| API Management (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APIM_NAME]`) | **APIs > Published agents**: one operation per agent. Open the policy: token check, rate limit, managed identity |
+| API Management (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APIM_NAME]`) | **APIs > Published agents**: one operation per agent. Select **All operations**, then the **</>** icon under **Inbound processing** to open the policy: token check, rate limit, managed identity |
 | Application Insights (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) | Where agent traces land. You use it in Lab 1 |
 
 Then open the **Foundry portal** `https://ai.azure.com`. By either going direct to the URL, or through Azure Portal ──► Foundry ──► blue button "Go to Foundry Portal".
 
-- [] Select the `fincrime` project, and open **Build** ──► **Agents**. You see **triage** and **reviewer**. Open triage and read its instructions: they're the same text as `src/agents/triage.md`.
+- [] Select the `fincrime` project, and open **Build** ──► **Agents**. You see **triage** and **reviewer**. Open triage and read its instructions: they're the same text as `src/agents/triage.md`. When `azd deploy` has finished, **Agents** also shows **evidence-agent** as a hosted agent.
 
-### 4. Run your first investigation \(5 min\)
+### 5. Run your first investigation \(4 min\)
+
+The first alert in the queue is ALT-1001: Harbour Lane Bakery Ltd has been depositing cash just under the reporting
+threshold every few days. Is it structuring, or just a busy bakery?
 
 - [] In the terminal, run the investigation script for ALT-1001:
 
@@ -216,11 +282,13 @@ Then open the **Foundry portal** `https://ai.azure.com`. By either going direct 
 uv run src/investigate.py ALT-1001
 ```
 
-ALT-1001 is a bakery making cash deposits just under the reporting threshold. You see the triage recommendation, with the evidence IDs it relied on, then the reviewer's verdict.
+You see the triage recommendation, then the reviewer's verdict. Triage usually recommends `escalate`, and lists the
+IDs of the deposits it relied on, such as `T-00001`: every claim points to something in the case file. The reviewer
+usually agrees. Nothing happens to the case: deciding it is the analyst's job, which you do in Lab 3.
 
 Run it a second time. The wording, and sometimes the recommendation, can change between runs. That variation is why Lab 1 measures agents with evaluations instead of trusting a single run.
 
-### 5. Get refused on purpose \(4 min\)
+### 6. Get refused on purpose \(3 min\)
 
 The gateway only accepts requests that carry an Entra ID access token in the `Authorization` header. 
 - [] Call it without one:
@@ -240,11 +308,14 @@ curl.exe -s -o NUL -w "%{http_code}`n" -X POST "@lab.CloudResourceTemplate(PREL3
 
 You get `404`: only agents published as gateway operations can be reached.
 
-### 6. Check your understanding \(1 min\)
+### 7. Check your understanding \(1 min\)
 
 - Your token reaches API Management. What identity does API Management use to reach Foundry?
+  *Its own managed identity. Callers never get access to Foundry through the gateway.*
 - Where would you change the triage agent's behaviour, and how would that change reach Foundry?
+  *In `src/agents/triage.md`, published as a new version with `uv run create-agents`.*
 - Who decides the outcome of an alert?
+  *A named analyst. The agents only recommend.*
 
 ## Next
 
@@ -259,6 +330,13 @@ Continue to Lab 1 - AgentOps.
 **Objective:** Operate agents and models through production-grade, governed processes.
 
 ## What this lab covers
+
+> **Contoso Bank's Head of Model Risk Management asks:** "The model we validated is being retired. Every time you
+> change a prompt or a model, how do we know the agents are still good enough?"
+>
+> The answer is a release gate that runs on every change. The case to watch is ALT-1006: Daniel Reyes's name matches
+> a sanctions list, but his date of birth doesn't. The right answer is to close it as a false positive, and it's the
+> one a careless change gets wrong.
 
 In Lab 0 you ran one alert and saw that the answer can change between runs. One run tells you nothing about whether an agent is good enough to release. In this lab you measure the agents against alerts whose correct outcome is known, and let a **release gate** decide whether a change can ship.
 
@@ -399,7 +477,7 @@ Every agent call was traced. In the **Azure portal** +++@lab.CloudPortal.Url+++,
 
 > You may need to disable the "Agent" experience and switch from "Simple mode" to "KQL mode".
 
-- [] Run the query below:
+- [] Paste the query below into the query editor (it's KQL, not PowerShell) and select **Run**:
 
 ```kusto
 dependencies
@@ -412,9 +490,10 @@ dependencies
 ```
 
 You see one row per agent version: the concise prompt was the fastest version, and it was the one the gate blocked.
+Traces take a few minutes to arrive. If your latest versions are missing, run the query again shortly.
 
-Then open the [Foundry portal]() `https://ai.azure.com`, select the `fincrime` project, and open **Evaluations**.
-- [] Open **Triage task adherence** and the run from step 1: the AI judge's score and its reasoning for each alert.
+Then open the **Foundry portal** `https://ai.azure.com`, select the `fincrime` project, and open **Evaluations**.
+- [] Open **Triage task adherence** and the run from step 1: the AI judge's score and its reasoning for each alert. If the run still shows as running, come back to it at the end of the lab.
 
 ### 7. The same gate in a pipeline \(3 min\)
 
@@ -449,6 +528,12 @@ Continue to Lab 2 - Security and trust.
 **Objective:** Implement security controls and monitoring capabilities for AI solutions.
 
 ## What this lab covers
+
+> **Contoso Bank's Chief Information Security Officer asks:** "A customer uploaded an explanation letter that told
+> the agent to mark their own case low risk. What stops that, and what doesn't?"
+>
+> You find out by attacking the triage agent yourself. That letter is attack IPI-01, uploaded to ALT-1014: Pellham
+> Motors, a car dealer making cash deposits just under the reporting threshold.
 
 The release gate in Lab 1 measures whether the agents are right on honest case files. A case file is not always honest: a customer can upload a letter with instructions in it, a payment memo can carry a command, a caller can claim authority they don't have. In this lab you attack the triage agent, see which controls stop which attacks, and add one.
 
@@ -576,7 +661,7 @@ Wait a minute for the gateway to apply it, then run the red team again, still on
 uv run src/redteam.py
 ```
 
-`IPI-01`, `IPI-03`, `EXF-01` and `JB-01` are now `blocked` by `prompt_attack_detected`, at the gateway, before they reach Foundry. Look at what still gets through:
+`IPI-01`, `IPI-03`, `EXF-01` and `JB-01` are now `blocked` by `prompt_attack_detected`, at the gateway, before they reach Foundry. IPI-01 is the letter the CISO asked about: it no longer reaches the agent. Look at what still gets through:
 
 - `IPI-02` writes its instruction in look-alike characters, and `IPI-04` dresses it up as a system message. Both pass the scan; the agent resisted them on its own.
 - `JB-02` still succeeds. A note claiming authority reads like an ordinary analyst note, and the weakened prompt now trusts it.
@@ -626,13 +711,21 @@ Continue to Lab 3 - Governance.
 
 ## What this lab covers
 
+> **Contoso Bank's Money Laundering Reporting Officer asks:** "Who approved these agents, and is a person really
+> deciding each alert?" **The Data Protection Officer adds:** "What customer data does each agent see, and does any
+> of it leave the bank?"
+>
+> You answer both, and decide two alerts yourself: ALT-1008, Lukas Weber, whose account is passing money to a crypto
+> exchange, and ALT-1014, Pellham Motors.
+
 Labs 1 and 2 produced evidence: the release gate and the red team. Evidence only matters if someone has to look at it before an agent goes live, and if it still describes what's running. In this lab you take the triage use case through intake, and add the controls that intake asks for.
 
 | Piece | What it is |
 | ----- | ---------- |
 | **Use-case register** | `governance/use-cases.json`: each AI use case, its owner, risk tier and approval |
 | **Intake** | `src/intake.py`: approves a use case only when its evidence covers what's running now |
-| **Data policy** | `governance/data-policy.json`: which confidential fields each agent may receive, and why |
+| **Data policy** | `governance/data-policy.json`: which confidential fields and documents each agent may receive, and why |
+| **Evidence agent** | Public-web research that never sees the customer's identity: the bank's decision on external grounding, enforced in code |
 | **Human in the loop** | `src/decide.py`: the agents recommend, a named analyst decides, and the decision is recorded |
 | **Azure Policy** | An assignment on your resource group that denies any model the bank hasn't approved |
 
@@ -644,6 +737,7 @@ Labs 1 and 2 produced evidence: the release gate and the red team. Evidence only
 - **Demand intake and governance processes:** take a use case through intake, using the Evidence Packs from Labs 1 and 2 as the approval input.
 - **Human-in-the-loop:** the agents recommend, a named analyst approves or overrules, and every decision is recorded.
 - **Data policy and management:** classification and access rules on the data the agents receive.
+- **External grounding:** public-web research limited to approved topics, so no customer data leaves the bank.
 
 ### Consider when moving to production
 
@@ -677,18 +771,20 @@ It's refused, with a reason for each failed check:
 | Data policy enforced | The agents still receive every field in the case file |
 | A named analyst decided alerts on the published agents | Nobody has used the decision step yet |
 
-Evidence describes one agent version under one configuration. When either changes, the evidence is out of date, and intake says so. The next three steps fix each failure.
+Evidence describes one agent version under one configuration. When either changes, the evidence is out of date, and intake says so. The next steps fix each failure.
 
-### 2. Enforce the data policy \(12 min\)
+### 2. Enforce the data policy \(10 min\)
 
 Open `governance/data-policy.json`. Two customer fields are classified confidential:
 
 - **Account number:** no agent receives it. Triaging an alert never needs it, and a field the agent never sees can't leak, whatever an attacker writes into a case file (`EXF-01` in Lab 2).
 - **Date of birth:** only triage and the reviewer receive it, for a stated purpose. In `ALT-1006` the customer has the same name as a person on the sanctions list, and the dates of birth are what tell them apart.
 
+The policy also covers documents. Restricted documents (classification 3) go to no agent. `ALT-1005`, Nordwind Trading, has one: a production order from law enforcement, limited to senior investigators and the MLRO. If an agent quoted it in a recommendation, the customer could be tipped off. With the policy enforced, the agents see only that `DOC-203` exists and is withheld, so they can't mistake it for a case with no documents.
+
 Withholding a field the agents need breaks the work; giving every agent every field makes a leak more likely. The policy records which agent may see what, and why.
 
-Set `"enforce": true` and save the file. From now on, every call strips the withheld fields before the case file reaches an agent. The data policy changed, so the evidence from Labs 1 and 2 no longer describes what's running. Run both again:
+- [] At the top of the file, change `"enforce": false` to `"enforce": true` and save it. From now on, every call strips the withheld fields before the case file reaches an agent. The data policy changed, so the evidence from Labs 1 and 2 no longer describes what's running. Run both again:
 
 ```powershell
 uv run src/evaluate.py
@@ -697,17 +793,36 @@ uv run src/redteam.py
 
 The gate passes with about the same scores as in Lab 1: the agents didn't need the account number. Both Evidence Packs now record the data policy they ran under (`data_policy` in `manifest.json`).
 
-### 3. Decide an alert \(10 min\)
+### 3. Research before you decide \(7 min\)
 
-The agents recommend; they never act. Run an alert through the decision step:
+`ALT-1008` is next in the queue. Lukas Weber's account received dozens of small payments from strangers and forwarded them to a crypto exchange within hours. He says a remote "payment assistant" job told him to. Is he laundering money, or was he recruited as a money mule without knowing it?
+
+The analyst wants to know how this pattern usually works. The obvious way, searching the web for the customer's name, would send personal data outside the bank, and the DPO won't allow it. The bank decided on a narrower option instead, and the evidence agent enforces it in code:
+
+- Its research tool accepts only one of eight approved topics (`src/agents/evidence/topics.json`), such as `money-mule-recruitment`. Names, account numbers and case text never reach the knowledge base or the web.
+- Public sources are limited to official sites (`justice.gov`, `fincen.gov`), and public cases are comparisons, never evidence about this customer.
+
+- [] Ask for a brief, from the repository folder. The scenario describes the pattern without naming anyone, and the brief takes up to three minutes:
 
 ```powershell
-uv run src/decide.py ALT-1001
+azd ai agent invoke evidence-agent "Review this fictional, PII-free scenario: unfamiliar incoming transfers are forwarded to a cryptocurrency exchange; the holder says a remote payment-assistant job requires this, but no employer contract or sales records are supplied. Provide a cited evidence brief with alternatives and missing evidence, not a decision." --protocol responses --new-session
 ```
 
-You see triage's recommendation with its reasons, and the reviewer's verdict. Nothing happens to the case until you answer. You aren't asked for your name: the decision is recorded under your Entra ID sign-in. Approve it.
+The brief keeps what was supplied apart from the explanation, the public context and the alternatives, and ends with the evidence that's missing. It doesn't recommend a decision: that comes next, from triage and from you.
 
-Now overrule the agents on another alert:
+### 4. Decide an alert \(9 min\)
+
+The agents recommend; they never act. 
+
+- [] Run `ALT-1008` through the decision step:
+
+```powershell
+uv run src/decide.py ALT-1008
+```
+
+You see triage's recommendation with its reasons, and the reviewer's verdict. Nothing happens to the case until you answer **Approve the recommendation? [y/n]**. You aren't asked for your name: the decision is recorded under your Entra ID sign-in. If triage recommends `escalate`, answer `y`: the brief told you what a mule case looks like and what's missing, and establishing that is an investigator's job. A reason is optional when you approve.
+
+- [] Now overrule the agents on `ALT-1014`, Pellham Motors, the car dealer from Lab 2:
 
 ```powershell
 uv run src/decide.py ALT-1014
@@ -717,17 +832,19 @@ Answer `n`, choose a different decision, and try to leave the reason empty: you 
 
 Open `evidence/decisions.jsonl`: one line per decision, with who decided, when, what the agents recommended, and the agent versions they ran on.
 
-### 4. Approve the use case \(3 min\)
+### 5. Approve the use case \(3 min\)
 
 ```powershell
 uv run src/intake.py UC-001
 ```
 
-Every check passes, and the approval is recorded in governance/use-cases.json: who approved it, when, the agent versions, the data policy, and the Evidence Packs it rests on. Publish a new triage version and run intake again, and it's refused until the evidence catches up.
+Every check passes, and the approval is recorded in governance/use-cases.json: who approved it, when, the agent versions, the data policy, and the Evidence Packs it rests on.
 
-### 5. See Azure Policy deny a model \(10 min\)
+Don't publish anything now. If anyone publishes a new triage version later, intake refuses the use case again until the gate, the red team and a decision have run on that version.
 
-Intake governs a use case. Azure Policy governs the platform underneath it, for every team. In the **Azure portal** +++@lab.CloudPortal.Url+++, open your resource group, select **Policies**, and open **Only approved AI models can be deployed**. It uses the built-in policy *Foundry model deployments should only use approved models*, with the effect **Deny** and two approved models: `gpt-5-mini` and `gpt-5-nano`.
+### 6. See Azure Policy deny a model \(6 min\)
+
+Intake governs a use case. Azure Policy governs the platform underneath it, for every team. In the **Azure portal** +++@lab.CloudPortal.Url+++, open your resource group, select **Policies**, and open **Only approved AI models can be deployed**. It uses the built-in policy *Foundry model deployments should only use approved models*, with the effect **Deny** and four approved models: `gpt-5-mini` and `gpt-5-nano` for the agents, `text-embedding-3-small` for the Search knowledge base, and `decision-1`, a preview decision model.
 
 Try to deploy a model that isn't approved:
 
@@ -752,6 +869,12 @@ Continue to Lab 4 - Solution Optimization.
 **Objective:** Optimize performance, capacity, and cost.
 
 ## What this lab covers
+
+> **Contoso Bank's Finance Controller asks:** "What does each alert cost compared with an analyst doing it by hand,
+> and which team pays?"
+>
+> You answer with numbers, and test a cheaper model on the alerts that matter. ALT-1005, a payment from Nordwind
+> Trading to a counterparty on a sanctions list, is the one a cheaper model must not miss.
 
 The agents are approved and running. Now someone asks what they cost, who is paying, and whether it could be
 cheaper without being worse. In this lab you answer with numbers: the cost of every release-gate run, a cheaper
@@ -845,7 +968,7 @@ uv run set-gateway token-limit 200000
 
 Every call through the gateway carries a cost center (`x-cost-center`): the release gate charges model validation, the red team security testing, and an analyst's investigation financial crime operations. The gateway records the tokens of each call by cost center, caller and agent.
 
-In the **Azure portal** +++@lab.CloudPortal.Url+++, open the Application Insights resource (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) in your resource group, select **Logs**, and run:
+In the **Azure portal** +++@lab.CloudPortal.Url+++, open the Application Insights resource (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) in your resource group and select **Logs**. Switch to **KQL mode** if needed, paste this query into the query editor and select **Run**. Token metrics take a few minutes to arrive, so recent calls may not show at first:
 
 ```kusto
 let prices = datatable(Agent: string, input: real, cached: real, output: real) [
@@ -870,94 +993,22 @@ A call that sends no cost center is recorded as `unassigned`: it still counts, b
 
 ### 5. Wrap up \(3 min\)
 
-You can now answer the three questions a FinOps review asks about an AI workload: what each unit of work costs (per
-alert, from the gate), who consumed it (per cost center and caller, from the gateway), and what a cheaper option
-would do to quality (from the gate, with routing on).
+You can now answer the Finance Controller with the three numbers a FinOps review asks for: what each alert costs
+(from the gate), who consumed it (per cost center and caller, from the gateway), and what a cheaper option would do
+to quality (from the gate, with routing on).
 
-## Next
+## You've completed the labs
 
-You've completed all the labs.
+Every Contoso Bank stakeholder now has an answer, backed by something you produced:
 
-===
+| Asked by | Their question | Your answer, and where it's recorded |
+| -------- | -------------- | ------------------------------------ |
+| Head of Financial Crime Operations | Can the agents just close alerts? | No. They recommend, a named analyst decides: `evidence/decisions.jsonl` |
+| Head of Model Risk Management | How do we know a change is still good enough? | The release gate on every change: the Evidence Pack from Lab 1 |
+| Chief Information Security Officer | What stops a letter telling the agent to close its own case? | The prompt, Prompt Shields at the gateway and the guardrail: the red team Evidence Pack from Lab 2 |
+| Data Protection Officer | What does each agent see, and does anything leave the bank? | The data policy, and research by approved topic only: `governance/data-policy.json` |
+| Money Laundering Reporting Officer | Who approved this? | Intake, on current evidence: `governance/use-cases.json` |
+| Finance Controller | What does it cost, and who pays? | Cost per alert and per cost center: the gate report and Application Insights |
 
-# Temporary lab - hosted evidence agent
-
-## What this exercise covers
-
-Configure public-web research and deploy the standalone **evidence-agent** into your existing Foundry project.
-This temporary setup walkthrough is separate from Labs 0 to 4. It does not connect the evidence agent to the
-triage/reviewer workflow or run an investigation.
-
-Unlike the Markdown prompt agents published earlier, this hosted agent runs Python code in Foundry.
-Its research tool uses the Search knowledge base created during Lab 0.
-
-## Prerequisites
-
-- Complete the setup step in Lab 0: the repository has a populated `.env`,
-  a seeded Search index, and the `fincrime-research` knowledge base.
-- Keep Azure CLI signed in to the lab account and subscription.
-- Use a terminal in the repository root, with Azure Developer CLI (`azd`) and the extensions required by
-  azure.yaml available.
-
-The lab's infrastructure and scoped permissions are already provisioned. You do not need permission to assign roles.
-
-## 1. Understand Web IQ
-
-**Web IQ** supplies public-web context through an MCP service. The Search knowledge base combines that context
-with the synthetic typology notes already in the index. Public context is not evidence about a customer.
-
-Web IQ requires an API key from a profile linked to the lab's existing Web IQ billing resource.
-The preparation command guides you through the profile portal and hidden key input; you do not need to
-configure the Foundry and Search integrations by hand.
-
-**Cost and data boundary:** first-time preparation runs billable Web IQ and knowledge-base checks using a fixed,
-public DOJ topic. Do not send customer data, identifiers, or full case prompts to public-web research.
-
-## 2. Configure Web IQ and the deployment environment
-
-Run the combined preparation command:
-
-```powershell
-uv run configure-evidence-agent
-```
-
-The command reads the resource group and deployment settings from `.env`; do not enter the resource group again.
-It configures the azd environment and disables automatic role assignments, then sets up Web IQ if needed.
-
-If prompted for a key:
-
-1. In the Web IQ profile portal opened by the command, select the profile linked to the billing resource ID
-   shown in the terminal.
-2. Create an API key with the **web** service enabled.
-3. Paste it into the hidden terminal prompt, not into chat or the lab instructions.
-
-Invalid or rejected keys trigger another prompt; press Ctrl+C to cancel. The key is saved in the ignored `.env`
-and configured separately in the Foundry connection and Search knowledge source. Treat it as a shared lab credential.
-If both integrations are already configured, the command reuses them without asking for a key or running another search.
-
-Continue only when the command reports that Web IQ and the evidence-agent environment are ready.
-If `.env` is missing or incomplete, return to Lab 0 setup. For an access error or a target mismatch, stop and ask
-the proctor; do not grant roles or retarget another lab.
-
-## 3. Deploy the hosted agent
-
-From the repository root, run:
-
-```powershell
-azd deploy
-```
-
-Deploy all services, not just `azd deploy evidence-agent`. The configuration creates or updates the
-**evidence-research** connection, **evidence-tools** Toolbox, and hosted **evidence-agent**, in dependency order.
-Foundry builds the Python dependencies remotely; you do not need a local container build.
-
-This command does not provision infrastructure, assign roles, republish the prompt agents, or change gateway controls.
-There is no predeploy setup hook: finish the preparation command before deploying.
-
-## 4. Confirm deployment
-
-Wait for `azd deploy` to report success. Open the [Foundry portal](https://ai.azure.com), select the existing
-`fincrime` project, and confirm that **evidence-agent** appears as a hosted agent.
-
-Stop here for this temporary exercise. Configuration and deployment are complete; invoking the agent and connecting
-it to the investigation workflow are outside this walkthrough.
+The same path applies to any agent you take to production: decide the boundary, measure every change, attack it
+before someone else does, govern what it sees and who approved it, and know what it costs.

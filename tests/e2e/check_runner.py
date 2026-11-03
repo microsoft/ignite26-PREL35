@@ -70,9 +70,9 @@ class RunnerChecks(unittest.TestCase):
               patch.object(Path, "write_text", side_effect=forbidden),
               patch.object(Path, "write_bytes", side_effect=forbidden)):
             self.assertEqual(self.runner.run(), 0)
-        for phase in ("Lab 0", "Lab 1", "Lab 2", "Lab 3", "Lab 4", "Temporary lab"):
+        for phase in ("Lab 0", "Lab 1", "Lab 2", "Lab 3", "Lab 4"):
             self.assertIn(phase, output.getvalue())
-        self.assertIn("42 command/query blocks mapped", output.getvalue())
+        self.assertIn("43 command/query blocks mapped", output.getvalue())
         self.assertIn("Kusto", output.getvalue())
 
     def test_source_drift_blocks_runner_creation(self):
@@ -87,13 +87,13 @@ class RunnerChecks(unittest.TestCase):
         lab.Runner(self.root)
 
     def test_removed_command_block_mapping_is_detected(self):
-        steps = [step for step in self.runner.steps if not (step.start <= 946 and step.end >= 948)]
-        with self.assertRaisesRegex(lab.WalkthroughError, "946"):
+        steps = [step for step in self.runner.steps if not (step.start <= 251 and step.end >= 253)]
+        with self.assertRaisesRegex(lab.WalkthroughError, "251"):
             self.runner.guide.check_coverage(steps)
 
     def test_missing_command_inside_a_still_mapped_block_is_detected(self):
-        steps = [step for step in self.runner.steps if not (step.start == 333 and step.expect == "pack-fail")]
-        with self.assertRaisesRegex(lab.WalkthroughError, "336"):
+        steps = [step for step in self.runner.steps if not (step.start == 411 and step.expect == "pack-fail")]
+        with self.assertRaisesRegex(lab.WalkthroughError, "414"):
             self.runner.guide.check_coverage(steps)
 
     def test_mismatched_environment_is_not_retargeted(self):
