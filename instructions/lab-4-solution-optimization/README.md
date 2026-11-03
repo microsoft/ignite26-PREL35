@@ -6,6 +6,12 @@
 
 ## What this lab covers
 
+> **Contoso Bank's Finance Controller asks:** "What does each alert cost compared with an analyst doing it by hand,
+> and which team pays?"
+>
+> You answer with numbers, and test a cheaper model on the alerts that matter. ALT-1005, a payment from Nordwind
+> Trading to a counterparty on a sanctions list, is the one a cheaper model must not miss.
+
 The agents are approved and running. Now someone asks what they cost, who is paying, and whether it could be
 cheaper without being worse. In this lab you answer with numbers: the cost of every release-gate run, a cheaper
 model for part of the work and what it does to quality, a limit on what any caller can consume, and the bill split
@@ -112,7 +118,8 @@ the red team security testing, and an analyst's investigation financial crime op
 tokens of each call by cost center, caller and agent.
 
 In the [Azure portal](https://portal.azure.com), open the Application Insights resource (`appi-…`) in your resource
-group, select **Logs**, and run:
+group and select **Logs**. Switch to **KQL mode** if needed, paste this query into the query editor and select
+**Run**. Token metrics take a few minutes to arrive, so recent calls may not show at first:
 
 ```kusto
 let prices = datatable(Agent: string, input: real, cached: real, output: real) [
@@ -140,10 +147,22 @@ caller's identity, because a header alone is whatever the caller says it is.
 
 ### 5. Wrap up (3 min)
 
-You can now answer the three questions a FinOps review asks about an AI workload: what each unit of work costs (per
-alert, from the gate), who consumed it (per cost center and caller, from the gateway), and what a cheaper option
-would do to quality (from the gate, with routing on).
+You can now answer the Finance Controller with the three numbers a FinOps review asks for: what each alert costs
+(from the gate), who consumed it (per cost center and caller, from the gateway), and what a cheaper option would do
+to quality (from the gate, with routing on).
 
-## Next
+## You've completed the labs
 
-You've completed all the labs.
+Every Contoso Bank stakeholder now has an answer, backed by something you produced:
+
+| Asked by | Their question | Your answer, and where it's recorded |
+|---|---|---|
+| Head of Financial Crime Operations | Can the agents just close alerts? | No. They recommend, a named analyst decides: `evidence/decisions.jsonl` |
+| Head of Model Risk Management | How do we know a change is still good enough? | The release gate on every change: the Evidence Pack from Lab 1 |
+| Chief Information Security Officer | What stops a letter telling the agent to close its own case? | The prompt, Prompt Shields at the gateway and the guardrail: the red team Evidence Pack from Lab 2 |
+| Data Protection Officer | What does each agent see, and does anything leave the bank? | The data policy, and research by approved topic only: `governance/data-policy.json` |
+| Money Laundering Reporting Officer | Who approved this? | Intake, on current evidence: `governance/use-cases.json` |
+| Finance Controller | What does it cost, and who pays? | Cost per alert and per cost center: the gate report and Application Insights |
+
+The same path applies to any agent you take to production: decide the boundary, measure every change, attack it
+before someone else does, govern what it sees and who approved it, and know what it costs.

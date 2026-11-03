@@ -8,8 +8,8 @@ An agent that works in a demo is a long way from an agent a bank lets near real 
 will ask: is it good enough, and how do you know? What happens when someone attacks it? Who approved it, and on what
 evidence? What does it cost, and who pays?
 
-In this lab you build the path that answers those questions, one stage at a time, for two agents that help a bank
-investigate financial crime alerts. Each stage produces something the next one relies on.
+In this lab you build the path that answers those questions, one stage at a time, for the agents that help Contoso
+Bank investigate financial crime alerts. Each stage produces something the next one relies on.
 
 | Stage | Lab | Question it answers | What it produces |
 |---|---|---|---|
@@ -21,14 +21,41 @@ investigate financial crime alerts. Each stage produces something the next one r
 
 ## The use case
 
-A bank's transaction monitoring system raises alerts: activity that might be money laundering, sanctions evasion or
-fraud. An analyst investigates each one, and most are false positives. Two agents help:
+**Contoso Bank** is a retail and commercial bank operating in several countries. Its transaction monitoring system
+raises alerts every day: activity that might be money laundering, sanctions evasion or fraud. A financial crime
+analyst investigates each one, most turn out to be false positives, and the queue keeps growing.
 
-- **Triage** reads the case file and recommends what to do with the alert, citing the evidence.
-- **Reviewer** checks the recommendation before a person sees it.
+This morning the queue holds 14 alerts. You meet these four again in the labs:
 
-**The agents recommend. A named analyst decides.** That rule holds in every lab. The data is synthetic: 14 alerts
-for a fictional bank.
+| Alert | Customer | What happened |
+|---|---|---|
+| ALT-1001 | Harbour Lane Bakery Ltd | Cash deposits just under the reporting threshold, every few days |
+| ALT-1006 | Daniel Reyes | His name matches a sanctions list, but his date of birth doesn't |
+| ALT-1005 | Nordwind Trading Ltd | A payment to a counterparty on a sanctions list |
+| ALT-1008 | Lukas Weber | Dozens of small payments in, forwarded to a crypto exchange within hours |
+
+Three agents help the analyst:
+
+| Agent | What it does |
+|---|---|
+| **Triage** | Reads the case file and recommends what to do with the alert, citing the evidence |
+| **Evidence** | Researches what a pattern usually means, from the bank's typology notes and official public sources, without ever seeing who the customer is |
+| **Reviewer** | Checks the triage recommendation before a person sees it, and disagrees if the evidence doesn't support it |
+
+**The agents recommend. A named analyst decides.** No agent closes a case or files a report. That rule holds in
+every lab. The data is synthetic.
+
+### Who's asking
+
+Each lab starts with a question from someone at Contoso Bank who has to sign off before the agents go live:
+
+| Lab | Asked by | Their question |
+|---|---|---|
+| 0 | Head of Financial Crime Operations | Can the agents just close these alerts? |
+| 1 | Model Risk Management | The model we validated is being retired. How do we know a change is still good enough? |
+| 2 | Chief Information Security Officer | A customer uploaded a letter telling the agent to mark their case low risk. What stops that? |
+| 3 | Money Laundering Reporting Officer and Data Protection Officer | Who approved this, what does each agent see, and is a person really deciding? |
+| 4 | Finance Controller | What does each alert cost, and who pays? |
 
 ## What you work with
 
@@ -39,6 +66,10 @@ your scripts  ──►  API Management (gateway)  ──►  Foundry project  �
                    cost metrics                        │
                                                        ▼
                                           Application Insights: traces, token metrics
+
+azd ai agent invoke  ──►  evidence agent (hosted in Foundry)  ──►  AI Search knowledge base
+                                                                  typology notes + Web IQ
+                                                                  (approved topics only)
 ```
 
 Everything is deployed in your own resource group before you start. You work from a terminal on the lab VM, in the

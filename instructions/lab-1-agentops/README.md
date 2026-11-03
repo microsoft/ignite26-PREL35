@@ -6,6 +6,13 @@
 
 ## What this lab covers
 
+> **Contoso Bank's Head of Model Risk Management asks:** "The model we validated is being retired. Every time you
+> change a prompt or a model, how do we know the agents are still good enough?"
+>
+> The answer is a release gate that runs on every change. The case to watch is ALT-1006: Daniel Reyes's name matches
+> a sanctions list, but his date of birth doesn't. The right answer is to close it as a false positive, and it's the
+> one a careless change gets wrong.
+
 In Lab 0 you ran one alert and saw that the answer can change between runs. One run tells you nothing about
 whether an agent is good enough to release. In this lab you measure the agents against alerts whose correct outcome
 is known, and let a **release gate** decide whether a change can ship.
@@ -136,7 +143,8 @@ This is what an approver signs and an auditor reads later. You use it as the app
 ### 6. See the versions in the traces and in Foundry (6 min)
 
 Every agent call was traced. In the [Azure portal](https://portal.azure.com), open the Application Insights
-resource (`appi-…`) in your resource group, select **Logs**, and run:
+resource (`appi-…`) in your resource group and select **Logs**. If it opens in **Simple mode**, switch to
+**KQL mode**. Paste this query into the query editor (it's KQL, not PowerShell) and select **Run**:
 
 ```kusto
 dependencies
@@ -149,9 +157,11 @@ dependencies
 ```
 
 You see one row per agent version: the concise prompt was the fastest version, and it was the one the gate blocked.
+Traces take a few minutes to arrive. If your latest versions are missing, run the query again shortly.
 
 Then open the [Foundry portal](https://ai.azure.com), select the `fincrime` project, and open **Evaluations**.
-Open **Triage task adherence** and the run from step 1: the AI judge's score and its reasoning for each alert.
+Open **Triage task adherence** and the run from step 1: the AI judge's score and its reasoning for each alert. If
+the run still shows as running, come back to it at the end of the lab.
 
 ### 7. The same gate in a pipeline (3 min)
 

@@ -34,11 +34,14 @@ def policy_hash() -> str:
     return hashlib.sha256(DATA_POLICY.read_bytes()).hexdigest()
 
 
-def case_file(case: dict, agent: str) -> str:
-    """What an agent receives: the case and the screening lists, minus the fields the data policy withholds from it."""
+def case_file(case: dict, agent: str, policy: dict | None = None) -> str:
+    """What an agent receives: the case and the screening lists, minus the fields and documents the data policy
+    withholds from it."""
     content = copy.deepcopy({**case, "screening_lists": data["screening_lists"]})
-    policy = data_policy()
-    for path, rule in policy["fields"].items() if policy["enforce"] else []:
+    policy = policy or data_policy()
+    if not policy["enforce"]:
+        return json.dumps(content)
+    for path, rule in policy["fields"].items():
         if agent in rule["agents"]:
             continue
         *parents, key = path.split(".")
@@ -47,7 +50,22 @@ def case_file(case: dict, agent: str) -> str:
             node = node.get(parent) or {}
         if key in node:
             node[key] = f"[withheld: {rule['class']}]"
+    # A withheld document keeps only its ID, so the agent knows a record exists without seeing what it is.
+    rules = policy.get("documents", {})
+    content["documents"] = [
+        {"id": doc["id"], "withheld": rules[level]["class"]}
+        if (level := str(doc.get("classification"))) in rules and agent not in rules[level]["agents"] else doc
+        for doc in content.get("documents", [])
+    ]
     return json.dumps(content)
+
+
+# Self-check of the data policy, with no calls to Azure: the production order on ALT-1005 never reaches an agent.
+_enforced = {**data_policy(), "enforce": True}
+_restricted = json.loads(case_file(cases["ALT-1005"], "triage", _enforced))["documents"]
+assert _restricted == [{"id": "DOC-203", "withheld": "restricted"}], _restricted
+assert "Production order" in case_file(cases["ALT-1005"], "triage", {**_enforced, "enforce": False})
+assert "DOC-204" in case_file(cases["ALT-1014"], "triage", _enforced)
 
 # Your own Entra ID token: the gateway checks it, then calls Foundry with its managed identity.
 credential = DefaultAzureCredential()

@@ -3,5 +3,8 @@
   "fields": {
     "customer.account_number": { "class": "confidential", "agents": [], "purpose": "Payments and statements. No agent needs it to triage an alert." },
     "customer.date_of_birth": { "class": "confidential", "agents": ["triage", "reviewer"], "purpose": "Sanctions screening: tells the customer apart from a listed person with the same name." }
+  },
+  "documents": {
+    "3": { "class": "restricted", "agents": [], "purpose": "Law enforcement and intelligence material. Limited to senior investigators and the MLRO: sharing it risks tipping off the customer." }
   }
 }

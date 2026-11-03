@@ -79,7 +79,7 @@ specific confirmation before the real model-create policy test. Do not pause
 just to acknowledge explanatory text, read a report, inspect a portal, or run a
 Kusto query. Display those actions and mark them `REVIEW NEEDED`; never claim
 they were human-verified. Default optional exercises to skipped; use repeatable
-`--optional` choices (`editor`, `colors`, `tuning`, `stale-evidence`) to enable
+`--optional` choices (`editor`, `colors`, `tuning`) to enable
 them without extra yes/no prompts.
 
 Format both plan and live output with a visible hierarchy, not just colored
@@ -171,12 +171,11 @@ Treat this as a coverage checklist, not a frozen command manifest:
 
 | Section | Required behavior |
 | --- | --- |
-| Lab 0 | Use real sign-in; run setup and agent publication; list the portal tour for review; investigate ALT-1001 twice; validate the 401 and 404 gateway probes. |
+| Lab 0 | Use real sign-in; run setup and agent publication; run `configure-evidence-agent` with real hidden key input if requested, then `azd deploy`; list the portal tour for review; investigate ALT-1001 twice; validate the 401 and 404 gateway probes. |
 | Lab 1 | Run the Foundry-backed gate; compare/apply the concise prompt; publish and observe its failed gate; restore/publish/retest; evaluate gpt-5-nano and restore the approved model; inspect Evidence Packs and traces. Offer the optional prompt-tuning exercise and its repeated gate runs, then restore. |
 | Lab 2 | Run the Foundry-backed red team and individual attacks; list guardrail inspection for review; compare/apply/publish the helpful prompt; rerun the documented attacks; enable Prompt Shields, wait, rerun red team and gate; restore/publish/retest and list report reviews. |
-| Lab 3 | Observe initial intake refusal; set only the data policy's `enforce` field to true; regenerate gate/red-team evidence; run both real analyst decisions interactively; run intake again; demonstrate Azure Policy denial only after a specific confirmation. |
+| Lab 3 | Observe initial intake refusal; set only the data policy's `enforce` field to true; regenerate gate/red-team evidence; invoke the hosted evidence agent with the guide's PII-free scenario; run both real analyst decisions (ALT-1008, ALT-1014) interactively; run intake again; demonstrate Azure Policy denial only after a specific confirmation. |
 | Lab 4 | Measure baseline cost; enable routing, wait and reevaluate, then disable routing; lower token limit, wait and investigate with scoped `OPENAI_LOG`; restore the limit and environment; list retry observations, the cost-attribution query, and wrap-up for review. |
-| Temporary hosted exercise | Show the Web IQ cost/data-boundary explanation; run `configure-evidence-agent` with real hidden key input if requested; run `azd deploy`; list hosted-agent verification for review. Do not invoke the hosted agent or connect it to investigation. |
 
 Expose optional sections explicitly in CLI help. Record an unselected optional
 section as `SKIPPED OPTIONAL`, never as `PASS`. Preserve file/report reviews,
