@@ -83,7 +83,8 @@ class RunnerChecks(unittest.TestCase):
 
     def test_windows_line_endings_do_not_count_as_source_drift(self):
         path = self.root / lab.GUIDE
-        path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+        # The checkout may already be CRLF (core.autocrlf), so normalize before converting.
+        path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
         lab.Runner(self.root)
 
     def test_removed_command_block_mapping_is_detected(self):
