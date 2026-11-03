@@ -11,10 +11,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import urllib.error
 
 import run_lab as lab
+import walkthrough_console as console
 
 
 class RunnerChecks(unittest.TestCase):
@@ -126,12 +127,19 @@ class RunnerChecks(unittest.TestCase):
             calls.append(args)
             return (2, "Fixture crash") if args[0] == "fixture-failure" else (0, "")
 
-        with patch.object(self.runner, "preflight"), patch.object(self.runner, "process", side_effect=fake_process):
-            result = self.quiet(self.runner.run, execute=True)
+        output = io.StringIO()
+        with (patch.object(self.runner, "preflight"),
+              patch.object(self.runner, "process", side_effect=fake_process),
+              contextlib.redirect_stdout(output)):
+            result = self.runner.run(execute=True)
         self.assertEqual(result, 1)
         self.assertEqual(calls, [["uv", "run", "create-agents"], ["fixture-failure"]])
         self.assertEqual((self.root / lab.PROMPT).read_bytes(), self.runner.original_prompt)
         self.assertIn("approved agents", self.runner.recovery)
+        report = output.getvalue().split("Walkthrough report")[-1]
+        self.assertIn("[ERROR] Step 03: failure", report)
+        self.assertIn("Unexpected result (exit 2)", report)
+        self.assertIn("[NOT RUN] Step 04: must not run", report)
 
     def test_cancelled_optional_edit_restores_the_explicitly_owned_edit(self):
         self.runner.steps = [lab.Step(425, 425, "edit", "edit", detail="Fixture edit")]
@@ -148,15 +156,16 @@ class RunnerChecks(unittest.TestCase):
     def test_cancelled_checkpoint_is_not_recorded_as_complete(self):
         self.runner.steps = [lab.Step(194, 208, "portal", "manual", detail="Fixture check")]
         output = io.StringIO()
-        with (patch.object(self.runner, "preflight"),
-              patch.object(lab, "confirm", side_effect=lab.Cancelled("Fixture cancellation")),
+        with (patch.object(self.runner, "preflight", side_effect=lab.Cancelled("Fixture cancellation")),
               contextlib.redirect_stdout(output)):
             result = self.runner.run(execute=True)
         self.assertEqual(result, 1)
         self.assertIn("INCOMPLETE", output.getvalue())
-        self.assertNotIn("Walkthrough finished", output.getvalue())
+        self.assertIn("[NOT RUN] Step 01: portal", output.getvalue())
+        self.assertIn("Fixture cancellation", output.getvalue().split("Walkthrough report")[-1])
+        self.assertNotIn("Automated flow finished", output.getvalue())
 
-    def test_declined_optional_group_executes_no_commands(self):
+    def test_unselected_optional_group_executes_no_commands_or_prompts(self):
         self.runner.steps = [
             lab.Step(157, 159, "editor", args=("code", "."), optional="editor"),
             lab.Step(343, 343, "editor again", args=("code", "."), optional="editor"),
@@ -165,9 +174,100 @@ class RunnerChecks(unittest.TestCase):
               patch.object(lab, "confirm", return_value=False) as confirm,
               patch.object(self.runner, "process") as process):
             self.assertEqual(self.quiet(self.runner.run, execute=True), 0)
-        confirm.assert_called_once()
+        confirm.assert_not_called()
         process.assert_not_called()
-        self.assertTrue(all(result[1] == "SKIPPED OPTIONAL" for result in self.runner.outcomes))
+        self.assertTrue(all(result.status == "SKIPPED OPTIONAL" for result in self.runner.outcomes))
+
+    def test_selected_optional_group_runs_without_an_extra_confirmation(self):
+        self.runner = lab.Runner(self.root, "fixture", optional=("editor",))
+        self.runner.steps = [lab.Step(157, 159, "editor", args=("code", "."), optional="editor")]
+        with (patch.object(self.runner, "preflight"),
+              patch.object(lab, "confirm") as confirm,
+              patch.object(self.runner, "process", return_value=(0, "")) as process):
+            self.assertEqual(self.quiet(self.runner.run, execute=True), 0)
+        confirm.assert_not_called()
+        process.assert_called_once_with(["code", "."], interactive=False)
+        self.assertEqual(self.runner.outcomes[0].status, "PASS")
+
+    def test_read_only_reviews_do_not_pause_and_are_reported_as_unverified(self):
+        self.runner.steps = [
+            lab.Step(194, 208, "portal review", "manual", detail="Inspect the portal fixture."),
+            lab.Step(215, 217, "next command", args=("fixture",)),
+        ]
+        output = io.StringIO()
+        with (patch.object(self.runner, "preflight"),
+              patch.object(lab, "confirm", side_effect=AssertionError("Unnecessary prompt")),
+              patch.object(self.runner, "process", return_value=(0, "")) as process,
+              contextlib.redirect_stdout(output)):
+            self.assertEqual(self.runner.run(execute=True), 0)
+        process.assert_called_once()
+        report = output.getvalue().split("Walkthrough report")[-1]
+        self.assertIn("[REVIEW NEEDED] Step 01: portal review", report)
+        self.assertIn("Inspect the portal fixture.", report)
+        self.assertIn(f"{lab.GUIDE}:194-208", report)
+        self.assertIn("[PASS] Step 02: next command", report)
+        self.assertIn("1 manual review item(s) remain unverified", report)
+
+    def test_runner_colors_follow_terminal_and_global_opt_outs_not_child_settings(self):
+        self.runner.child_env["UV_NO_COLOR"] = "1"
+        for is_tty, env, colored in (
+            (True, {}, True),
+            (False, {}, False),
+            (True, {"NO_COLOR": ""}, False),
+            (True, {"UV_NO_COLOR": "1"}, False),
+            (True, {"TERM": "dumb"}, False),
+        ):
+            with self.subTest(is_tty=is_tty, env=env):
+                output = io.StringIO()
+                with (contextlib.redirect_stdout(output),
+                      patch.object(output, "isatty", return_value=is_tty),
+                      patch.object(console.sys, "platform", "linux"),
+                      patch.dict(console.os.environ, env, clear=True)):
+                    self.runner.say("Fixture completed", "PASS")
+                self.assertEqual("\033[" in output.getvalue(), colored)
+                self.assertIn("[PASS] Fixture completed", lab.ANSI.sub("", output.getvalue()))
+
+    def test_console_wraps_prose_but_keeps_commands_and_queries_copyable(self):
+        output = io.StringIO()
+        command = "uv run fixture --long-value " + "x" * 70
+        query = "customEvents | where " + "x" * 70
+        prose = "A readable explanation with several words that should wrap on a narrow terminal."
+        with (contextlib.redirect_stdout(output),
+              patch.object(console.shutil, "get_terminal_size",
+                           return_value=console.os.terminal_size((48, 24)))):
+            self.runner.console.heading("Fixture lab")
+            self.runner.console.message(prose)
+            self.runner.console.block("Command", command, command=True)
+            self.runner.console.block("Kusto query", query)
+        text = output.getvalue()
+        self.assertIn("=" * 48, text)
+        self.assertIn("    > " + command, text)
+        self.assertIn("    " + query, text)
+        wrapped = text.split("  Command:")[0]
+        self.assertTrue(all(len(line) <= 48 for line in wrapped.splitlines()))
+        self.assertIn(prose, " ".join(wrapped.split()))
+        self.assertNotIn("\033[", text)
+
+    def test_windows_console_enables_ansi_or_falls_back_to_plain_text(self):
+        import ctypes
+
+        for supported in (True, False):
+            with self.subTest(supported=supported):
+                output, kernel = io.StringIO(), Mock()
+                kernel.GetStdHandle.return_value = 42
+                kernel.GetConsoleMode.return_value = supported
+                kernel.SetConsoleMode.return_value = True
+                with (contextlib.redirect_stdout(output),
+                      patch.object(output, "isatty", return_value=True),
+                      patch.object(console.sys, "platform", "win32"),
+                      patch.dict(console.os.environ, {}, clear=True),
+                      patch.object(ctypes, "WinDLL", return_value=kernel, create=True)):
+                    console.Console().message("Windows fixture", "PASS")
+                self.assertEqual("\033[" in output.getvalue(), supported)
+                if supported:
+                    kernel.SetConsoleMode.assert_called_once_with(42, 0x0004)
+                else:
+                    kernel.SetConsoleMode.assert_not_called()
 
     def test_fresh_failed_pack_is_an_expected_teaching_outcome(self):
         before = self.runner.pack_snapshot()
@@ -258,6 +358,17 @@ class RunnerChecks(unittest.TestCase):
         self.assertEqual(code, 3)
         self.assertIn("fixture output", output.getvalue())
         self.assertIn("fixture output", captured)
+        self.assertLess(output.getvalue().index("Command output:"), output.getvalue().index("fixture output"))
+
+    def test_private_token_capture_has_no_formatted_or_raw_output(self):
+        output = io.StringIO()
+        with (contextlib.redirect_stdout(output),
+              patch.object(lab.shutil, "which", return_value="/fixture/az"),
+              patch.object(lab.subprocess, "run",
+                           return_value=subprocess.CompletedProcess([], 0, stdout="fixture-private-token"))):
+            code, token = self.runner.process(["az", "account", "get-access-token"], private=True)
+        self.assertEqual((code, token), (0, "fixture-private-token"))
+        self.assertEqual(output.getvalue(), "")
 
     def test_http_probe_keeps_token_private_and_refuses_redirects(self):
         self.write(".env", b"AZURE_RESOURCE_GROUP=fixture\nAPIM_GATEWAY_URL=https://fixture.azure-api.net\n")

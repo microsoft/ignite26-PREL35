@@ -5,6 +5,8 @@
 
 Uses only the standard library. Remove tests/e2e/ to remove this harness.
 Live execution is interactive, billable, and changes the lab's agents and settings.
+Optional exercises are skipped unless selected with --optional EXERCISE.
+Read-only/manual checks are listed for review at the end, without pausing.
 """
 
 import argparse
@@ -24,6 +26,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from walkthrough_console import Console
+
 ROOT = Path(__file__).resolve().parents[2]
 GUIDE = Path("instructions/skillable/content.md")
 SOURCE_SHA256 = "09d8255baf232ddec38f971bf0ea2a90fc034d623b64705baa13b21afcba3d36"
@@ -31,6 +35,7 @@ ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 PROMPT = Path("src/agents/triage.md")
 DATA_POLICY = Path("governance/data-policy.json")
 REGISTER = Path("governance/use-cases.json")
+OPTIONAL_GROUPS = ("editor", "colors", "tuning", "stale-evidence")
 NOTES = (
     "Azure must already be provisioned. The runner never assigns roles or bypasses policy.",
     "Gateway updates need APIM permissions AND a Skillable policy allowing "
@@ -61,6 +66,16 @@ class Step:
     detail: str = ""
     optional: str = ""
     interactive: bool = False
+
+
+@dataclass(frozen=True)
+class Outcome:
+    number: int
+    lab: str
+    step: Step
+    status: str
+    elapsed: float = 0.0
+    detail: str = ""
 
 
 def build_steps():
@@ -227,7 +242,7 @@ def build_steps():
         manual(867, 869, "Review the caller-attribution query discrepancy",
                "The suggested one-line Caller substitution loses customDimensions during aggregation. "
                "Ask the proctor for the corrected caller-preserving query and verify it in the portal. "
-               "If unavailable, enter q: this check is incomplete, not an automatic pass."),
+               "If unavailable, leave this review item unresolved; it is not an automatic pass."),
         manual(874, 879, "Wrap up Labs 0-4",
                "Explain cost per alert, cost attribution and the cost/quality tradeoff from your actual results."),
         manual(906, 914, "Understand Web IQ and its cost/data boundary",
@@ -333,43 +348,41 @@ def checked_json(path):
         raise WalkthroughError(f"Cannot read valid JSON from {path.name}: {type(error).__name__}.") from None
 
 
-def confirm(message, *, optional=False, word=None):
-    print(message, flush=True)
+def confirm(message, *, word=None):
+    console = Console()
+    console.message(message, "CHECKPOINT")
     if word:
-        return input(f"Type {word} to continue; anything else cancels: ").strip() == word
+        return input(console.styled(
+            f"  Type {word} to continue; anything else cancels: ", "CHECKPOINT"
+        )).strip() == word
     while True:
-        answer = input("[y/n/q] " if optional else "[Enter] verified/done, [q] cancel: ").strip().lower()
+        prompt = "[Enter] verified/done, [q] cancel: "
+        answer = input(console.styled("  " + prompt, "CHECKPOINT")).strip().lower()
         if answer == "q":
             raise Cancelled("Cancelled at a human checkpoint.")
-        if optional and answer in ("y", "n"):
-            return answer == "y"
-        if not optional and answer == "":
+        if answer == "":
             return True
 
 
 class Runner:
-    def __init__(self, root=ROOT, resource_group=""):
+    def __init__(self, root=ROOT, resource_group="", *, optional=()):
         self.root = root.resolve()
         self.resource_group = resource_group
         self.guide = Guide(self.root / GUIDE)
         self.steps = build_steps()
         self.guide.check_coverage(self.steps)
         self.outcomes = []
-        self.choices = {}
+        self.optional_groups = frozenset(optional)
+        if self.optional_groups - set(OPTIONAL_GROUPS):
+            raise WalkthroughError("Unknown optional exercise; see --help for the supported groups.")
         self.child_env = {}
         self.recovery = {}
         self.original_prompt = None
         self.owned_prompt = None
+        self.console = Console()
 
     def say(self, text, status=""):
-        colors = {"PASS": 32, "MANUAL": 36, "EXPECTED FAIL": 36, "ERROR": 31,
-                  "OBSERVED FAIL": 33, "SKIPPED OPTIONAL": 33, "PLAN": 36}
-        prefix = f"[{status}] " if status else ""
-        if (status in colors and sys.stdout.isatty()
-                and "NO_COLOR" not in os.environ and "UV_NO_COLOR" not in os.environ
-                and not self.child_env.get("UV_NO_COLOR")):
-            prefix = f"\033[{colors[status]}m{prefix}\033[0m"
-        print(prefix + text, flush=True)
+        self.console.message(text, status)
 
     def safe_path(self, relative):
         path = self.root / relative
@@ -426,13 +439,18 @@ class Runner:
                **self.child_env, **(overrides or {})}
         command = [executable, *args[1:]]
         if interactive or private:
+            if not private:
+                self.say("Interactive command: answer its prompts below.", "CHECKPOINT")
             result = subprocess.run(
                 command, cwd=self.root, env=env, shell=False, check=False,
                 capture_output=private, text=True, encoding="utf-8", errors="replace",
             )
             if private and result.returncode:
                 raise WalkthroughError("Private Azure token acquisition failed. Check sign-in; token output was not logged.")
+            if not private:
+                print(flush=True)
             return result.returncode, result.stdout or ""
+        self.console.message("Command output:", style="muted")
         output = []
         with subprocess.Popen(command, cwd=self.root, env=env, shell=False,
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -441,6 +459,7 @@ class Runner:
                 for line in child.stdout:
                     print(line, end="", flush=True)
                     output.append(line)
+                print(flush=True)
                 return child.wait(), ANSI.sub("", "".join(output))
             except BaseException:
                 child.terminate()
@@ -613,7 +632,7 @@ class Runner:
 
     def wait_for_gateway(self):
         for remaining in range(60, 0, -10):
-            self.say(f"Gateway propagation: {remaining}s remaining...")
+            self.say(f"Gateway propagation: {remaining}s remaining...", "WAIT")
             time.sleep(10)
 
     def command(self, step):
@@ -653,9 +672,9 @@ class Runner:
             return self.command(step)
         if step.kind == "manual":
             for query in self.guide.queries(step):
-                self.say("\nKusto query (run it in the portal):\n" + query + "\n")
-            confirm(step.detail)
-            return "MANUAL"
+                self.console.block("Kusto query - run in the portal", query)
+            self.say("Listed for review in the final report; continuing without a prompt.", "REVIEW NEEDED")
+            return "REVIEW NEEDED"
         if step.kind == "cwd":
             self.say(f"Working directory for every child command: {self.root}")
         elif step.kind == "colors":
@@ -689,17 +708,16 @@ class Runner:
             code, output = self.process(self.resolve(step.args), overrides={"OPENAI_LOG": "info"})
             if code:
                 raise WalkthroughError(f"Throttled investigation failed (exit {code}).")
-            confirm("Inspect the actual client retry/429 behavior above. "
-                    "If the demonstration did not occur, cancel rather than claim it did. "
-                    "OPENAI_LOG was scoped to this child and is now restored.")
+            self.say("Review the actual client retry/429 behavior above; it was not automatically verified. "
+                     "OPENAI_LOG was scoped to this child and is now restored.", "REVIEW NEEDED")
+            return "REVIEW NEEDED"
         else:
             raise WalkthroughError(f"Unimplemented action: {step.kind}")
         return "PASS"
 
     def preview(self, step):
         if step.args and step.kind in ("command", "logged-investigation"):
-            suffix = " [then wait 60s for gateway propagation]" if "set-gateway" in step.args else ""
-            return " ".join(step.args) + suffix
+            return " ".join(step.args)
         return {
             "cwd": "Python: run all children with cwd=repository root",
             "copy": f"Python file copy: {step.args[0]} -> {PROMPT}" if step.args else "",
@@ -707,7 +725,7 @@ class Runner:
             "enforce": "Python JSON edit: governance/data-policy.json enforce=true",
             "colors": "Scoped environment: UV_NO_COLOR=1",
             "probe": "Python HTTPS POST; token captured privately only for the 404 probe",
-            "manual": "Human checkpoint: " + step.detail,
+            "manual": "Review without pausing: " + step.detail,
             "edit": "Human prompt-edit checkpoint: " + step.detail,
         }.get(step.kind, step.kind)
 
@@ -715,49 +733,51 @@ class Runner:
         current_lab = None
         complete = False
         exit_code = 1
+        issues = []
         try:
-            self.say("PREL35 | full guided walkthrough" + ("" if execute else " | PLAN ONLY"))
+            self.console.heading("PREL35 | full guided walkthrough")
+            self.say("LIVE EXECUTION - interactive, billable, changes lab state." if execute
+                     else "PLAN ONLY - no commands or changes.", "NOTE" if execute else "PLAN")
             for note in NOTES:
-                self.say("Note: " + note)
+                self.say(note, "NOTE")
             if execute:
                 self.preflight()
             for index, step in enumerate(self.steps, 1):
                 lab, heading = self.guide.context[step.start]
                 if lab != current_lab:
                     current_lab = lab
-                    self.say(f"\n{'=' * 68}\n{lab}\n{'=' * 68}")
-                self.say(f"\n{index:02}/{len(self.steps)}  {step.title}")
-                self.say(f"  {GUIDE}:{step.start}-{step.end} | {heading}")
-                self.say("  " + self.preview(step))
-                if step.optional:
-                    self.say(f"  Optional group: {step.optional}")
+                    self.console.heading(lab)
+                self.console.step(index, len(self.steps), step, heading, self.preview(step), source=GUIDE)
+                if "set-gateway" in step.args:
+                    self.say("Then wait 60s for gateway propagation.", "WAIT")
                 if not execute:
                     for query in self.guide.queries(step):
-                        self.say(query)
-                    self.outcomes.append((lab, "PLAN", 0.0))
+                        self.console.block("Kusto query - run in the portal", query)
+                    self.outcomes.append(Outcome(index, lab, step, "PLAN"))
                     continue
                 started = time.monotonic()
                 try:
-                    if step.optional:
-                        if step.optional not in self.choices:
-                            self.choices[step.optional] = confirm(
-                                f"Include the optional {step.optional} exercise?", optional=True)
-                        if not self.choices[step.optional]:
-                            status = "SKIPPED OPTIONAL"
-                        else:
-                            status = self.action(step)
+                    if step.optional and step.optional not in self.optional_groups:
+                        status = "SKIPPED OPTIONAL"
                     else:
                         status = self.action(step)
-                except (WalkthroughError, OSError, ValueError, urllib.error.URLError, KeyboardInterrupt, EOFError):
-                    self.outcomes.append((lab, "ERROR", time.monotonic() - started))
+                except (WalkthroughError, OSError, ValueError, urllib.error.URLError, KeyboardInterrupt, EOFError) as error:
+                    self.outcomes.append(Outcome(
+                        index, lab, step, "ERROR", time.monotonic() - started,
+                        str(error) or "Cancelled.",
+                    ))
                     raise
                 elapsed = time.monotonic() - started
-                self.outcomes.append((lab, status, elapsed))
+                detail = ""
+                if status == "REVIEW NEEDED":
+                    detail = step.detail or "Review the actual retry/429 behavior in this command's output."
+                self.outcomes.append(Outcome(index, lab, step, status, elapsed, detail))
                 self.say(f"{step.title} ({elapsed:.1f}s)", status)
             complete = True
             exit_code = 0
         except (WalkthroughError, OSError, ValueError, urllib.error.URLError, KeyboardInterrupt, EOFError) as error:
-            self.say(str(error) if str(error) else "Cancelled.", "ERROR")
+            issues.append(str(error) or "Cancelled.")
+            self.say(issues[-1], "ERROR")
         finally:
             if execute and self.owned_prompt is not None:
                 try:
@@ -766,25 +786,49 @@ class Runner:
                 except (WalkthroughError, OSError) as error:
                     complete = False
                     exit_code = 1
-                    self.say(f"Local restoration needs review: {error}", "ERROR")
+                    issues.append(f"Local restoration needs review: {error}")
             if execute and self.recovery:
                 complete = False
                 exit_code = 1
-                self.say("\nCloud state may be partway through an exercise. No automatic cloud rollback was attempted.")
+            if execute:
+                for index in range(len(self.outcomes), len(self.steps)):
+                    step = self.steps[index]
+                    lab, _ = self.guide.context[step.start]
+                    self.outcomes.append(Outcome(index + 1, lab, step, "NOT RUN"))
+            self.console.heading("Walkthrough report")
+            for issue in issues:
+                self.say(issue, "ERROR")
+            if execute and self.recovery:
+                self.say("Cloud state may be partway through an exercise. No automatic cloud rollback was attempted.",
+                         "ERROR")
                 for recovery in self.recovery.values():
-                    self.say("  Recovery: " + recovery)
-            self.say("\nSummary")
-            for lab in dict.fromkeys(item[0] for item in self.outcomes):
-                entries = [item for item in self.outcomes if item[0] == lab]
-                counts = Counter(item[1] for item in entries)
-                self.say(f"  {lab}: " + ", ".join(f"{count} {status}" for status, count in counts.items())
-                         + f" ({sum(item[2] for item in entries):.1f}s)")
+                    self.say("Recovery: " + recovery)
+            for lab in dict.fromkeys(item.lab for item in self.outcomes):
+                entries = [item for item in self.outcomes if item.lab == lab]
+                counts = Counter(item.status for item in entries)
+                self.console.message(lab, style="command")
+                self.console.message(", ".join(f"{count} {status}" for status, count in counts.items())
+                                     + f" | elapsed {sum(item.elapsed for item in entries):.1f}s", indent=4)
+                if execute:
+                    for item in entries:
+                        self.console.message(
+                            f"Step {item.number:02}: {item.step.title}"
+                            + ("" if item.status == "NOT RUN" else f" ({item.elapsed:.1f}s)"),
+                            item.status, indent=4,
+                        )
+                        if item.detail:
+                            self.console.message(item.detail, indent=6)
+                            self.console.message(
+                                f"Source: {GUIDE}:{item.step.start}-{item.step.end}", indent=6,
+                                style="muted",
+                            )
             if not execute:
                 self.say(f"{len(self.steps)} planned actions; {len(self.guide.blocks)} command/query blocks mapped; "
                          f"{len(self.guide.commands)} terminal commands individually accounted for. "
                          "No subprocesses, prompts, writes, waits or Azure calls were made.", "PLAN")
             elif complete:
-                self.say("Walkthrough finished, including human-verified steps. "
+                pending = sum(item.status == "REVIEW NEEDED" for item in self.outcomes)
+                self.say(f"Automated flow finished; {pending} manual review item(s) remain unverified. "
                          "OBSERVED FAIL entries are real quality/security outcomes, not successful gates.")
             else:
                 self.say("INCOMPLETE: later steps were not executed. Evidence and human decisions were retained.", "ERROR")
@@ -797,9 +841,11 @@ def main(argv=None):
     mode.add_argument("--plan", action="store_true", help="Print source-mapped coverage without side effects (default).")
     mode.add_argument("--execute", action="store_true", help="Run the billable walkthrough with real human checkpoints.")
     parser.add_argument("--resource-group", default="", help="Existing lab resource group; must match .env if present.")
+    parser.add_argument("--optional", action="append", choices=OPTIONAL_GROUPS, default=[],
+                        help="Include an optional exercise; repeat to select several. Default: skip all.")
     args = parser.parse_args(argv)
     try:
-        return Runner(resource_group=args.resource_group).run(execute=args.execute)
+        return Runner(resource_group=args.resource_group, optional=args.optional).run(execute=args.execute)
     except (WalkthroughError, OSError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
