@@ -12,11 +12,32 @@ subscription-level `LOD Reader` and `LOD Contributor` learners; neither grants r
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, on Tearing Down, blocking | [teardown.ps1](teardown.ps1): deletes and purges the Foundry account, which Skillable requires for `Microsoft.CognitiveServices/accounts` |
 | **Access control policy** | [acp-v4.json](acp-v4.json) |
 | **Instructions** | [instructions/skillable/content.md](../../instructions/skillable/content.md), linked from GitHub |
-| **Lab VM** | Azure CLI, PowerShell 7 for the lab's terminal examples, [uv](https://docs.astral.sh/uv/), this repository cloned, and in it `uv sync` |
+| **Lab VM** | Azure CLI, Git, PowerShell 7 for the lab's terminal examples, [uv](https://docs.astral.sh/uv/), the source download below, and then `uv sync` in the lab directory |
 | **Subscription** | Access to `gpt-5-mini` and `gpt-5-nano` (`GlobalStandard`). Without it the template fails with `SpecialFeatureOrQuotaIdRequired`; ask Skillable to enable both models |
 
 Replace the old Foundry-only setup and role-cleanup snippets with this pair. Keep the separate Foundry
 deletion/purge action. See [the setup sequence](../README.md#skillable-post-build-setup) for roles and learner commands.
+
+## VM source download
+
+Use [lifecycle_github_repo_download.ps1](lifecycle_github_repo_download.ps1) in a blocking
+Windows VM PowerShell lifecycle action. GitHub already supplies the source ZIP; no packaging
+pipeline is needed.
+
+The script downloads `microsoft/ignite26-PREL35` at `main` into
+`C:\Users\LabUser\Desktop\ignite26-PREL35`. In the copy pasted into the VM lifecycle action,
+replace `PASTE_YOUR_PAT_HERE` in the `GitHubToken` parameter with the read-only Contents token.
+When running the file directly, pass `-GitHubToken` or supply an action-scoped `GITHUB_TOKEN` environment variable.
+Do not hardcode the token, persist it in the VM's user/system environment, or save it in the image.
+Use `Ref` to select another branch, tag, or a pinned commit, and `TargetPath` for another destination
+that does not exist or is an empty folder.
+
+GitHub source ZIPs contain no `.git` history. The script creates a neutral, single-commit baseline
+on `main` with no remotes, retaining hidden source files. An existing empty directory is filled without
+replacing the directory itself; existing files (including hidden files) are never overwritten.
+You can pre-create and trust `C:\Users\LabUser\Desktop\ignite26-PREL35` in VS Code before installation;
+there is no need to trust the entire Desktop. Temporary download/extraction files are removed on success or failure.
+Run `uv sync` in the installed lab directory afterward; this action does not deploy Azure resources.
 
 ## Resource template
 

@@ -1,6 +1,9 @@
 """Offline runner checks. Run directly; not collected as part of the project test suite.
 
     uv run --no-sync tests/e2e/check_runner.py
+
+All offline e2e checks:
+    uv run --no-sync python -B -m unittest discover -s tests/e2e -p "check_*.py"
 """
 
 import contextlib
@@ -343,6 +346,87 @@ class RunnerChecks(unittest.TestCase):
             "Not approved. Fix the failures and run intake again.",
         ])
         self.assertEqual(self.runner.check_result(step, 1, text, None), "EXPECTED FAIL")
+
+    def test_scripted_decision_commands_do_not_prompt_and_validate_test_records(self):
+        agents = {"triage": {"version": "1", "model": "gpt-5-mini"}}
+        self.runner.tested_agents = agents
+        for expect, alert, approved, disposition in (
+            ("decision-approve", "ALT-1008", True, "escalate"),
+            ("decision-override", "ALT-1014", False, "request_info"),
+        ):
+            step = lab.Step(825, 827, "fixture decision", args=("uv", "run", "src/decide.py", alert),
+                            expect=expect, interactive=True)
+
+            def record(args, **kwargs):
+                self.assertFalse(kwargs["interactive"])
+                self.assertEqual(args[2:4], ["tests/e2e/decision_driver.py", expect.removeprefix("decision-")])
+                decision = {
+                    "alert": alert, "analyst": "lab-test-automation", "mode": "lab-test",
+                    "approved_recommendation": approved, "decision": disposition,
+                    "recommendation": "escalate", "reviewer": "agree", "reason": "Fixture test reason",
+                    "agents": agents,
+                }
+                path = self.root / self.runner.decision_path()
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with path.open("a") as stream:
+                    stream.write(json.dumps(decision) + "\n")
+                return 0, ""
+
+            with self.subTest(expect=expect), patch.object(self.runner, "process", side_effect=record):
+                self.assertEqual(self.runner.command(step), "PASS")
+
+    def test_interactive_decision_accepts_approval_even_in_override_exercise(self):
+        self.runner.interactive_decisions = True
+        step = lab.Step(833, 835, "fixture override", args=("uv", "run", "src/decide.py", "ALT-1014"),
+                        expect="decision-override", interactive=True)
+        self.write("evidence/decisions.jsonl", (json.dumps({
+            "alert": "ALT-1014", "analyst": "fixture-analyst", "approved_recommendation": True,
+            "decision": "escalate", "recommendation": "escalate", "reviewer": "agree", "reason": "",
+            "agents": {"triage": {"version": "1"}},
+        }) + "\n").encode())
+        self.assertEqual(self.runner.check_result(step, 0, "", 0), "PASS")
+        self.assertEqual(self.runner.command_arguments(step), step.args)
+
+    def test_scripted_decision_rejects_wrong_provenance_versions_and_branch(self):
+        agents = {"triage": {"version": "1"}}
+        self.runner.tested_agents = agents
+        step = lab.Step(833, 835, "fixture override", args=("uv", "run", "src/decide.py", "ALT-1014"),
+                        expect="decision-override")
+        record = {
+            "alert": "ALT-1014", "analyst": "lab-test-automation", "mode": "lab-test",
+            "approved_recommendation": False, "decision": "request_info",
+            "recommendation": "escalate", "reviewer": "agree", "reason": "Fixture reason",
+            "agents": agents,
+        }
+        for change in (
+            {"mode": "human"}, {"analyst": "fixture-human"},
+            {"agents": {"triage": {"version": "old"}}}, {"reason": ""},
+            {"approved_recommendation": True, "decision": "escalate"},
+        ):
+            with self.subTest(change=change):
+                self.write(self.runner.decision_path(), (json.dumps(record | change) + "\n").encode())
+                with self.assertRaises(lab.WalkthroughError):
+                    self.runner.check_result(step, 0, "", 0)
+
+    def test_scripted_intake_is_explicitly_marked_and_rejects_human_approval(self):
+        step = lab.Step(843, 845, "fixture approval", args=("uv", "run", "src/intake.py", "UC-001"),
+                        expect="intake-approve")
+        self.assertEqual(self.runner.command_arguments(step), (
+            "uv", "run", "tests/e2e/decision_driver.py", "intake", "UC-001"))
+        for mode, actor, accepted in (
+            ("lab-test", "lab-test-automation", True), ("human", "fixture-analyst", False),
+        ):
+            path = self.root / self.runner.register_path()
+            before = path.read_bytes() if path.exists() else b""
+            self.write(self.runner.register_path(), [{"id": "UC-001", "approval": {
+                "mode": mode, "approved_by": actor, "agents": {"triage": {"version": "1"}},
+                "evidence": ["fixture-gate", "fixture-redteam"],
+            }}])
+            if accepted:
+                self.assertEqual(self.runner.check_result(step, 0, "", before), "PASS")
+            else:
+                with self.assertRaises(lab.WalkthroughError):
+                    self.runner.check_result(step, 0, "", before)
 
     def test_interactive_children_inherit_terminal_without_canned_input(self):
         with (patch.object(lab.shutil, "which", return_value="/fixture/uv"),
