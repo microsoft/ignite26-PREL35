@@ -1,8 +1,58 @@
-"""Prepare an existing lab's Search index and knowledge base, without publishing prompt agents."""
+"""Initialize the local lab repository and prepare Search, without publishing prompt agents."""
 import argparse
+import os
+from pathlib import Path
+import tempfile
 
 from scripts import create_search_index
-from scripts.common import ROOT, SetupError, az_json, check_target, cli, message, read_settings, write_settings
+from scripts.common import ROOT, SetupError, az_json, check_target, cli, command, message, read_settings, write_settings
+
+
+def initialize_repository():
+    root = ROOT.resolve()
+    metadata = root / ".git"
+    if metadata.is_symlink():
+        raise SetupError("Refusing linked Git metadata. Use a regular lab checkout.")
+    if not metadata.exists() and not (root / ".gitignore").is_file():
+        raise SetupError("The lab .gitignore is missing. No Git baseline was created.")
+    safe = command(["git", "config", "--global", "--get-all", "safe.directory"], allow_failure=True)
+    if safe.returncode not in (0, 1):
+        raise SetupError("Could not read this user's Git configuration. Run setup as the learner account.")
+    if root.as_posix() not in safe.stdout.splitlines():
+        command(["git", "config", "--global", "--add", "safe.directory", root.as_posix()])
+    if metadata.exists():
+        result = command(["git", "-C", str(root), "rev-parse", "--show-toplevel"])
+        if root != Path(result.stdout.strip()).resolve():
+            raise SetupError("Git points to a different repository. Existing history was not changed.")
+        message("Existing Git checkout preserved; this user's trust is limited to the lab folder.")
+        return
+
+    with tempfile.TemporaryDirectory(prefix="prel35-git-") as temporary:
+        hooks = Path(temporary) / "hooks"
+        hooks.mkdir()
+        excludes = Path(temporary) / "excludes"
+        excludes.touch()
+        git = ["git", "-C", str(root), "-c", f"core.hooksPath={hooks}",
+               "-c", f"core.excludesFile={excludes}", "-c", "commit.gpgsign=false"]
+        command([*git, "init", "--initial-branch=main", "--template="])
+        command([*git, "config", "core.autocrlf", "false"])
+        command([*git, "config", "core.filemode", "false"])
+        command([*git, "add", "--all"])
+        identity = {
+            "GIT_AUTHOR_NAME": "Lab baseline", "GIT_AUTHOR_EMAIL": "lab@example.invalid",
+            "GIT_COMMITTER_NAME": "Lab baseline", "GIT_COMMITTER_EMAIL": "lab@example.invalid",
+        }
+        before = {name: os.environ.get(name) for name in identity}
+        try:
+            os.environ.update(identity)
+            command([*git, "commit", "-m", "Initial lab baseline"])
+        finally:
+            for name, value in before.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+    message("Created a clean Git baseline as the current user (main, one commit, no remotes).", "green")
 
 
 def find_resource(resources, resource_group, resource_type, name="", kind=""):
@@ -103,6 +153,7 @@ def main(argv=None):
     parser.add_argument("--foundry-name", default="")
     parser.add_argument("--search-name", default="")
     args = parser.parse_args(argv)
+    initialize_repository()
     message("Reading the existing lab resources.")
     settings = discover_settings(args.resource_group, args.foundry_name, args.search_name)
     path = ROOT / ".env"

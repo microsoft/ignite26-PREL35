@@ -32,12 +32,19 @@ Do not hardcode the token, persist it in the VM's user/system environment, or sa
 Use `Ref` to select another branch, tag, or a pinned commit, and `TargetPath` for another destination
 that does not exist or is an empty folder.
 
-GitHub source ZIPs contain no `.git` history. The script creates a neutral, single-commit baseline
-on `main` with no remotes, retaining hidden source files. An existing empty directory is filled without
-replacing the directory itself; existing files (including hidden files) are never overwritten.
+GitHub source ZIPs contain no `.git` history. The lifecycle action downloads sources only and does
+not run Git or write the lifecycle account's global Git configuration. An existing empty directory
+is filled without replacing the directory itself; existing files (including hidden files) are never overwritten.
 You can pre-create and trust `C:\Users\LabUser\Desktop\ignite26-PREL35` in VS Code before installation;
 there is no need to trust the entire Desktop. Temporary download/extraction files are removed on success or failure.
-Run `uv sync` in the installed lab directory afterward; this action does not deploy Azure resources.
+As **LabUser**, run `uv run setup-lab --resource-group <your-resource-group>` as shown in the lab.
+Setup creates the neutral, single-commit Git baseline on `main` with no remotes before saving `.env`,
+and registers only this folder as trusted in LabUser's Git configuration. Existing Git history and edits are preserved.
+This addresses administrator-owned folders without writing the trust exception under Administrator or SYSTEM.
+
+There is no separate Git initialization command. The e2e runner follows the guide's existing
+`setup-lab --resource-group ...` step and checks Git only after that setup completes.
+The download action itself does not deploy Azure resources or install dependencies.
 
 ## Resource template
 

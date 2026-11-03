@@ -9,6 +9,7 @@ from scripts import common, configure_evidence_agent, setup_lab, setup_webiq
 @pytest.fixture
 def setup_steps(lab_root, azure_resources, azd_environment, monkeypatch):
     steps = []
+    monkeypatch.setattr(setup_lab, "initialize_repository", Mock())
     monkeypatch.setattr(setup_lab.create_search_index, "main", Mock(side_effect=lambda args: steps.append(("index", args))))
     monkeypatch.setattr(setup_webiq, "main", Mock(side_effect=AssertionError("Web IQ belongs to a later step")))
     monkeypatch.setattr(
@@ -21,6 +22,20 @@ def setup_steps(lab_root, azure_resources, azd_environment, monkeypatch):
     return steps
 
 
+def test_normal_setup_initializes_git_before_discovering_azure(lab_root, setup_steps, monkeypatch):
+    calls = []
+    discover = setup_lab.discover_settings
+    monkeypatch.setattr(setup_lab, "initialize_repository", Mock(side_effect=lambda: calls.append("git")))
+
+    def discover_after_git(*args):
+        calls.append("azure")
+        return discover(*args)
+
+    monkeypatch.setattr(setup_lab, "discover_settings", discover_after_git)
+    assert setup_lab.main(["--resource-group", "fixture"]) == 0
+    assert calls == ["git", "azure"]
+
+
 @pytest.mark.parametrize("interactive", [True, False])
 def test_setup_seeds_local_corpus_and_kb_without_later_integrations(
     lab_root, lab_settings, setup_steps, azd_environment, capsys, monkeypatch, interactive,
@@ -29,6 +44,7 @@ def test_setup_seeds_local_corpus_and_kb_without_later_integrations(
     path = lab_root / ".env"
     path.write_text('# custom settings\nWEBIQ_API_KEY="fixture-secret"\nOBO_SCOPE=keep\n')
     assert setup_lab.main(["--resource-group", "fixture"]) == 0
+    setup_lab.initialize_repository.assert_called_once()
     assert [step[0] for step in setup_steps] == ["index"]
     args = setup_steps[0][1]
     assert args[args.index("--data") + 1] == str(lab_root / "data/investigator/schemes.json")

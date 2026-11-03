@@ -474,10 +474,6 @@ class Runner:
             raise WalkthroughError("Live execution needs --resource-group or AZURE_RESOURCE_GROUP in .env.")
         for relative in (PROMPT, DATA_POLICY, REGISTER, Path("evidence")):
             self.safe_path(relative)
-        code, _ = self.process(["git", "diff", "--quiet", "HEAD", "--",
-                                str(PROMPT), str(DATA_POLICY), str(REGISTER)])
-        if code:
-            raise WalkthroughError("Prompt/governance files have existing edits. Use a fresh lab checkout; nothing was overwritten.")
         if checked_json(self.root / DATA_POLICY).get("enforce") is not False:
             raise WalkthroughError("The walkthrough starts before data-policy enforcement. Existing policy was not reset.")
         register = checked_json(self.root / REGISTER)
@@ -692,6 +688,12 @@ class Runner:
         interactive = step.interactive and (not step.expect.startswith("decision-") or self.interactive_decisions)
         code, output = self.process(args, interactive=interactive)
         status = self.check_result(step, code, output, before)
+        if "setup-lab" in args:
+            code, _ = self.process(["git", "diff", "--quiet", "HEAD", "--",
+                                    str(PROMPT), str(DATA_POLICY), str(REGISTER)])
+            if code:
+                raise WalkthroughError("Git baseline check failed or prompt/governance files have existing edits. "
+                                       "Nothing was overwritten.")
         if "create-agents" in args and args[-1] != "gpt-5-nano" and self.owned_prompt is None:
             self.recovery.pop("approved agents", None)
         if "set-gateway" in args:
@@ -773,6 +775,8 @@ class Runner:
                      else "PLAN ONLY - no commands or changes.", "NOTE" if execute else "PLAN")
             self.say("Decision mode: real interactive analyst decisions." if self.interactive_decisions else
                      "Decision mode: LAB TEST automation; decisions and intake are not human approvals.", "NOTE")
+            self.say("The guide's setup-lab step initializes Git as the current user. "
+                     "Git checks run afterward; plan mode never initializes Git.", "NOTE")
             for note in NOTES:
                 self.say(note, "NOTE")
             if execute:

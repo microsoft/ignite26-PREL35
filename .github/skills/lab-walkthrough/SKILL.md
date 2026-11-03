@@ -84,6 +84,13 @@ Default the testing runner to scripted lab-test decisions and intake approval.
 Offer `--interactive-decisions` to use real analyst input and ordinary intake.
 Do not ask for confirmation on each scripted decision.
 
+Allow a source-only checkout without `.git` during startup preflight. The guide's
+existing `uv run setup-lab --resource-group ...` step creates the Git baseline and
+scoped trust exception under the learner account, preserving existing history and
+edits. Defer Git-based checks until that step completes successfully. Do not add
+an initialization flag, duplicate setup, run it ahead of the guide, or reimplement
+Git initialization/global-config logic in the generated runner.
+
 Minimize prompts: retain one startup authorization, required sign-ins/secrets,
 analyst inputs only with `--interactive-decisions`, and completion of an explicitly selected prompt edit.
 Run the model-create policy test under the startup authorization, without another confirmation. Do not pause
