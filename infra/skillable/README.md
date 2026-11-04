@@ -18,6 +18,13 @@ subscription-level `LOD Reader` and `LOD Contributor` learners; neither grants r
 Replace the old Foundry-only setup and role-cleanup snippets with this pair. Keep the separate Foundry
 deletion/purge action. See [the setup sequence](../README.md#skillable-post-build-setup) for roles and learner commands.
 
+The role-setup action keeps timestamped progress in its `LogPath` file and throws a compact failure
+through PowerShell's error handling. It returns only `$true` on success, without console writes or
+`Write-Host` progress that could disrupt Skillable's result parser or add bulky CLIXML records.
+Failure summaries are limited to 1,500 characters plus a truncation marker; the local log includes the
+full message and script stack. The default `/tmp` log on a Linux cloud runner is not on the learner VM
+and is not automatically uploaded or retained by this script.
+
 ## VM source download
 
 Use [lifecycle_github_repo_download.ps1](lifecycle_github_repo_download.ps1) in a blocking
