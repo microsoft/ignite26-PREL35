@@ -9,11 +9,8 @@ param(
     [string]$LogPath = ''
 )
 $ErrorActionPreference = 'Stop'
-if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Select PowerShell, not Legacy PowerShell, for this cloud action.' }
-if (-not $LogPath) { $LogPath = Join-Path ([IO.Path]::GetTempPath()) "prel35-roles-$([guid]::NewGuid()).log" }
-$LogPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($LogPath)
-[IO.Directory]::CreateDirectory((Split-Path $LogPath -Parent)) | Out-Null
-Start-Transcript -LiteralPath $LogPath -Append | Out-Null
+$ProgressPreference = 'SilentlyContinue'
+$logReady = $false
 $step = 'Starting role assignments'
 $assignmentOwner = 'PREL35 Skillable lifecycle'
 $roleNames = @{
@@ -27,9 +24,15 @@ $roleNames = @{
     '312a565d-c81f-4fd8-895a-4e21e48d571c' = 'API Management Service Contributor'
 }
 
+function Write-SetupLog([string]$Message) {
+    if ($script:logReady) {
+        Add-Content -LiteralPath $LogPath -Value ("[{0}] {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message) -Encoding utf8
+    }
+}
+
 function Write-SetupStep([string]$Message) {
     $script:step = $Message
-    Write-Host ("[{0}] {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message)
+    Write-SetupLog $Message
 }
 
 function Invoke-SetupRequest([string]$Method, [string]$Uri, [object]$Body) {
@@ -37,6 +40,7 @@ function Invoke-SetupRequest([string]$Method, [string]$Uri, [object]$Body) {
     if ($address.Scheme -ne 'https' -or $address.Host -ne 'management.azure.com' -or
         $address.UserInfo -or $address.Port -ne 443) { throw 'Refusing to send Azure credentials to an unexpected endpoint.' }
     for ($attempt = 0; $attempt -lt 10; $attempt++) {
+        Write-SetupLog "$Method $($address.AbsolutePath) (attempt $($attempt + 1))."
         $token = (Get-AzAccessToken -ResourceUrl 'https://management.azure.com/' -ErrorAction Stop).Token
         if ($token -is [securestring]) { $token = [pscredential]::new('token', $token).GetNetworkCredential().Password }
         if (-not $token) { throw 'Skillable did not provide an Azure management access token.' }
@@ -49,14 +53,17 @@ function Invoke-SetupRequest([string]$Method, [string]$Uri, [object]$Body) {
             $parameters.ContentType = 'application/json; charset=utf-8'
         }
         try { $response = Invoke-WebRequest @parameters }
-        catch { throw "$Method $($address.AbsolutePath) did not complete. Check connectivity and rerun." }
+        catch {
+            $detail = $_.Exception.GetBaseException().Message.Replace($token, '[redacted]')
+            throw "$Method $($address.AbsolutePath) did not complete: $detail"
+        }
         $status = [int]$response.StatusCode
         if ($status -ge 200 -and $status -lt 300) {
             if ($response.Content) { return ($response.Content | ConvertFrom-Json -AsHashtable) }
             return @{}
         }
         if ($status -in 403, 429, 500, 502, 503, 504 -and $attempt -lt 9) {
-            Write-Host "Waiting for Azure permissions/availability: $Method $($address.AbsolutePath) (HTTP $status)."
+            Write-SetupLog "Waiting for Azure permissions/availability: $Method $($address.AbsolutePath) (HTTP $status)."
             Start-Sleep -Seconds ([Math]::Min([Math]::Pow(2, $attempt + 1), 30))
             continue
         }
@@ -96,7 +103,7 @@ function Set-SetupRole([string]$Scope, [string]$Principal, [string]$Role, [strin
     $existing = @(Get-SetupCollection "https://management.azure.com$Scope/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01&`$filter=atScope()" | Where-Object {
         $_.properties.principalId -eq $Principal -and $_.properties.roleDefinitionId -like "*/$Role"
     })
-    if ($existing.Count) { Write-Host "Already assigned: $($roleNames[$Role]) -> $Principal on $Scope."; return }
+    if ($existing.Count) { Write-SetupLog "Already assigned: $($roleNames[$Role]) -> $Principal on $Scope."; return }
     $name = Get-SetupRoleName $Scope $Principal $Role
     Invoke-SetupRequest PUT "https://management.azure.com$Scope/providers/Microsoft.Authorization/roleAssignments/${name}?api-version=2022-04-01" @{
         properties = @{
@@ -105,7 +112,7 @@ function Set-SetupRole([string]$Scope, [string]$Principal, [string]$Role, [strin
             description = $assignmentOwner
         }
     } | Out-Null
-    Write-Host "Assigned: $($roleNames[$Role]) -> $Principal on $Scope."
+    Write-SetupLog "Assigned: $($roleNames[$Role]) -> $Principal on $Scope."
 }
 
 function Select-SetupResource($Resources, [string]$Type, [string]$Name = '') {
@@ -115,6 +122,11 @@ function Select-SetupResource($Resources, [string]$Type, [string]$Name = '') {
 }
 
 try {
+    if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Select PowerShell, not Legacy PowerShell, for this cloud action.' }
+    if (-not $LogPath) { $LogPath = Join-Path ([IO.Path]::GetTempPath()) "prel35-roles-$([guid]::NewGuid()).log" }
+    $LogPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($LogPath)
+    [IO.Directory]::CreateDirectory((Split-Path $LogPath -Parent)) | Out-Null
+    $logReady = $true
     Write-SetupStep "Starting Skillable role setup. Log file: $LogPath"
     $script:subscription = "$((Get-AzContext).Subscription.Id)"
     if (-not $script:subscription) { throw 'No Skillable Azure context. Select Execute Script in Cloud Platform / Azure / PowerShell.' }
@@ -160,13 +172,13 @@ try {
     Set-SetupRole $foundry.id $searchDetails.identity.principalId '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd' 'ServicePrincipal'
     Set-SetupRole $search.id $project.identity.principalId '1407120a-92aa-4202-b7e9-c0e197c71c8f' 'ServicePrincipal'
     Write-SetupStep 'Role assignments completed. No index, documents, knowledge bases or agents were created.'
-    Write-Host 'Next, the learner runs: pwsh -File .\scripts\setup_lab.ps1 -ResourceGroup <lab-resource-group>'
+    Write-SetupLog 'Next, the learner runs: pwsh -File .\scripts\setup_lab.ps1 -ResourceGroup <lab-resource-group>'
     $true
 } catch {
     $message = "Skillable setup failed during '$step': $($_.Exception.Message)"
-    Write-Host $message
-    Write-Host $_.ScriptStackTrace
-    throw $message
-} finally {
-    Stop-Transcript | Out-Null
+    $stack = $_.ScriptStackTrace
+    $summary = $message -replace '\s+', ' '
+    if ($summary.Length -gt 1500) { $summary = $summary.Substring(0, 1500) + ' [truncated]' }
+    try { Write-SetupLog "$message`n$stack" } catch {}
+    throw $summary
 }

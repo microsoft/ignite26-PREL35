@@ -111,7 +111,7 @@ Each lab builds on the one before, so work through them in order.
 - **Nothing you do affects anyone else.** Your resource group, agents and gateway are yours alone, and are deleted when the lab ends.
 - **If a step fails,** read the error first: most failures name what's missing, such as a sign-in or a setting that hasn't applied yet (gateway changes take about a minute). Then ask a proctor.
 
-## Next
+## Click next to continue
 
 Start with Lab 0 - Setup.
 
@@ -317,7 +317,7 @@ You get `404`: only agents published as gateway operations can be reached.
 - Who decides the outcome of an alert?
   *A named analyst. The agents only recommend.*
 
-## Next
+## Click next to continue
 
 Continue to Lab 1 - AgentOps.
 
@@ -521,7 +521,7 @@ git checkout src/agents/triage.md
 uv run create-agents
 ```
 
-## Next
+## Click next to continue
 
 Continue to Lab 2 - Security and trust.
 
@@ -703,7 +703,7 @@ Then open the **Foundry portal** `https://ai.azure.com`, select the `fincrime` p
 
 Together with the release gate's Evidence Pack, these are the security input to the approval in Lab 3.
 
-## Next
+## Click next to continue
 
 Continue to Lab 3 - Governance.
 
@@ -867,7 +867,7 @@ The deployment is refused. The error code depends on what your lab account may d
 
 These are two separate controls. Role-based access decides *who* can deploy; Azure Policy decides *what* can be deployed, even by someone who is allowed to deploy. Nobody needs to remember the approved list: the platform enforces it, whoever deploys and however they do it.
 
-## Next
+## Click next to continue
 
 Continue to Lab 4 - Solution Optimization.
 
