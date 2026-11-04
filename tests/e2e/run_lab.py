@@ -31,7 +31,7 @@ from walkthrough_console import Console
 
 ROOT = Path(__file__).resolve().parents[2]
 GUIDE = Path("instructions/skillable/content.md")
-SOURCE_SHA256 = "98e9a9bef36d9c957c380eae61ef4070516aad195429480ff186af8c16346fb6"
+SOURCE_SHA256 = "df8070e84286d2753a9d2cda84934d5ce3cabbfa139de19ccb6af3a206e3a44f"
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 PROMPT = Path("src/agents/triage.md")
 DATA_POLICY = Path("governance/data-policy.json")
@@ -41,8 +41,6 @@ NOTES = (
     "Azure must already be provisioned. The runner never assigns roles or bypasses policy.",
     "Gateway updates need APIM permissions AND a Skillable policy allowing "
     "Microsoft.ApiManagement/service/namedValues at every inherited scope.",
-    "The guide's caller-cost query variation (line 1001) drops Caller during earlier "
-    "aggregation. Review that variation with the proctor; do not claim it ran unchanged.",
 )
 
 
@@ -146,8 +144,8 @@ def build_steps():
         manual(460, 472, "Inspect a passing Evidence Pack",
                "Open report.md, manifest.json and results.json; inspect versions, model, hashes and source commit."),
         manual(474, 496, "Inspect traces and the Foundry AI judge",
-               "Run the displayed Kusto query in Application Insights Logs, then inspect Triage task adherence "
-               "in Foundry Evaluations. This is a human-verified portal step."),
+               "Run the displayed Kusto query in Application Insights Logs, then open the Release gate run in "
+               "Foundry Evaluations and read Task adherence and its reasons. This is a human-verified portal step."),
         manual(498, 500, "Review the release pipeline",
                "Read .github/workflows/release-gate.yml. Do not execute a deployment pipeline."),
         Step(504, 504, "Edit the smaller-model prompt yourself", "edit", optional="tuning",
@@ -236,13 +234,12 @@ def build_steps():
         Step(966, 970, "Investigate with scoped OPENAI_LOG=info", "logged-investigation",
              args=("uv", "run", "src/investigate.py", "ALT-1001")),
         switch(974, 976, "token-limit", "200000"),
-        manual(980, 999, "Attribute cost by cost center",
+        manual(980, 1000, "Attribute cost by cost center",
                "Run the displayed Kusto query in Application Insights Logs and inspect unassigned costs."),
-        manual(1001, 1001, "Review the caller-attribution query discrepancy",
-               "The suggested one-line Caller substitution loses customDimensions during aggregation. "
-               "Ask the proctor for the corrected caller-preserving query and verify it in the portal. "
-               "If unavailable, leave this review item unresolved; it is not an automatic pass."),
-        manual(1005, 1025, "Wrap up Labs 0-4",
+        manual(1002, 1002, "Attribute cost by caller",
+               "Change by CostCenter on the query's last summarize line to by Caller, run it again in the portal, "
+               "and check the cost per person."),
+        manual(1006, 1026, "Wrap up Labs 0-4",
                "Explain cost per alert, cost attribution and the cost/quality tradeoff from your actual results, "
                "then answer each stakeholder from the evidence you produced."),
     ]
