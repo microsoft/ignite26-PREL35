@@ -18,12 +18,20 @@ subscription-level `LOD Reader` and `LOD Contributor` learners; neither grants r
 Replace the old Foundry-only setup and role-cleanup snippets with this pair. Keep the separate Foundry
 deletion/purge action. See [the setup sequence](../README.md#skillable-post-build-setup) for roles and learner commands.
 
-The role-setup action keeps timestamped progress in its `LogPath` file and throws a compact failure
+The role-setup and role-cleanup actions keep timestamped progress in their `LogPath` files and throw a compact failure
 through PowerShell's error handling. It returns only `$true` on success, without console writes or
 `Write-Host` progress that could disrupt Skillable's result parser or add bulky CLIXML records.
 Failure summaries are limited to 1,500 characters plus a truncation marker; the local log includes the
 full message and script stack. The default `/tmp` log on a Linux cloud runner is not on the learner VM
 and is not automatically uploaded or retained by this script.
+
+When diagnosing a lifecycle failure, include the action's configured script and the complete error.
+`#< CLIXML` is PowerShell's serialized output, not the underlying error; progress records alone do not
+identify the failure. Neither role script accepts a `GroupId` parameter. An empty `GroupId` error
+needs the failing command from the configured action or Skillable's wrapper before it can be traced.
+An operation-canceled message alone does not distinguish an action timeout from a canceled lab run.
+Updating these files does not update scripts already pasted into Studio; replace the corresponding
+action contents before retrying.
 
 ## VM source download
 

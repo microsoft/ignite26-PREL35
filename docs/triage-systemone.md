@@ -142,6 +142,30 @@ held-out accuracy or latency guarantees. Warm-up and network conditions affect
 timings. Decision-1 is a model and
 its probabilities are not established as calibrated confidence.
 
+## Review a recommendation with Decision-1
+
+`src/decision1_reviewer.py` asks Decision-1 whether a triage recommendation is the
+one the bank's rules support. It returns only a verdict (`agree` or `disagree`)
+and a confidence, with no issue list. The rubric in `src/prompts/decision1_reviewer.md`
+is followed by the triage rules from `decision1.md`, so the rules are defined once.
+The reviewer sees the recommended disposition and any reasons, never the triage
+confidence. A service failure has no verdict and is never read as `agree`.
+
+`src/investigate_decisions.py` triages each alert with Decision-1, then reviews each
+recommendation using the reviewer's own case view under the data policy. No GPT is involved.
+
+```bash
+# Triage and review all 14 cases.
+uv run python src/investigate_decisions.py --tenant-id <lab-tenant-id>
+
+# Also give the reviewer every wrong disposition; it should disagree with all of them.
+uv run python src/investigate_decisions.py --tenant-id <lab-tenant-id> --challenge
+```
+
+Evidence goes to ignored `evidence/decision1-investigations/`. A run exits nonzero if triage
+differs from a golden label, the reviewer disagrees with a correct recommendation or agrees
+with a wrong one, or any call is unavailable.
+
 ## Compare speed and cost with gpt-5-mini
 
 ```bash
@@ -165,6 +189,28 @@ A measured run on the 14 golden cases (median of three):
 
 These are indicative results on a small, known dataset; timings vary with
 warm-up, rate limits and network conditions.
+
+## Compare the two investigations
+
+`src/compare_investigations.py` runs every golden alert through the classic investigation (GPT `triage` and
+`reviewer` agents through API Management) and through `investigate_decisions.py`, both on the same
+policy-enforced case files, and prints a side-by-side table. Evidence goes to `evidence/investigation-comparison/`.
+
+```bash
+uv run python src/compare_investigations.py --workers 4
+```
+
+One run on the 14 golden alerts:
+
+| | Classic (GPT) | Decision-1 |
+|---|---|---|
+| Wall time | 47.3 s | 2.8 s |
+| Cost per alert | $0.00298 | $0.00020 |
+| Triage matches golden | 13/14 | 14/14 |
+| Reviewer agrees | 12/14 | 14/14 |
+
+The classic reviewer also returns issues; Decision-1 returns a verdict and confidence only. Fourteen alerts and
+one run are indicative, not statistical.
 
 ## Publish and exercise the single-case agent
 

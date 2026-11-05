@@ -6,12 +6,9 @@ param(
     [string]$LogPath = ''
 )
 $ErrorActionPreference = 'Stop'
-if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Select PowerShell, not Legacy PowerShell, for this cloud action.' }
-if (-not $LogPath) { $LogPath = Join-Path ([IO.Path]::GetTempPath()) "prel35-roles-$([guid]::NewGuid()).log" }
-$LogPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($LogPath)
-[IO.Directory]::CreateDirectory((Split-Path $LogPath -Parent)) | Out-Null
-Start-Transcript -LiteralPath $LogPath -Append | Out-Null
-$step = 'Starting role assignments'
+$ProgressPreference = 'SilentlyContinue'
+$logReady = $false
+$step = 'Starting role teardown'
 $assignmentOwner = 'PREL35 Skillable lifecycle'
 $roleNames = @{
     '53ca6127-db72-4b80-b1b0-d745d6d5456d' = 'Foundry User'
@@ -24,9 +21,15 @@ $roleNames = @{
     '312a565d-c81f-4fd8-895a-4e21e48d571c' = 'API Management Service Contributor'
 }
 
+function Write-SetupLog([string]$Message) {
+    if ($script:logReady) {
+        Add-Content -LiteralPath $LogPath -Value ("[{0}] {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message) -Encoding utf8
+    }
+}
+
 function Write-SetupStep([string]$Message) {
     $script:step = $Message
-    Write-Host ("[{0}] {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message)
+    Write-SetupLog $Message
 }
 
 function Invoke-SetupRequest([string]$Method, [string]$Uri) {
@@ -34,6 +37,7 @@ function Invoke-SetupRequest([string]$Method, [string]$Uri) {
     if ($address.Scheme -ne 'https' -or $address.Host -ne 'management.azure.com' -or
         $address.UserInfo -or $address.Port -ne 443) { throw 'Refusing to send Azure credentials to an unexpected endpoint.' }
     for ($attempt = 0; $attempt -lt 10; $attempt++) {
+        Write-SetupLog "$Method $($address.AbsolutePath) (attempt $($attempt + 1))."
         $token = (Get-AzAccessToken -ResourceUrl 'https://management.azure.com/' -ErrorAction Stop).Token
         if ($token -is [securestring]) { $token = [pscredential]::new('token', $token).GetNetworkCredential().Password }
         if (-not $token) { throw 'Skillable did not provide an Azure management access token.' }
@@ -42,7 +46,10 @@ function Invoke-SetupRequest([string]$Method, [string]$Uri) {
             SkipHttpErrorCheck = $true; MaximumRedirection = 0; TimeoutSec = 90; ErrorAction = 'Stop'
         }
         try { $response = Invoke-WebRequest @parameters }
-        catch { throw "$Method $($address.AbsolutePath) did not complete. Check connectivity and rerun." }
+        catch {
+            $detail = $_.Exception.GetBaseException().Message.Replace($token, '[redacted]')
+            throw "$Method $($address.AbsolutePath) did not complete: $detail"
+        }
         $status = [int]$response.StatusCode
         if ($status -eq 404) { return @{} }
         if ($status -ge 200 -and $status -lt 300) {
@@ -50,7 +57,7 @@ function Invoke-SetupRequest([string]$Method, [string]$Uri) {
             return @{}
         }
         if ($status -in 403, 429, 500, 502, 503, 504 -and $attempt -lt 9) {
-            Write-Host "Waiting for Azure permissions/availability: $Method $($address.AbsolutePath) (HTTP $status)."
+            Write-SetupLog "Waiting for Azure permissions/availability: $Method $($address.AbsolutePath) (HTTP $status)."
             Start-Sleep -Seconds ([Math]::Min([Math]::Pow(2, $attempt + 1), 30))
             continue
         }
@@ -94,11 +101,16 @@ function Remove-SetupRoles([string]$Scope) {
         $expectedId = "$Scope/providers/Microsoft.Authorization/roleAssignments/$name"
         if ($assignment.id -ne $expectedId) { throw "Refusing to remove an unexpected role assignment on $Scope." }
         Invoke-SetupRequest DELETE "https://management.azure.com${expectedId}?api-version=2022-04-01" | Out-Null
-        Write-Host "Removed: $($roleNames[$role]) -> $($assignment.properties.principalId) on $Scope."
+        Write-SetupLog "Removed: $($roleNames[$role]) -> $($assignment.properties.principalId) on $Scope."
     }
 }
 
 try {
+    if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Select PowerShell, not Legacy PowerShell, for this cloud action.' }
+    if (-not $LogPath) { $LogPath = Join-Path ([IO.Path]::GetTempPath()) "prel35-roles-$([guid]::NewGuid()).log" }
+    $LogPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($LogPath)
+    [IO.Directory]::CreateDirectory((Split-Path $LogPath -Parent)) | Out-Null
+    $logReady = $true
     Write-SetupStep "Starting Skillable role teardown. Log file: $LogPath"
     $script:subscription = "$((Get-AzContext).Subscription.Id)"
     if (-not $script:subscription) { throw 'No Skillable Azure context. Select Execute Script in Cloud Platform / Azure / PowerShell.' }
@@ -123,9 +135,9 @@ try {
     $true
 } catch {
     $message = "Skillable teardown failed during '$step': $($_.Exception.Message)"
-    Write-Host $message
-    Write-Host $_.ScriptStackTrace
-    throw $message
-} finally {
-    Stop-Transcript | Out-Null
+    $stack = $_.ScriptStackTrace
+    $summary = $message -replace '\s+', ' '
+    if ($summary.Length -gt 1500) { $summary = $summary.Substring(0, 1500) + ' [truncated]' }
+    try { Write-SetupLog "$message`n$stack" } catch {}
+    throw $summary
 }

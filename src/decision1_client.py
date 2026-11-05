@@ -14,11 +14,11 @@ CRITERIA = {
 }
 
 
-def read_answer(answer):
-    if not isinstance(answer, dict) or answer.get("type") != "choice" or answer.get("choice") not in CRITERIA:
+def read_answer(answer, labels=CRITERIA):
+    if not isinstance(answer, dict) or answer.get("type") != "choice" or answer.get("choice") not in labels:
         raise ValueError("Invalid Decision-1 choice.")
     probabilities = answer.get("probabilities")
-    if not isinstance(probabilities, dict) or set(probabilities) != set(CRITERIA):
+    if not isinstance(probabilities, dict) or set(probabilities) != set(labels):
         raise ValueError("Invalid choice probabilities.")
     values = [answer.get("confidence"), *probabilities.values()]
     if not all(type(v) in (int, float) and math.isfinite(v) and 0 <= v <= 1 for v in values):
@@ -58,6 +58,15 @@ class DecisionClient:
         if not isinstance(payload, dict) or payload.get("model") != "microsoft-decision-1":
             raise ValueError("Unexpected decision model.")
         return payload
+
+    def choose(self, state, criteria, name="choice"):
+        """One typed choice over any state: the instructions, the labels and their probabilities."""
+        question = {"type": "choice", "instructions": self.instructions, "criteria": criteria}
+        payload = self._post({"model": self.deployment, "state": state, "questions": {name: question}})
+        if not isinstance(payload.get("answers"), dict) or set(payload["answers"]) != {name}:
+            raise ValueError("Returned question names differ from the request.")
+        parsed = read_answer(payload["answers"][name], criteria)
+        return {"choice": parsed.pop("disposition"), **parsed, "usage": payload.get("usage")}
 
     def classify(self, cases, *, workers=8, shared=False):
         if not cases or len({c["alert"]["id"] for c in cases}) != len(cases):
