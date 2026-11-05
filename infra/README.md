@@ -10,6 +10,20 @@ creates the prompt agents from top-level Markdown files in [src/agents](../src/a
 using `uv run create-agents`.
 The standalone hosted evidence agent is deployed separately with azd, as described below.
 
+## Decision-1 MCP server
+
+[systemone.bicep](systemone.bicep) deploys the Decision-1 backing REST API,
+native APIM MCP server and `asses_next_step` tool, project-managed-identity
+connection, and single-case agent route. The root deployment
+passes it the lab's APIM and Foundry project.
+
+The Decision-1 named value loads [the Markdown rubric](../src/prompts/decision1.md).
+The REST/MCP policies allow the project's identity and the operator/learner principal
+IDs supplied to the template. APIM calls the model using its managed identity.
+After provisioning through the root azd environment, `uv run create-agents`
+publishes the `triage-systemone` prompt agent with the others.
+See [the architecture and evaluation guide](../docs/triage-systemone.md).
+
 ## Deploy
 
 Skillable provisions the ARM template before the learner starts. Then it executes lifecycle hooks to setup permissions. To test in your own subscription:
@@ -189,7 +203,7 @@ The `models` list in `main.bicep` deploys and approves all four models, includin
 `text-embedding-3-small` version 1 (Standard, capacity 10). The two GPT decision models retain GlobalStandard.
 Embeddings use 1,536 dimensions.
 
-`Microsoft-Decision-1` version 1 is deployed as `decision-1` (DataZoneStandard, capacity 10).
+`Microsoft-Decision-1` version 1 is deployed as `decision-1` (DataZoneStandard, capacity 200; capacity is also the request rate per minute).
 This preview model uses the Microsoft format and the `azureml-msr` registry for its policy allowlist entry.
 It accepts typed decision questions at `/providers/microsoft/v1/systemone`; it does not replace the agents'
 default GPT deployment or support free-form text generation.

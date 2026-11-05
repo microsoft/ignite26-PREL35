@@ -1,0 +1,6 @@
+<validate-azure-ad-token tenant-id="{{tenant-id}}" output-token-variable-name="systemone-jwt">
+  <audiences><audience>https://ai.azure.com</audience></audiences>
+  <required-claims>
+    <claim name="oid" match="any">__CALLERS__</claim>
+  </required-claims>
+</validate-azure-ad-token>

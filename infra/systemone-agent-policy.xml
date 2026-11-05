@@ -1,0 +1,10 @@
+<policies>
+  <inbound>
+    <base />
+    <set-variable name="agent" value="triage-systemone" />
+    <rewrite-uri template="/agents/triage-systemone/endpoint/protocols/openai/responses" copy-unmatched-params="true" />
+  </inbound>
+  <backend><forward-request timeout="300" buffer-response="false" /></backend>
+  <outbound><base /></outbound>
+  <on-error><base /></on-error>
+</policies>

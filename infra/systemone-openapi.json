@@ -1,0 +1,639 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Alert disposition",
+    "version": "1.0"
+  },
+  "paths": {
+    "/asses_next_step": {
+      "post": {
+        "summary": "Assess 1..50 complete permitted case files with Decision-1",
+        "description": "Fixed server-owned bank rules; independent inference per case. Read-only recommendations, not case actions.",
+        "operationId": "asses_next_step",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssessmentRequest"
+              },
+              "example": {
+                "cases": [
+                  {
+                    "alert": {
+                      "created": "string",
+                      "customer_id": "string",
+                      "id": "string",
+                      "jurisdiction": "string",
+                      "rule": "string",
+                      "score": 0,
+                      "title": "string"
+                    },
+                    "customer": {
+                      "account_number": "string",
+                      "date_of_birth": "string",
+                      "expected_monthly_volume": 0,
+                      "id": "string",
+                      "jurisdiction": "string",
+                      "kyc_status": "string",
+                      "name": "string",
+                      "occupation": "string",
+                      "onboarded": "string",
+                      "pep": true,
+                      "risk_rating": "string",
+                      "type": "string"
+                    },
+                    "documents": [
+                      {
+                        "amount": 0,
+                        "classification": 0,
+                        "content": "string",
+                        "customer_id": "string",
+                        "id": "string",
+                        "source": "string",
+                        "title": "string",
+                        "type": "string",
+                        "withheld": "string"
+                      }
+                    ],
+                    "prior_cases": [
+                      {
+                        "customer_id": "string",
+                        "id": "string",
+                        "opened": "string",
+                        "outcome": "string",
+                        "summary": "string"
+                      }
+                    ],
+                    "screening_lists": {
+                      "counterparty_kyc": {
+                        "Daniel Reyes": {
+                          "date_of_birth": "string",
+                          "nationality": "string"
+                        },
+                        "Viktor Salazar-Orlov": {
+                          "date_of_birth": "string",
+                          "nationality": "string"
+                        }
+                      },
+                      "high_risk_jurisdictions": [
+                        {
+                          "code": "string",
+                          "name": "string"
+                        }
+                      ],
+                      "pep": [
+                        {
+                          "country": "string",
+                          "id": "string",
+                          "name": "string",
+                          "position": "string"
+                        }
+                      ],
+                      "sanctions": [
+                        {
+                          "date_of_birth": "string",
+                          "id": "string",
+                          "name": "string",
+                          "nationality": "string",
+                          "programme": "string"
+                        }
+                      ]
+                    },
+                    "transactions": [
+                      {
+                        "amount": 0,
+                        "channel": "string",
+                        "counterparty": "string",
+                        "counterparty_country": "string",
+                        "counterparty_type": "string",
+                        "currency": "string",
+                        "customer_id": "string",
+                        "direction": "string",
+                        "id": "string",
+                        "memo": "string",
+                        "timestamp": "string"
+                      }
+                    ]
+                  }
+                ],
+                "batch_reference": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "N ordered correlated assessments; per-case errors have null dispositions."
+          },
+          "400": {
+            "description": "Invalid batch envelope; no inference."
+          }
+        }
+      }
+    },
+    "/batches": {
+      "post": {
+        "summary": "Stage a complete permitted batch without model inference",
+        "description": "Stage a complete permitted batch without model inference",
+        "operationId": "stage_batch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Batch"
+              },
+              "example": {
+                "cases": [
+                  {
+                    "alert": {
+                      "created": "string",
+                      "customer_id": "string",
+                      "id": "string",
+                      "jurisdiction": "string",
+                      "rule": "string",
+                      "score": 0,
+                      "title": "string"
+                    },
+                    "customer": {
+                      "account_number": "string",
+                      "date_of_birth": "string",
+                      "expected_monthly_volume": 0,
+                      "id": "string",
+                      "jurisdiction": "string",
+                      "kyc_status": "string",
+                      "name": "string",
+                      "occupation": "string",
+                      "onboarded": "string",
+                      "pep": true,
+                      "risk_rating": "string",
+                      "type": "string"
+                    },
+                    "documents": [
+                      {
+                        "amount": 0,
+                        "classification": 0,
+                        "content": "string",
+                        "customer_id": "string",
+                        "id": "string",
+                        "source": "string",
+                        "title": "string",
+                        "type": "string",
+                        "withheld": "string"
+                      }
+                    ],
+                    "prior_cases": [
+                      {
+                        "customer_id": "string",
+                        "id": "string",
+                        "opened": "string",
+                        "outcome": "string",
+                        "summary": "string"
+                      }
+                    ],
+                    "screening_lists": {
+                      "counterparty_kyc": {
+                        "Daniel Reyes": {
+                          "date_of_birth": "string",
+                          "nationality": "string"
+                        },
+                        "Viktor Salazar-Orlov": {
+                          "date_of_birth": "string",
+                          "nationality": "string"
+                        }
+                      },
+                      "high_risk_jurisdictions": [
+                        {
+                          "code": "string",
+                          "name": "string"
+                        }
+                      ],
+                      "pep": [
+                        {
+                          "country": "string",
+                          "id": "string",
+                          "name": "string",
+                          "position": "string"
+                        }
+                      ],
+                      "sanctions": [
+                        {
+                          "date_of_birth": "string",
+                          "id": "string",
+                          "name": "string",
+                          "nationality": "string",
+                          "programme": "string"
+                        }
+                      ]
+                    },
+                    "transactions": [
+                      {
+                        "amount": 0,
+                        "channel": "string",
+                        "counterparty": "string",
+                        "counterparty_country": "string",
+                        "counterparty_type": "string",
+                        "currency": "string",
+                        "customer_id": "string",
+                        "direction": "string",
+                        "id": "string",
+                        "memo": "string",
+                        "timestamp": "string"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Opaque batch reference; expires in 10 minutes."
+          },
+          "400": {
+            "description": "Invalid batch."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Batch_casesItem_alert": {
+        "type": "object",
+        "properties": {
+          "created": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "jurisdiction": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Batch_casesItem_customer": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string"
+          },
+          "date_of_birth": {
+            "type": "string",
+            "nullable": true
+          },
+          "expected_monthly_volume": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "jurisdiction": {
+            "type": "string"
+          },
+          "kyc_status": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "occupation": {
+            "type": "string"
+          },
+          "onboarded": {
+            "type": "string"
+          },
+          "pep": {
+            "type": "boolean"
+          },
+          "risk_rating": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Batch_casesItem_documentsItem": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "classification": {
+            "type": "number"
+          },
+          "content": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "withheld": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Batch_casesItem_prior_casesItem": {
+        "type": "object",
+        "properties": {
+          "customer_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "opened": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Batch_casesItem_screening_lists_counterparty_kyc_Daniel_Reyes": {
+        "type": "object",
+        "properties": {
+          "date_of_birth": {
+            "type": "string"
+          },
+          "nationality": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Batch_casesItem_screening_lists_counterparty_kyc_Viktor_Salazar-Orlov": {
+        "type": "object",
+        "properties": {
+          "date_of_birth": {
+            "type": "string"
+          },
+          "nationality": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Batch_casesItem_screening_lists_counterparty_kyc": {
+        "type": "object",
+        "properties": {
+          "Daniel Reyes": {
+            "$ref": "#/components/schemas/Batch_casesItem_screening_lists_counterparty_kyc_Daniel_Reyes"
+          },
+          "Viktor Salazar-Orlov": {
+            "$ref": "#/components/schemas/Batch_casesItem_screening_lists_counterparty_kyc_Viktor_Salazar-Orlov"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Batch_casesItem_screening_lists_high_risk_jurisdictionsItem": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Batch_casesItem_screening_lists_pepItem": {
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Batch_casesItem_screening_lists_sanctionsItem": {
+        "type": "object",
+        "properties": {
+          "date_of_birth": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nationality": {
+            "type": "string"
+          },
+          "programme": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Batch_casesItem_screening_lists": {
+        "type": "object",
+        "properties": {
+          "counterparty_kyc": {
+            "$ref": "#/components/schemas/Batch_casesItem_screening_lists_counterparty_kyc"
+          },
+          "high_risk_jurisdictions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Batch_casesItem_screening_lists_high_risk_jurisdictionsItem"
+            }
+          },
+          "pep": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Batch_casesItem_screening_lists_pepItem"
+            }
+          },
+          "sanctions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Batch_casesItem_screening_lists_sanctionsItem"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "Batch_casesItem_transactionsItem": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "counterparty": {
+            "type": "string"
+          },
+          "counterparty_country": {
+            "type": "string"
+          },
+          "counterparty_type": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "memo": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Batch_casesItem": {
+        "required": [
+          "alert",
+          "customer",
+          "transactions",
+          "prior_cases",
+          "documents",
+          "screening_lists"
+        ],
+        "type": "object",
+        "properties": {
+          "alert": {
+            "$ref": "#/components/schemas/Batch_casesItem_alert"
+          },
+          "customer": {
+            "$ref": "#/components/schemas/Batch_casesItem_customer"
+          },
+          "documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Batch_casesItem_documentsItem"
+            }
+          },
+          "prior_cases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Batch_casesItem_prior_casesItem"
+            }
+          },
+          "screening_lists": {
+            "$ref": "#/components/schemas/Batch_casesItem_screening_lists"
+          },
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Batch_casesItem_transactionsItem"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "Batch": {
+        "required": [
+          "cases"
+        ],
+        "type": "object",
+        "properties": {
+          "cases": {
+            "maxItems": 50,
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Batch_casesItem"
+            },
+            "description": "Complete permitted case files, every field unchanged, input order preserved."
+          }
+        },
+        "additionalProperties": false
+      },
+      "AssessmentRequest": {
+        "type": "object",
+        "properties": {
+          "cases": {
+            "maxItems": 50,
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Batch_casesItem"
+            },
+            "description": "Complete permitted case files, every field unchanged, input order preserved."
+          },
+          "batch_reference": {
+            "type": "string",
+            "description": "An authorized APIM-staged immutable batch reference. Use instead of cases, never together."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "apiKeyHeader": {
+        "type": "apiKey",
+        "name": "Ocp-Apim-Subscription-Key",
+        "in": "header"
+      },
+      "apiKeyQuery": {
+        "type": "apiKey",
+        "name": "subscription-key",
+        "in": "query"
+      }
+    }
+  },
+  "security": [
+    {
+      "apiKeyHeader": []
+    },
+    {
+      "apiKeyQuery": []
+    }
+  ]
+}
