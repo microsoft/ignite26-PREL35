@@ -1,6 +1,6 @@
 ---
 name: lab-walkthrough
-description: Create or refresh an isolated Python walkthrough runner for the entire Ignite PREL35 lab, using instructions/skillable/content.md as the source of truth. Use when asked to generate the lab runner, automate the lab instructions, create an end-to-end lab walkthrough, or refresh/run the walkthrough after instructions change. Cover Labs 0-4 and the temporary hosted evidence-agent exercise, with readable terminal output and real human checkpoints.
+description: Create or refresh tests/e2e/run_lab.py, an isolated Python walkthrough runner for the entire Ignite PREL35 lab that can start at any numbered step via --start-step. Use when asked to generate the lab runner, automate the lab instructions, create an end-to-end lab walkthrough, or refresh/run the walkthrough after instructions change. Cover Labs 0-4 and the temporary hosted evidence-agent exercise, with readable terminal output and real human checkpoints.
 ---
 
 # Create the lab walkthrough
@@ -64,7 +64,9 @@ Support these invocations from the repository root:
 
 ```text
 uv run --no-sync tests/e2e/run_lab.py --plan
+uv run --no-sync tests/e2e/run_lab.py --plan --start-step 17
 uv run --no-sync tests/e2e/run_lab.py --execute --resource-group <lab-resource-group>
+uv run --no-sync tests/e2e/run_lab.py --execute --resource-group <lab-resource-group> --start-step 17
 uv run --no-sync tests/e2e/run_lab.py --execute --resource-group <lab-resource-group> --optional tuning
 uv run --no-sync tests/e2e/run_lab.py --execute --resource-group <lab-resource-group> --interactive-decisions
 ```
@@ -72,6 +74,27 @@ uv run --no-sync tests/e2e/run_lab.py --execute --resource-group <lab-resource-g
 Default to plan mode when no execution flag is supplied. Make `--plan` and
 `--execute` mutually exclusive. Plan mode must not execute subprocesses, sign in,
 write files, pause for input, open applications, sleep, or contact Azure.
+
+Support `--start-step N` in both modes, defaulting to 1. Use the inclusive,
+one-based step numbers displayed by the full plan, not guide line numbers or
+per-lab numbering. Reject nonintegers and numbers outside 1..total before any
+live work. Keep numbering stable when optional exercises are skipped. Execute
+only N through the end; never replay earlier sign-ins, setup, publication, or
+other prerequisites automatically. Keep earlier actions visible as `NOT RUN`
+with a start-step explanation in the plan and final report, not as passed or
+verified. State the selected range and that completing it is not completing the
+entire lab. Retain normal optional-exercise selection and all safety checks.
+
+For a later start, read the existing `.env` and require the Git baseline if setup
+was skipped. Do not apply fresh-lab-only policy/approval checks to a resumed lab
+or reset existing enforcement, evidence, decisions, or approvals. Explain that
+the user must already have completed the skipped prerequisites, including cloud
+configuration; step selection is not automatic state recovery. Keep the startup
+authorization and source-drift check. Use the Git baseline as the approved prompt
+for later rollbacks, never a current concise/helpful variant captured at startup.
+Refuse to overwrite unrelated prompt edits; retain startup bytes separately for
+failure/cancellation cleanup. On success leave the selected flow's intended
+final prompt, not the variant present when resuming.
 
 Use the runner's file location to derive the repository root, not the current
 working directory or the VM-specific `cd` path in the guide. Resolve Skillable
@@ -295,6 +318,10 @@ it, republish agents automatically, or reset all lab state.
    cancelled checkpoints, deferred manual reviews, optional opt-ins, final reports,
    and local restoration. Keep durable runner checks in
    `tests/e2e/`; do not run project-wide test suites or live lab commands.
+   Add discoverable `test_*.py` checks for `--start-step`: default, first, middle
+   and last steps; invalid values; stable numbering; no execution of earlier
+   actions; side-effect-free partial plans; resumed enforced/approved state;
+   prompt rollback and cancellation safety; and accurate partial-run reports.
    Check terminal and redirected formatting, color opt-outs, readable narrow
    terminals, and separation of child output and results. Preserve private token
    capture and inherited terminal input; never format or echo hidden credentials.

@@ -2,10 +2,13 @@
 
     uv run --no-sync tests/e2e/run_lab.py --plan
     uv run --no-sync tests/e2e/run_lab.py --execute --resource-group PREL35
+    uv run --no-sync tests/e2e/run_lab.py --execute --resource-group PREL35 --start-step 17
 
 Uses only the standard library. Remove tests/e2e/ to remove this harness.
 Live execution is interactive, billable, and changes the lab's agents and settings.
 Optional exercises are skipped unless selected with --optional EXERCISE.
+--start-step N starts at the inclusive step number shown by --plan.
+Skipped prerequisites must already be complete; no earlier actions are replayed.
 Read-only/manual checks are listed for review at the end, without pausing.
 Decisions and intake use labeled lab-test automation unless --interactive-decisions is supplied.
 """
@@ -31,7 +34,7 @@ from walkthrough_console import Console
 
 ROOT = Path(__file__).resolve().parents[2]
 GUIDE = Path("instructions/skillable/content.md")
-SOURCE_SHA256 = "df8070e84286d2753a9d2cda84934d5ce3cabbfa139de19ccb6af3a206e3a44f"
+SOURCE_SHA256 = "62416355b6a51bcfe42d89364d915954d41b0245e8a63a76092151ae9dfc8c71"
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 PROMPT = Path("src/agents/triage.md")
 DATA_POLICY = Path("governance/data-policy.json")
@@ -145,10 +148,10 @@ def build_steps():
                "Open report.md, manifest.json and results.json; inspect versions, model, hashes and source commit."),
         manual(474, 496, "Inspect traces and the Foundry AI judge",
                "Run the displayed Kusto query in Application Insights Logs, then open the Release gate run in "
-               "Foundry Evaluations and read Task adherence and its reasons. This is a human-verified portal step."),
+               "Foundry Evaluations and read Task adherence and its reasons. This portal review remains unverified."),
         manual(498, 500, "Review the release pipeline",
                "Read .github/workflows/release-gate.yml. Do not execute a deployment pipeline."),
-        Step(504, 504, "Edit the smaller-model prompt yourself", "edit", optional="tuning",
+        Step(504, 508, "Edit the smaller-model prompt yourself", "edit", optional="tuning",
              detail="Review the nano report; edit only src/agents/triage.md for the optional exercise."),
         publish(510, 513, "gpt-5-nano", optional="tuning"),
         gate(510, 513, "pack-observe", optional="tuning"),
@@ -353,11 +356,15 @@ def confirm(message, *, word=None):
 
 
 class Runner:
-    def __init__(self, root=ROOT, resource_group="", *, optional=(), interactive_decisions=False):
+    def __init__(self, root=ROOT, resource_group="", *, optional=(), interactive_decisions=False,
+                 start_step=1):
         self.root = root.resolve()
         self.resource_group = resource_group
         self.guide = Guide(self.root / GUIDE)
         self.steps = build_steps()
+        if not 1 <= start_step <= len(self.steps):
+            raise WalkthroughError(f"--start-step must be between 1 and {len(self.steps)}.")
+        self.start_step = start_step
         self.guide.check_coverage(self.steps)
         self.outcomes = []
         self.interactive_decisions = interactive_decisions
@@ -368,6 +375,7 @@ class Runner:
         self.child_env = {}
         self.recovery = {}
         self.original_prompt = None
+        self.approved_prompt = None
         self.owned_prompt = None
         self.console = Console()
 
@@ -471,13 +479,61 @@ class Runner:
             raise WalkthroughError("Live execution needs --resource-group or AZURE_RESOURCE_GROUP in .env.")
         for relative in (PROMPT, DATA_POLICY, REGISTER, Path("evidence")):
             self.safe_path(relative)
-        if checked_json(self.root / DATA_POLICY).get("enforce") is not False:
-            raise WalkthroughError("The walkthrough starts before data-policy enforcement. Existing policy was not reset.")
-        register = checked_json(self.root / REGISTER)
-        use_case = next((item for item in register if item.get("id") == "UC-001"), None)
-        if not use_case or use_case.get("approval"):
-            raise WalkthroughError("UC-001 is missing or already approved. Use a fresh lab; approvals were not reset.")
+        if self.start_step == 1:
+            if checked_json(self.root / DATA_POLICY).get("enforce") is not False:
+                raise WalkthroughError("The walkthrough starts before data-policy enforcement. Existing policy was not reset.")
+            register = checked_json(self.root / REGISTER)
+            use_case = next((item for item in register if item.get("id") == "UC-001"), None)
+            if not use_case or use_case.get("approval"):
+                raise WalkthroughError("UC-001 is missing or already approved. Use a fresh lab; approvals were not reset.")
         self.original_prompt = (self.root / PROMPT).read_bytes()
+        self.approved_prompt = self.original_prompt
+        if any("setup-lab" in step.args for step in self.steps[:self.start_step - 1]):
+            if not self.safe_path(".env").is_file():
+                raise WalkthroughError("Starting after setup-lab requires its existing .env. "
+                                       "Complete setup first; it was not run automatically.")
+            baseline = subprocess.run(
+                [shutil.which("git"), "show", f"HEAD:{PROMPT.as_posix()}"],
+                cwd=self.root, shell=False, check=False, capture_output=True,
+            )
+            if baseline.returncode:
+                raise WalkthroughError("Starting after setup-lab requires its existing Git baseline. "
+                                       "Complete setup first; it was not run automatically.")
+            # Git stores LF even when the learner's Windows checkout uses CRLF.
+            self.approved_prompt = baseline.stdout.replace(b"\r\n", b"\n")
+            if b"\r\n" in self.original_prompt:
+                self.approved_prompt = self.approved_prompt.replace(b"\n", b"\r\n")
+            remaining = self.steps[self.start_step - 1:]
+            if any(step.kind in ("copy", "restore", "edit")
+                   and (not step.optional or step.optional in self.optional_groups) for step in remaining):
+                known = [self.approved_prompt]
+                for name in ("concise", "helpful"):
+                    path = self.safe_path(f"src/agents/variants/triage.{name}.md")
+                    if path.exists():
+                        known.append(path.read_bytes())
+                if self.original_prompt not in known:
+                    raise WalkthroughError("The triage prompt has unrelated edits; refusing to overwrite them. "
+                                           "Preserve your work before starting a prompt-changing exercise.")
+            variant = False
+            for step in self.steps[:self.start_step - 1]:
+                if step.optional and step.optional not in self.optional_groups:
+                    continue
+                if step.kind in ("copy", "edit", "restore"):
+                    variant = step.kind != "restore"
+                if "create-agents" in step.args:
+                    if variant or step.args[-1] == "gpt-5-nano":
+                        self.recovery["approved agents"] = (
+                            "Restore the approved local prompt, then: uv run create-agents"
+                        )
+                    else:
+                        self.recovery.pop("approved agents", None)
+                if "set-gateway" in step.args and step.args[-2] in ("model-routing", "token-limit"):
+                    name, value = step.args[-2:]
+                    default = "off" if name == "model-routing" else "200000"
+                    if value == default:
+                        self.recovery.pop(name, None)
+                    else:
+                        self.recovery[name] = f"uv run set-gateway {name} {default}"
         if not confirm(
             f"Target resource group: {settings['resource_group']}\n"
             "This runs billable evaluations/research/deployment and changes the lab. "
@@ -675,7 +731,9 @@ class Runner:
         elif step.expect == "intake-approve":
             path = self.safe_path(self.register_path())
             before = path.read_bytes() if path.exists() else b""
-        if "create-agents" in args and (args[-1] == "gpt-5-nano" or self.owned_prompt is not None):
+        approved = self.approved_prompt if self.approved_prompt is not None else self.original_prompt
+        publishing_variant = "create-agents" in args and self.safe_path(PROMPT).read_bytes() != approved
+        if "create-agents" in args and (args[-1] == "gpt-5-nano" or publishing_variant):
             self.recovery["approved agents"] = "Restore the approved local prompt, then: uv run create-agents"
         if "set-gateway" in args:
             name, value = args[-2:]
@@ -691,7 +749,7 @@ class Runner:
             if code:
                 raise WalkthroughError("Git baseline check failed or prompt/governance files have existing edits. "
                                        "Nothing was overwritten.")
-        if "create-agents" in args and args[-1] != "gpt-5-nano" and self.owned_prompt is None:
+        if "create-agents" in args and args[-1] != "gpt-5-nano" and not publishing_variant:
             self.recovery.pop("approved agents", None)
         if "set-gateway" in args:
             self.wait_for_gateway()
@@ -716,11 +774,12 @@ class Runner:
             content = self.safe_path(step.args[0]).read_bytes()
             self.set_prompt(content)
         elif step.kind == "restore":
-            self.set_prompt(self.original_prompt)
+            self.set_prompt(self.approved_prompt if self.approved_prompt is not None else self.original_prompt)
         elif step.kind == "edit":
             path = self.safe_path(PROMPT)
             current = path.read_bytes()
-            if current != self.original_prompt:
+            approved = self.approved_prompt if self.approved_prompt is not None else self.original_prompt
+            if current != approved:
                 raise WalkthroughError("The optional edit must start from the approved prompt.")
             try:
                 confirm(step.detail)
@@ -767,9 +826,14 @@ class Runner:
         exit_code = 1
         issues = []
         try:
-            self.console.heading("PREL35 | full guided walkthrough")
+            self.console.heading("PREL35 | " + ("full guided walkthrough" if self.start_step == 1
+                                              else "selected-step walkthrough"))
             self.say("LIVE EXECUTION - interactive, billable, changes lab state." if execute
                      else "PLAN ONLY - no commands or changes.", "NOTE" if execute else "PLAN")
+            self.say(f"Selected steps: {self.start_step}-{len(self.steps)} (inclusive).", "NOTE")
+            if self.start_step > 1:
+                self.say("Earlier steps are NOT RUN, not verified. Complete their prerequisites first, "
+                         "including sign-in, setup and cloud configuration. Nothing is replayed automatically.", "NOTE")
             self.say("Decision mode: real interactive analyst decisions." if self.interactive_decisions else
                      "Decision mode: LAB TEST automation; decisions and intake are not human approvals.", "NOTE")
             self.say("The guide's setup-lab step initializes Git as the current user. "
@@ -784,6 +848,11 @@ class Runner:
                     current_lab = lab
                     self.console.heading(lab)
                 self.console.step(index, len(self.steps), step, heading, self.preview(step), source=GUIDE)
+                if index < self.start_step:
+                    detail = f"Before --start-step {self.start_step}; prerequisite completion is not verified."
+                    self.outcomes.append(Outcome(index, lab, step, "NOT RUN", detail=detail))
+                    self.say(detail, "NOT RUN")
+                    continue
                 if "set-gateway" in step.args:
                     self.say("Then wait 60s for gateway propagation.", "WAIT")
                 if not execute:
@@ -817,7 +886,7 @@ class Runner:
             issues.append(str(error) or "Cancelled.")
             self.say(issues[-1], "ERROR")
         finally:
-            if execute and self.owned_prompt is not None:
+            if execute and self.owned_prompt is not None and (not complete or self.recovery):
                 try:
                     self.set_prompt(self.original_prompt)
                     self.say("Restored only the runner-owned local prompt change.")
@@ -861,12 +930,16 @@ class Runner:
                                 style="muted",
                             )
             if not execute:
-                self.say(f"{len(self.steps)} planned actions; {len(self.guide.blocks)} command/query blocks mapped; "
+                self.say(f"{len(self.steps) - self.start_step + 1} planned actions; "
+                         f"{len(self.guide.blocks)} command/query blocks mapped; "
                          f"{len(self.guide.commands)} terminal commands individually accounted for. "
                          "No subprocesses, prompts, writes, waits or Azure calls were made.", "PLAN")
             elif complete:
                 pending = sum(item.status == "REVIEW NEEDED" for item in self.outcomes)
-                self.say(f"Automated flow finished; {pending} manual review item(s) remain unverified. "
+                scope = ("Automated flow finished" if self.start_step == 1 else
+                         f"Selected flow finished (steps {self.start_step}-{len(self.steps)}); "
+                         "earlier steps were not run or verified; this is not a full-lab completion")
+                self.say(f"{scope}; {pending} manual review item(s) remain unverified. "
                          "OBSERVED FAIL entries are real quality/security outcomes, not successful gates.")
             else:
                 self.say("INCOMPLETE: later steps were not executed. Evidence and human decisions were retained.", "ERROR")
@@ -879,14 +952,20 @@ def main(argv=None):
     mode.add_argument("--plan", action="store_true", help="Print source-mapped coverage without side effects (default).")
     mode.add_argument("--execute", action="store_true", help="Run the billable walkthrough with real human checkpoints.")
     parser.add_argument("--resource-group", default="", help="Existing lab resource group; must match .env if present.")
+    parser.add_argument("--start-step", type=int, default=1, metavar="N",
+                        help="Start at inclusive step N from --plan (1-based; default: 1). "
+                             "Earlier prerequisites must already be complete; they are not replayed.")
     parser.add_argument("--optional", action="append", choices=OPTIONAL_GROUPS, default=[],
                         help="Include an optional exercise; repeat to select several. Default: skip all.")
     parser.add_argument("--interactive-decisions", action="store_true",
                         help="Use real analyst prompts instead of scripted lab-test decisions and approval.")
     args = parser.parse_args(argv)
+    if not 1 <= args.start_step <= len(build_steps()):
+        parser.error(f"--start-step must be between 1 and {len(build_steps())}.")
     try:
         return Runner(resource_group=args.resource_group, optional=args.optional,
-                      interactive_decisions=args.interactive_decisions).run(execute=args.execute)
+                      interactive_decisions=args.interactive_decisions,
+                      start_step=args.start_step).run(execute=args.execute)
     except (WalkthroughError, OSError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
