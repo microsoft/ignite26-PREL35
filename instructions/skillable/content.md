@@ -985,7 +985,6 @@ Every call through the gateway carries a cost center (`x-cost-center`): the rele
 In the **Azure portal** +++@lab.CloudPortal.Url+++, open the Application Insights resource (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) in your resource group and select **Logs**. Switch to **KQL mode** if needed, paste this query into the query editor and select **Run**. Token metrics take a few minutes to arrive, so recent calls may not show at first:
 
 ```kusto
-```kusto
 let prices = datatable(Agent: string, input: real, cached: real, output: real) [
     "triage", 0.25, 0.025, 2.0,
     "reviewer", 0.25, 0.025, 2.0,
