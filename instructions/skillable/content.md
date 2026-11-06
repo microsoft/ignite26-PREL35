@@ -985,6 +985,7 @@ Every call through the gateway carries a cost center (`x-cost-center`): the rele
 In the **Azure portal** +++@lab.CloudPortal.Url+++, open the Application Insights resource (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) in your resource group and select **Logs**. Switch to **KQL mode** if needed, paste this query into the query editor and select **Run**. Token metrics take a few minutes to arrive, so recent calls may not show at first:
 
 ```kusto
+```kusto
 let prices = datatable(Agent: string, input: real, cached: real, output: real) [
     "triage", 0.25, 0.025, 2.0,
     "reviewer", 0.25, 0.025, 2.0,
@@ -992,8 +993,9 @@ let prices = datatable(Agent: string, input: real, cached: real, output: real) [
 ];
 customMetrics
 | where name in ("Prompt Tokens", "Prompt Cached Tokens", "Completion Tokens")
-| extend CostCenter = tostring(customDimensions["Cost center"]), Agent = tostring(customDimensions["Agent"])
-| summarize tokens = sum(valueSum) by CostCenter, Agent, name
+| extend CostCenter = tostring(customDimensions["Cost center"]), Agent = tostring(customDimensions["Agent"]),
+         Caller = tostring(customDimensions["Caller"])
+| summarize tokens = sum(valueSum) by CostCenter, Caller, Agent, name
 | evaluate pivot(name, sum(tokens))
 | lookup prices on Agent
 | extend usd = ((['Prompt Tokens'] - ['Prompt Cached Tokens']) * input + ['Prompt Cached Tokens'] * cached + ['Completion Tokens'] * output) / 1000000
@@ -1001,7 +1003,7 @@ customMetrics
 | order by usd desc
 ```
 
-Model validation is most of the bill: you ran the gate more often today than anyone triaged an alert. Then change `by CostCenter` to `by tostring(customDimensions["Caller"])` to see the cost per person.
+Model validation is most of the bill: you ran the gate more often today than anyone triaged an alert. Then change `by CostCenter` on the last `summarize` line to `by Caller` to see the cost per person.
 
 A call that sends no cost center is recorded as `unassigned`: it still counts, but nobody can be charged for it. The lab's scripts always send one. In production, the gateway would refuse calls without one, or derive it from the caller's identity, because a header alone is whatever the caller says it is.
 
