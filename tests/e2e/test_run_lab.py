@@ -223,6 +223,22 @@ class StartStepTests(unittest.TestCase):
         self.assertNotIn("query discrepancy", text)
         self.assertTrue(all(item.status == "PLAN" for item in runner.outcomes[number - 1:]))
 
+    def test_refreshed_web_iq_and_policy_guidance_is_visible_without_execution(self):
+        runner = lab.Runner(self.root)
+        output = io.StringIO()
+        with (contextlib.redirect_stdout(output),
+              patch.object(runner, "process", side_effect=AssertionError("Plan executed a command")),
+              patch("builtins.input", side_effect=AssertionError("Plan requested input"))):
+            self.assertEqual(runner.run(), 0)
+        text = " ".join(output.getvalue().split())
+        self.assertIn("Select Skip on the 'You're ready to use WebIQ' screen", text)
+        self.assertIn("billing resource shown in the terminal", text)
+        self.assertIn("paste it into the hidden prompt", text)
+        self.assertIn("Web IQ calls are billable", text)
+        self.assertIn("AuthorizationFailed demonstrates role-based refusal instead", text)
+        self.assertIn("policy remains unverified", text)
+        self.assertTrue(all(item.status == "PLAN" for item in runner.outcomes))
+
     def test_resume_in_gateway_exercise_reports_recovery_when_command_fails(self):
         number = self.number(lambda step: step.kind == "logged-investigation")
         runner = lab.Runner(self.root, start_step=number)
