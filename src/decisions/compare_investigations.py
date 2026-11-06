@@ -26,7 +26,7 @@ from src.decisions.compare_models import price_decision  # noqa: E402
 from src.decisions.decision1_client import DecisionClient  # noqa: E402
 from scripts.console_output import color  # noqa: E402
 from src.decisions.decision1_reviewer import Decision1Reviewer  # noqa: E402
-from src.decisions.display import heading, print_steps  # noqa: E402
+from src.decisions.display import heading, mark, print_steps  # noqa: E402
 from src.decisions.investigate_decisions import TRIAGE_PROMPT, run_pipeline  # noqa: E402
 
 
@@ -76,6 +76,26 @@ def metrics(rows, wall, latencies, tokens, cost):
         "reviewer_disagrees": sum(r["verdict"] == "disagree" for r in rows),
         "unavailable": sum(r["status"] != "ok" for r in rows),
     }
+
+
+def show_differences(classic_rows, decision_rows):
+    classic_by_alert = {r["alert_id"]: r for r in classic_rows}
+    differences = [(classic_by_alert[r["alert_id"]], r) for r in decision_rows
+                   if classic_by_alert[r["alert_id"]]["disposition"] != r["triage"].get("disposition")
+                   or classic_by_alert[r["alert_id"]]["verdict"] != r["review"].get("verdict")]
+    if not differences:
+        return
+    heading("Different results")
+    print(f"  {mark(True)} matches golden; {mark(False)} does not. Reviewer agreement is separate.")
+    for classic, decision in differences:
+        expected = decision["expected"]
+        print(f"\n  {decision['alert_id']} | Golden: {expected or 'not available'}")
+        for name, choice, review in (
+            ("Classic (GPT)", classic["disposition"], classic["verdict"]),
+            ("Decision-1", decision["triage"].get("disposition"), decision["review"].get("verdict")),
+        ):
+            result = f"{choice} {mark(choice == expected)}" if choice and expected else choice or "unavailable"
+            print(f"    {name:<13} {result} | Reviewer: {review or 'unavailable'}")
 
 
 def main(argv=None):
@@ -137,14 +157,9 @@ def main(argv=None):
     if decision_m["wall_seconds"] and decision_m["cost_per_alert_usd"]:
         print(color(f"\nDecision-1 was {classic_m['wall_seconds'] / decision_m['wall_seconds']:.0f}x faster and "
                     f"{classic_m['cost_per_alert_usd'] / decision_m['cost_per_alert_usd']:.0f}x cheaper per alert.", "green"))
-    classic_by_alert = {r["alert_id"]: r for r in classic["rows"]}
-    for r in decision["rows"]:
-        c = classic_by_alert[r["alert_id"]]
-        if c["disposition"] != r["triage"].get("disposition") or c["verdict"] != r["review"].get("verdict"):
-            print(color(f"  {r['alert_id']}: classic {c['disposition']} / {c['verdict']}, "
-                  f"Decision-1 {r['triage'].get('disposition')} / {r['review'].get('verdict')}, expected {r['expected']}", "yellow"))
+    show_differences(classic["rows"], decision["rows"])
     print("\nCaveats: 14 known alerts are indicative only, and one run each. Classic cost includes reasoning tokens; "
-          "Decision-1 cost uses $0.042 per 1M input tokens and ignores its ~1 output token per call. The classic reviewer "
+          "Decision-1 cost uses $0.042 per 1M input tokens; output tokens are free. The classic reviewer "
           "also returns issues; Decision-1 returns a verdict and confidence only.")
 
     output = ROOT / "evidence" / "investigation-comparison" / datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
