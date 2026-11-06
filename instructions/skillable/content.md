@@ -241,9 +241,11 @@ step 1, which combines the bank's typology notes with official public sources fr
 uv run configure-evidence-agent
 ```
 
-If you're asked for a key, the command opens the Web IQ profile portal. Select the profile linked to the billing
-resource shown in the terminal, create an API key with the **web** service enabled, and paste it into the hidden
-prompt. The key is saved in `.env`, which Git ignores.
+If you're asked for a key, the command opens the Web IQ portal. 
+
+!IMAGE[0-3-webiq-api-key.png](instructions361796/0-3-webiq-api-key.png)
+
+Select the profile linked to the billing resource shown in the terminal. You'll see "You're ready to use WebIQ", select **Skip** on that screen. Then create an API key with the **web** service enabled, and paste it into the hidden prompt. The key is saved in `.env`, which Git ignores.
 
 - [] When the command reports that Web IQ and the evidence-agent environment are ready, deploy:
 
@@ -268,7 +270,9 @@ Find your resource group @lab.CloudResourceGroup(PREL35).Name and deployed resou
 
 Then open the **Foundry portal** `https://ai.azure.com`. By either going direct to the URL, or through Azure Portal ──► Foundry ──► blue button "Go to Foundry Portal".
 
-- [] Select the `fincrime` project, and open **Build** ──► **Agents**. You see **triage** and **reviewer**. Open triage and read its instructions: they're the same text as `src/agents/triage.md`. When `azd deploy` has finished, **Agents** also shows **evidence-agent** as a hosted agent.
+- [] Open the Foundry Portal
+
+Select the `fincrime` project, and open **Build** ──► **Agents**. You see **triage** and **reviewer**. Open triage and read its instructions: they're the same text as `src/agents/triage.md`. When `azd deploy` has finished, **Agents** also shows **evidence-agent** as a hosted agent.
 
 ### 5. Run your first investigation \(4 min\)
 
