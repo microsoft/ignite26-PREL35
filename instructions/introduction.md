@@ -23,7 +23,7 @@ Bank investigate financial crime alerts. Each stage produces something the next 
 
 **Contoso Bank** is a retail and commercial bank operating in several countries. Its transaction monitoring system
 raises alerts every day: activity that might be money laundering, sanctions evasion or fraud. A financial crime
-analyst investigates each one, most turn out to be false positives, and the queue keeps growing.
+human analyst investigates each one, most turn out to be false positives, and the queue keeps growing.
 
 This morning the queue holds 14 alerts. You meet these four again in the labs:
 
@@ -34,7 +34,7 @@ This morning the queue holds 14 alerts. You meet these four again in the labs:
 | ALT-1005 | Nordwind Trading Ltd | A payment to a counterparty on a sanctions list |
 | ALT-1008 | Lukas Weber | Dozens of small payments in, forwarded to a crypto exchange within hours |
 
-Three agents help the analyst:
+Three agents help the human analyst:
 
 | Agent | What it does |
 |---|---|
@@ -42,7 +42,7 @@ Three agents help the analyst:
 | **Evidence** | Researches what a pattern usually means, from the bank's typology notes and official public sources, without ever seeing who the customer is |
 | **Reviewer** | Checks the triage recommendation before a person sees it, and disagrees if the evidence doesn't support it |
 
-**The agents recommend. A named analyst decides.** No agent closes a case or files a report. That rule holds in
+**The agents recommend. A named human analyst decides.** No agent closes a case or files a report. That rule holds in
 every lab. The data is synthetic.
 
 ### Who's asking
