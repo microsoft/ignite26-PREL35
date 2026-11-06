@@ -181,12 +181,11 @@ Provided on the lab VM: Azure CLI, Azure Developer CLI (`azd`) with the extensio
 cd C:\Users\LabUser\Desktop\ignite26-PREL35
 ```
 
-- [] Sign in to Azure: 
+- [] Sign in to Azure using username +++@lab.CloudPortalCredential(User1).Username+++ and the access token +++@lab.CloudPortalCredential(User1).AccessToken+++.
 
 ```powershell
 az login
 ```
-Use the username +++@lab.CloudPortalCredential(User1).Username+++ and the access token +++@lab.CloudPortalCredential(User1).AccessToken+++.
 
 You can skip the "Automatically sign in to Microsoft sites like Bing and Outlook" option when prompted.
 
