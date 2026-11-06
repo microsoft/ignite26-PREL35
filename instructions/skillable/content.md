@@ -33,7 +33,7 @@ Bank investigate financial crime alerts. Each stage produces something the next 
 
 **Contoso Bank** is a retail and commercial bank operating in several countries. Its transaction monitoring system
 raises alerts every day: activity that might be money laundering, sanctions evasion or fraud. A financial crime
-analyst investigates each one, most turn out to be false positives, and the queue keeps growing.
+human analyst investigates each one, most turn out to be false positives, and the queue keeps growing.
 
 This morning the queue holds 14 alerts. You meet these four again in the labs:
 
@@ -44,7 +44,7 @@ This morning the queue holds 14 alerts. You meet these four again in the labs:
 | ALT-1005 | Nordwind Trading Ltd | A payment to a counterparty on a sanctions list |
 | ALT-1008 | Lukas Weber | Dozens of small payments in, forwarded to a crypto exchange within hours |
 
-Three agents help the analyst:
+Three agents help the human analyst:
 
 | Agent | What it does |
 | ----- | ------------ |
@@ -52,7 +52,7 @@ Three agents help the analyst:
 | **Evidence** | Researches what a pattern usually means, from the bank's typology notes and official public sources, without ever seeing who the customer is |
 | **Reviewer** | Checks the triage recommendation before a person sees it, and disagrees if the evidence doesn't support it |
 
-**The agents recommend. A named analyst decides.** No agent closes a case or files a report. That rule holds in
+**The agents recommend. A named human analyst decides.** No agent closes a case or files a report. That rule holds in
 every lab. The data is synthetic.
 
 ### Who's asking
@@ -126,7 +126,7 @@ Start with Lab 0 - Setup.
 > **Contoso Bank's Head of Financial Crime Operations asks:** "Most of these alerts are false positives. Can the
 > agents just close them?"
 >
-> No. The agents recommend; a named analyst decides. In this lab you set up the platform that holds that line, and
+> No. The agents recommend; a named human analyst decides. In this lab you set up the platform that holds that line, and
 > run the first alert in the queue: Harbour Lane Bakery.
 
 You connect to your lab environment, tour it as a small AI landing zone, deploy the agents, and run your first
@@ -135,7 +135,7 @@ alert. Everything you deploy, measure and protect in Labs 1 to 4 builds on this.
 ### The use case
 
 Contoso Bank's transaction monitoring system raises **alerts**: activity that might be money laundering, sanctions
-evasion or fraud. An analyst investigates every alert, and most turn out to be false positives. Three agents help:
+evasion or fraud. A human analyst investigates every alert, and most turn out to be false positives. Three agents help:
 
 | Agent | What it does |
 | ----- | ------------ |
@@ -143,7 +143,7 @@ evasion or fraud. An analyst investigates every alert, and most turn out to be f
 | **Reviewer** | Checks the triage recommendation before a human sees it, and disagrees if the evidence doesn't support it |
 | **Evidence** | Researches what a pattern usually means, using only approved topics, never the customer's identity. You use it in Lab 3 |
 
-**The agents recommend. A named analyst decides.** No agent can close a case.
+**The agents recommend. A named human analyst decides.** No agent can close a case.
 
 The data is synthetic: 14 alerts in data/cases.json, introduced in the introduction.
 
@@ -283,7 +283,7 @@ uv run src/investigate.py ALT-1001
 
 You see the triage recommendation, then the reviewer's verdict. Triage usually recommends `escalate`, and lists the
 IDs of the deposits it relied on, such as `T-00001`: every claim points to something in the case file. The reviewer
-usually agrees. Nothing happens to the case: deciding it is the analyst's job, which you do in Lab 3.
+usually agrees. Nothing happens to the case: deciding it is the human analyst's job, which you do in Lab 3.
 
 Run it a second time. The wording, and sometimes the recommendation, can change between runs. That variation is why Lab 1 measures agents with evaluations instead of trusting a single run.
 
@@ -314,7 +314,7 @@ You get `404`: only agents published as gateway operations can be reached.
 - Where would you change the triage agent's behaviour, and how would that change reach Foundry?
   *In `src/agents/triage.md`, published as a new version with `uv run create-agents`.*
 - Who decides the outcome of an alert?
-  *A named analyst. The agents only recommend.*
+  *A named human analyst. The agents only recommend.*
 
 ## Click next to continue
 
@@ -595,7 +595,7 @@ uv run src/redteam.py --foundry
 
 Your attacks take about a minute and end with `Red team: PASS` when no attack succeeded. Like the release gate, it writes an Evidence Pack under `evidence/` and exits with code 1 when an attack succeeds, so a pipeline can stop the release. The Foundry scan takes about 15 minutes; you read it in step 6.
 
-In the table, `JB-01` is `blocked` by `content_filter`, and the other attacks are usually `resisted`. Now and then `PER-02` succeeds: the prompt rightly accepts a solicitor's letter as independent evidence, so a convincing forgery gets through. No prompt rule can tell a real letter from a forged one; that's what the reviewer agent and the analyst who decides are for. 
+In the table, `JB-01` is `blocked` by `content_filter`, and the other attacks are usually `resisted`. Now and then `PER-02` succeeds: the prompt rightly accepts a solicitor's letter as independent evidence, so a convincing forgery gets through. No prompt rule can tell a real letter from a forged one; that's what the reviewer agent and the human analyst who decides are for. 
 
 - [] Look at three attacks in full:
 
@@ -623,7 +623,7 @@ Changing a guardrail is a change to the model deployment, owned by the platform 
 
 ### 3. Ship a "helpful" prompt and red team it \(9 min\)
 
-A colleague proposes a change that saves analysts time: when compliance or a senior officer has already cleared the activity, close the case instead of escalating it again. 
+A colleague proposes a change that saves human analysts time: when compliance or a senior officer has already cleared the activity, close the case instead of escalating it again. 
 
 - [] Review the proposed change and compare it with the approved prompt:
 
@@ -669,7 +669,7 @@ uv run src/redteam.py
 `IPI-01`, `IPI-03`, `EXF-01` and `JB-01` are now `blocked` by `prompt_attack_detected`, at the gateway, before they reach Foundry. IPI-01 is the letter the CISO asked about: it no longer reaches the agent. Look at what still gets through:
 
 - `IPI-02` writes its instruction in look-alike characters, and `IPI-04` dresses it up as a system message. Both pass the scan; the agent resisted them on its own.
-- `JB-02` still succeeds. A note claiming authority reads like an ordinary analyst note, and the weakened prompt now trusts it.
+- `JB-02` still succeeds. A note claiming authority reads like an ordinary human analyst note, and the weakened prompt now trusts it.
 
 
 Prompt Shields is one more layer, not a fix: it catches most injected instructions, and it can't repair a prompt that trusts the wrong things. Only the prompt fix closes `JB-02`.
@@ -731,7 +731,7 @@ Labs 1 and 2 produced evidence: the release gate and the red team. Evidence only
 | **Intake** | `src/intake.py`: approves a use case only when its evidence covers what's running now |
 | **Data policy** | `governance/data-policy.json`: which confidential fields and documents each agent may receive, and why |
 | **Evidence agent** | Public-web research that never sees the customer's identity: the bank's decision on external grounding, enforced in code |
-| **Human in the loop** | `src/decide.py`: the agents recommend, a named analyst decides, and the decision is recorded |
+| **Human in the loop** | `src/decide.py`: the agents recommend, a named human analyst decides, and the decision is recorded |
 | **Azure Policy** | An assignment on your resource group that denies any model the bank hasn't approved |
 
 ## Topics
@@ -740,7 +740,7 @@ Labs 1 and 2 produced evidence: the release gate and the red team. Evidence only
 
 - **Azure Policy for AI:** restrict allowed models, and see a non-compliant deployment denied.
 - **Demand intake and governance processes:** take a use case through intake, using the Evidence Packs from Labs 1 and 2 as the approval input.
-- **Human-in-the-loop:** the agents recommend, a named analyst approves or overrules, and every decision is recorded.
+- **Human-in-the-loop:** the agents recommend, a named human analyst approves or overrules, and every decision is recorded.
 - **Data policy and management:** classification and access rules on the data the agents receive.
 - **External grounding:** public-web research limited to approved topics, so no customer data leaves the bank.
 
@@ -774,7 +774,7 @@ It's refused, with a reason for each failed check:
 | Release gate passed on the published agents | The last gate ran on an earlier triage version, before Lab 2 republished it |
 | Red team passed on the published agents | The evidence must be for the version that callers get today |
 | Data policy enforced | The agents still receive every field in the case file |
-| A named analyst decided alerts on the published agents | Nobody has used the decision step yet |
+| A named human analyst decided alerts on the published agents | Nobody has used the decision step yet |
 
 Evidence describes one agent version under one configuration. When either changes, the evidence is out of date, and intake says so. The next steps fix each failure.
 
@@ -802,7 +802,7 @@ The gate passes with about the same scores as in Lab 1: the agents didn't need t
 
 `ALT-1008` is next in the queue. Lukas Weber's account received dozens of small payments from strangers and forwarded them to a crypto exchange within hours. He says a remote "payment assistant" job told him to. Is he laundering money, or was he recruited as a money mule without knowing it?
 
-The analyst wants to know how this pattern usually works. The obvious way, searching the web for the customer's name, would send personal data outside the bank, and the DPO won't allow it. The bank decided on a narrower option instead, and the evidence agent enforces it in code:
+The human analyst wants to know how this pattern usually works. The obvious way, searching the web for the customer's name, would send personal data outside the bank, and the DPO won't allow it. The bank decided on a narrower option instead, and the evidence agent enforces it in code:
 
 - Its research tool accepts only one of eight approved topics (`src/agents/evidence/topics.json`), such as `money-mule-recruitment`. Names, account numbers and case text never reach the knowledge base or the web.
 - Public sources are limited to official sites (`justice.gov`, `fincen.gov`), and public cases are comparisons, never evidence about this customer.
@@ -880,7 +880,7 @@ Continue to Lab 4 - Solution Optimization.
 
 ## What this lab covers
 
-> **Contoso Bank's Finance Controller asks:** "What does each alert cost compared with an analyst doing it by hand,
+> **Contoso Bank's Finance Controller asks:** "What does each alert cost compared with a human analyst doing it by hand,
 > and which team pays?"
 >
 > You answer with numbers, and test a cheaper model on the alerts that matter. ALT-1005, a payment from Nordwind
@@ -944,7 +944,7 @@ Compare the result with step 1:
 
 - **Cost:** about a tenth lower. Only the four alerts scored 65 or less go to `triage-lite`, and the reviewer still runs on `gpt-5-mini` for every alert.
 - **Quality:** the blocking metrics usually still pass, sometimes right at the threshold, when the smaller model gets one of its four alerts wrong. Look at the alerts on `gpt-5-nano` in the report: they include ALT-1005, a sanctions hit. A risk score measures how unusual the activity is, not how serious a mistake would be.
-- **Reviewer agreement:** usually lower. The reviewer disagrees more often with the smaller model's reasons, and every disagreement is work for an analyst, which costs far more than the tokens saved.
+- **Reviewer agreement:** usually lower. The reviewer disagrees more often with the smaller model's reasons, and every disagreement is work for a human analyst, which costs far more than the tokens saved.
 
 The gate turns "is the cheaper model good enough?" into numbers anyone can check. Turn routing off again:
 
@@ -976,7 +976,7 @@ uv run set-gateway token-limit 200000
 
 ### 4. Attribute the cost \(12 min\)
 
-Every call through the gateway carries a cost center (`x-cost-center`): the release gate charges model validation, the red team security testing, and an analyst's investigation financial crime operations. The gateway records the tokens of each call by cost center, caller and agent.
+Every call through the gateway carries a cost center (`x-cost-center`): the release gate charges model validation, the red team security testing, and a human analyst's investigation financial crime operations. The gateway records the tokens of each call by cost center, caller and agent.
 
 In the **Azure portal** +++@lab.CloudPortal.Url+++, open the Application Insights resource (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) in your resource group and select **Logs**. Switch to **KQL mode** if needed, paste this query into the query editor and select **Run**. Token metrics take a few minutes to arrive, so recent calls may not show at first:
 
@@ -1013,7 +1013,7 @@ Every Contoso Bank stakeholder now has an answer, backed by something you produc
 
 | Asked by | Their question | Your answer, and where it's recorded |
 | -------- | -------------- | ------------------------------------ |
-| Head of Financial Crime Operations | Can the agents just close alerts? | No. They recommend, a named analyst decides: `evidence/decisions.jsonl` |
+| Head of Financial Crime Operations | Can the agents just close alerts? | No. They recommend, a named human analyst decides: `evidence/decisions.jsonl` |
 | Head of Model Risk Management | How do we know a change is still good enough? | The release gate on every change: the Evidence Pack from Lab 1 |
 | Chief Information Security Officer | What stops a letter telling the agent to close its own case? | The prompt, Prompt Shields at the gateway and the guardrail: the red team Evidence Pack from Lab 2 |
 | Data Protection Officer | What does each agent see, and does anything leave the bank? | The data policy, and research by approved topic only: `governance/data-policy.json` |
