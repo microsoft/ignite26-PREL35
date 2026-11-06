@@ -169,13 +169,13 @@ investigate.py  ──(your Entra ID token)──►  API Management  ──(its
 
 ## Prerequisites
 
-Provided on the lab VM: Azure CLI, Azure Developer CLI (`azd`) with the extensions listed in `azure.yaml`, PowerShell 7, uv with a Python 3.12 environment holding the packages in `pyproject.toml`, and this repository. Your resource group and sign-in details are on the **Resources** tab of the lab instructions.
+Provided on the lab VM: Azure CLI, Azure Developer CLI (`azd`) with the extensions listed in `azure.yaml`, PowerShell, uv with a Python 3.12 environment holding the packages in `pyproject.toml`, and this repository. Your resource group and sign-in details are on the **Resources** tab of the lab instructions.
 
 ## Steps
 
 ### 1. Sign in and connect \(3 min\)
 
-- [] Open a PowerShell terminal (Click Start -> type `Terminal`). Make sure it's **PowerShell 7**: type +++pwsh+++ if the prompt doesn't already start with `PS 7`. Windows PowerShell 5.1 can't run the setup. Navigate to the repository folder, where every command in these labs runs:
+- [] Open a **PowerShell** terminal (Click Start -> type `Terminal`). Navigate to the repository folder, where every command in these labs runs:
 
 ```powershell
 cd C:\Users\LabUser\Desktop\ignite26-PREL35
