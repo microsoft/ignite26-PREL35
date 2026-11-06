@@ -23,7 +23,7 @@ through intake, and add the controls that intake asks for.
 | **Intake** | [src/intake.py](../../src/intake.py): approves a use case only when its evidence covers what's running now |
 | **Data policy** | [governance/data-policy.json](../../governance/data-policy.json): which confidential fields each agent may receive, and why |
 | **Evidence agent** | Public-web research that never sees the customer's identity: the bank's decision on external grounding, enforced in code |
-| **Human in the loop** | [src/decide.py](../../src/decide.py): the agents recommend, a named analyst decides, and the decision is recorded |
+| **Human in the loop** | [src/decide.py](../../src/decide.py): the agents recommend, a named human analyst decides, and the decision is recorded |
 | **Azure Policy** | An assignment on your resource group that denies any model the bank hasn't approved |
 
 ## Topics
@@ -32,7 +32,7 @@ through intake, and add the controls that intake asks for.
 
 - **Azure Policy for AI:** restrict allowed models, and see a non-compliant deployment denied.
 - **Demand intake and governance processes:** take a use case through intake, using the Evidence Packs from Labs 1 and 2 as the approval input.
-- **Human-in-the-loop:** the agents recommend, a named analyst approves or overrules, and every decision is recorded.
+- **Human-in-the-loop:** the agents recommend, a named human analyst approves or overrules, and every decision is recorded.
 - **Data policy and management:** classification and access rules on the data the agents receive.
 - **External grounding:** public-web research limited to approved topics, so no customer data leaves the bank.
 
@@ -67,7 +67,7 @@ It's refused, with a reason for each failed check:
 | Release gate passed on the published agents | The last gate ran on an earlier triage version, before Lab 2 republished it |
 | Red team passed on the published agents | The evidence must be for the version that callers get today |
 | Data policy enforced | The agents still receive every field in the case file |
-| A named analyst decided alerts on the published agents | Nobody has used the decision step yet |
+| A named human analyst decided alerts on the published agents | Nobody has used the decision step yet |
 
 Evidence describes one agent version under one configuration. When either changes, the evidence is out of date, and
 intake says so. The next steps fix each failure.
@@ -108,7 +108,7 @@ ALT-1008 is next in the queue. Lukas Weber's account received dozens of small pa
 them to a crypto exchange within hours. He says a remote "payment assistant" job told him to. Is he laundering money,
 or was he recruited as a money mule without knowing it?
 
-The analyst wants to know how this pattern usually works. The obvious way, searching the web for the customer's
+The human analyst wants to know how this pattern usually works. The obvious way, searching the web for the customer's
 name, would send personal data outside the bank, and the DPO won't allow it. The bank decided on a narrower option
 instead, and the evidence agent enforces it in code:
 

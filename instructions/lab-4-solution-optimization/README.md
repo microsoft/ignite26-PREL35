@@ -6,7 +6,7 @@
 
 ## What this lab covers
 
-> **Contoso Bank's Finance Controller asks:** "What does each alert cost compared with an analyst doing it by hand,
+> **Contoso Bank's Finance Controller asks:** "What does each alert cost compared with a human analyst doing it by hand,
 > and which team pays?"
 >
 > You answer with numbers, and test a cheaper model on the alerts that matter. ALT-1005, a payment from Nordwind
@@ -78,7 +78,7 @@ Compare the result with step 1:
   one of its four alerts wrong. Look at the alerts on `gpt-5-nano` in the report: they include ALT-1005, a sanctions
   hit. A risk score measures how unusual the activity is, not how serious a mistake would be.
 - **Reviewer agreement:** usually lower. The reviewer disagrees more often with the smaller model's reasons, and
-  every disagreement is work for an analyst, which costs far more than the tokens saved.
+  every disagreement is work for a human analyst, which costs far more than the tokens saved.
 
 The gate turns "is the cheaper model good enough?" into numbers anyone can check. Turn routing off again:
 
@@ -114,7 +114,7 @@ uv run set-gateway token-limit 200000
 ### 4. Attribute the cost (12 min)
 
 Every call through the gateway carries a cost center (`x-cost-center`): the release gate charges model validation,
-the red team security testing, and an analyst's investigation financial crime operations. The gateway records the
+the red team security testing, and a human analyst's investigation financial crime operations. The gateway records the
 tokens of each call by cost center, caller and agent.
 
 In the [Azure portal](https://portal.azure.com), open the Application Insights resource (`appi-…`) in your resource
@@ -158,7 +158,7 @@ Every Contoso Bank stakeholder now has an answer, backed by something you produc
 
 | Asked by | Their question | Your answer, and where it's recorded |
 |---|---|---|
-| Head of Financial Crime Operations | Can the agents just close alerts? | No. They recommend, a named analyst decides: `evidence/decisions.jsonl` |
+| Head of Financial Crime Operations | Can the agents just close alerts? | No. They recommend, a named human analyst decides: `evidence/decisions.jsonl` |
 | Head of Model Risk Management | How do we know a change is still good enough? | The release gate on every change: the Evidence Pack from Lab 1 |
 | Chief Information Security Officer | What stops a letter telling the agent to close its own case? | The prompt, Prompt Shields at the gateway and the guardrail: the red team Evidence Pack from Lab 2 |
 | Data Protection Officer | What does each agent see, and does anything leave the bank? | The data policy, and research by approved topic only: `governance/data-policy.json` |

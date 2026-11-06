@@ -146,6 +146,10 @@ Every agent call was traced. In the [Azure portal](https://portal.azure.com), op
 resource (`appi-…`) in your resource group and select **Logs**. If it opens in **Simple mode**, switch to
 **KQL mode**. Paste this query into the query editor (it's KQL, not PowerShell) and select **Run**:
 
+![Application Insights: Logs, under Monitoring](../images/1-6-logs-menu.png)
+
+![Logs: the query editor in KQL mode, with Run](../images/1-6-logs-kql.png)
+
 ```kusto
 dependencies
 | where name startswith "invoke_agent "

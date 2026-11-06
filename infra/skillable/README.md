@@ -8,6 +8,7 @@ subscription-level `LOD Reader` and `LOD Contributor` learners; neither grants r
 |---|---|
 | **Resource template** on the resource group | [infra/main.bicep](../main.bicep), compiled to ARM JSON (below). No parameters needed |
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, after the template deploys, blocking | [assign-learner.ps1](assign-learner.ps1): grants scoped Foundry, project, Search and Web IQ access |
+| **Life cycle action** (optional): Execute Script in Cloud Platform, PowerShell, after the template deploys, blocking | [bump-decision-capacity.ps1](bump-decision-capacity.ps1): raises `decision-1` capacity to 30 requests per minute |
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, on Tearing Down, blocking, before resource deletion | [remove-setup-roles.ps1](remove-setup-roles.ps1): removes only role assignments created by the matching setup; leaves pre-existing permissions unchanged |
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, on Tearing Down, blocking | [teardown.ps1](teardown.ps1): deletes and purges the Foundry account, which Skillable requires for `Microsoft.CognitiveServices/accounts` |
 | **Access control policy** | [acp-v4.json](acp-v4.json) |

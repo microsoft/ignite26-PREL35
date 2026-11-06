@@ -7,7 +7,7 @@
 > **Contoso Bank's Head of Financial Crime Operations asks:** "Most of these alerts are false positives. Can the
 > agents just close them?"
 >
-> No. The agents recommend; a named analyst decides. In this lab you set up the platform that holds that line, and
+> No. The agents recommend; a named human analyst decides. In this lab you set up the platform that holds that line, and
 > run the first alert in the queue: Harbour Lane Bakery.
 
 You connect to your lab environment, tour it as a small AI landing zone, deploy the agents, and run your first
@@ -16,7 +16,7 @@ alert. Everything you deploy, measure and protect in Labs 1 to 4 builds on this.
 ### The use case
 
 Contoso Bank's transaction monitoring system raises **alerts**: activity that might be money laundering, sanctions
-evasion or fraud. An analyst investigates every alert, and most turn out to be false positives. Three agents help:
+evasion or fraud. A human analyst investigates every alert, and most turn out to be false positives. Three agents help:
 
 | Agent | What it does |
 |---|---|
@@ -24,7 +24,7 @@ evasion or fraud. An analyst investigates every alert, and most turn out to be f
 | **Reviewer** | Checks the triage recommendation before a human sees it, and disagrees if the evidence doesn't support it |
 | **Evidence** | Researches what a pattern usually means, using only approved topics, never the customer's identity. You use it in Lab 3 |
 
-**The agents recommend. A named analyst decides.** No agent can close a case.
+**The agents recommend. A named human analyst decides.** No agent can close a case.
 
 The data is synthetic: 14 alerts in [data/cases.json](../../data/cases.json), introduced in the
 [introduction](../introduction.md).
@@ -118,6 +118,10 @@ If you're asked for a key, the command opens the Web IQ profile portal. Select t
 resource shown in the terminal, create an API key with the **web** service enabled, and paste it into the hidden
 prompt. The key is saved in `.env`, which Git ignores.
 
+![Web IQ: select the Azure resource for your lab's subscription](../images/0-3-webiq-resource.png)
+
+![Web IQ: Profile Management, with Create API Key under Authentication](../images/0-3-webiq-api-key.png)
+
 When the command reports that Web IQ and the evidence-agent environment are ready, deploy:
 
 ```powershell
@@ -131,17 +135,25 @@ repository folder, and carry on with step 4. You use the evidence agent in Lab 3
 
 In the [Azure portal](https://portal.azure.com), open your resource group and find:
 
+![Your resource group, with the Foundry, API Management and Application Insights resources](../images/0-4-resource-group.png)
+
 | Resource | Look for |
 |---|---|
 | Foundry (`aif-…`) | **Resource Management > Keys and Endpoint**: local (key) authentication is disabled |
 | API Management (`apim-…`) | **APIs > Published agents**: one operation per agent. Select **All operations**, then the **</>** icon under **Inbound processing** to open the policy: token check, rate limit, managed identity |
 | Application Insights (`appi-…`) | Where agent traces land. You use it in Lab 1 |
 
+![Foundry: Keys and Endpoint, with API key authentication disabled](../images/0-4-foundry-keys.png)
+
+![API Management: APIs, with Published agents](../images/0-4-apim-published-agents.png)
+
 Then open the [Foundry portal](https://ai.azure.com), select the `fincrime` project, and open **Agents**. You see
 **triage** and **reviewer**. Open triage and read its instructions: they're the same text as
 [src/agents/triage.md](../../src/agents/triage.md).
 
 When `azd deploy` has finished, **Agents** also shows **evidence-agent** as a hosted agent.
+
+![Foundry: the fincrime project's Agents list](../images/0-4-foundry-agents.png)
 
 ### 5. Run your first investigation (4 min)
 
@@ -154,7 +166,7 @@ uv run src/investigate.py ALT-1001
 
 You see the triage recommendation, then the reviewer's verdict. Triage usually recommends `escalate`, and lists
 the IDs of the deposits it relied on, such as `T-00001`: every claim points to something in the case file. The
-reviewer usually agrees. Nothing happens to the case: deciding it is the analyst's job, which you do in Lab 3.
+reviewer usually agrees. Nothing happens to the case: deciding it is the human analyst's job, which you do in Lab 3.
 
 Run it a second time. The wording, and sometimes the recommendation, can change between runs. That variation is
 why Lab 1 measures agents with evaluations instead of trusting a single run.
@@ -186,7 +198,7 @@ You get `404`: only agents published as gateway operations can be reached.
 - Where would you change the triage agent's behaviour, and how would that change reach Foundry?
   *In [src/agents/triage.md](../../src/agents/triage.md), published as a new version with `uv run create-agents`.*
 - Who decides the outcome of an alert?
-  *A named analyst. The agents only recommend.*
+  *A named human analyst. The agents only recommend.*
 
 ## Next
 
