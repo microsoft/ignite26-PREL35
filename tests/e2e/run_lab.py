@@ -34,12 +34,16 @@ from walkthrough_console import Console
 
 ROOT = Path(__file__).resolve().parents[2]
 GUIDE = Path("instructions/skillable/content.md")
-SOURCE_SHA256 = "c4e93a76ab137d6e440c95cd24ca8066b628c85a259441ba2cb42b64ea238d77"
+SOURCE_SHA256 = "261020b066bfee53e92c2ea77a0f334d27c4bd398c45cc5f4989b0031c5b2b55"
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 PROMPT = Path("src/agents/triage.md")
 DATA_POLICY = Path("governance/data-policy.json")
 REGISTER = Path("governance/use-cases.json")
-OPTIONAL_GROUPS = ("editor", "colors", "tuning")
+OPTIONAL_GROUPS = ("editor", "colors", "tuning", "decision-json", "full-comparison")
+DECISION_REPORTS = {
+    "choice-review": "evidence/decision1-investigations",
+    "investigation-compare": "evidence/investigation-comparison",
+}
 NOTES = (
     "Azure must already be provisioned. The runner never assigns roles or bypasses policy.",
     "Gateway updates need APIM permissions AND a Skillable policy allowing "
@@ -113,142 +117,173 @@ def build_steps():
         uv(200, 202, "Prepare the existing lab", "setup-lab", "--resource-group", "{resource_group}"),
         publish(211, 213),
         Step(217, 219, "Demonstrate color opt-out for child commands", "colors", optional="colors"),
-        uv(240, 248, "Configure Web IQ and the hosted-agent environment",
+        manual(221, 232, "Review the four published prompt agents",
+               "Inspect reviewer, triage, triage-systemone and triage-lite. The Decision-1 explanation runner "
+               "uses triage-systemone in Lab 4; the local Decision-1 calls do not create agents."),
+        uv(240, 251, "Configure Web IQ and the hosted-agent environment",
            "configure-evidence-agent", interactive=True,
            detail="If asked for a key, select the Web IQ profile linked to the billing resource shown "
                   "in the terminal. Select Skip on the 'You're ready to use WebIQ' screen, create an "
                   "API key with the web service enabled, and paste it into the hidden prompt. "
                   "The key is saved in Git-ignored .env; Web IQ calls are billable."),
-        Step(252, 254, "Deploy the hosted evidence agent", args=("azd", "deploy"), interactive=True),
-        manual(259, 275, "Tour Azure and Foundry",
+        Step(254, 256, "Deploy the hosted evidence agent", args=("azd", "deploy"), interactive=True),
+        manual(261, 277, "Tour Azure and Foundry",
                "Inspect keyless Foundry, gateway operations/policy and monitoring; read triage's instructions "
                "in the fincrime project. Confirm the selected subscription and resource group."),
-        uv(284, 286, "Investigate ALT-1001", "src/investigate.py", "ALT-1001"),
-        uv(292, 292, "Repeat the investigation as requested in prose", "src/investigate.py", "ALT-1001"),
-        Step(299, 301, "Expect HTTP 401 without a token", "probe", args=("triage", "401")),
-        Step(307, 310, "Acquire a token privately; expect HTTP 404", "probe", args=("unpublished", "404")),
-        manual(314, 321, "Check your understanding",
+        uv(286, 288, "Investigate ALT-1001", "src/investigate.py", "ALT-1001"),
+        uv(294, 294, "Repeat the investigation as requested in prose", "src/investigate.py", "ALT-1001"),
+        Step(301, 303, "Expect HTTP 401 without a token", "probe", args=("triage", "401")),
+        Step(309, 312, "Acquire a token privately; expect HTTP 404", "probe", args=("unpublished", "404")),
+        manual(316, 323, "Check your understanding",
                "Explain the gateway's downstream identity, how agent changes are published, and who decides alerts."),
-        gate(387, 389, "pack-pass", "--foundry"),
-        manual(395, 401, "Inspect baseline release evidence",
+        gate(389, 391, "pack-pass", "--foundry"),
+        manual(397, 403, "Inspect baseline release evidence",
                "Open the new report.md and compare every blocking metric with its threshold."),
-        Step(406, 408, "Compare the concise prompt", args=(
+        Step(408, 410, "Compare the concise prompt", args=(
             "git", "--no-pager", "diff", "--no-index",
             "src/agents/triage.md", "src/agents/variants/triage.concise.md"), expect="diff"),
-        Step(414, 418, "Apply the concise prompt", "copy", args=("src/agents/variants/triage.concise.md",)),
-        publish(414, 418),
-        gate(414, 418, "pack-fail"),
-        Step(424, 424, "Open reports in VS Code", args=("code", "."), optional="editor"),
-        manual(420, 430, "Review the failed gate and its exit code",
+        Step(416, 420, "Apply the concise prompt", "copy", args=("src/agents/variants/triage.concise.md",)),
+        publish(416, 420),
+        gate(416, 420, "pack-fail"),
+        Step(426, 426, "Open reports in VS Code", args=("code", "."), optional="editor"),
+        manual(422, 432, "Review the failed gate and its exit code",
                "Inspect citation validity, escalation recall and token savings. The preceding gate verified "
                "exit code 1 (the guide's $LASTEXITCODE check) against its new Evidence Pack."),
-        restore(436, 440),
-        publish(436, 440),
-        gate(436, 440),
-        publish(450, 453, "gpt-5-nano"),
-        gate(450, 453, "pack-observe"),
-        publish(459, 461),
-        manual(463, 475, "Inspect a passing Evidence Pack",
+        restore(438, 442),
+        publish(438, 442),
+        gate(438, 442),
+        publish(452, 455, "gpt-5-nano"),
+        gate(452, 455, "pack-observe"),
+        publish(461, 463),
+        manual(465, 477, "Inspect a passing Evidence Pack",
                "Open report.md, manifest.json and results.json; inspect versions, model, hashes and source commit."),
-        manual(477, 499, "Inspect traces and the Foundry AI judge",
+        manual(479, 501, "Inspect traces and the Foundry AI judge",
                "Run the displayed Kusto query in Application Insights Logs, then open the Release gate run in "
                "Foundry Evaluations and read Task adherence and its reasons. This portal review remains unverified."),
-        manual(501, 503, "Review the release pipeline",
+        manual(503, 505, "Review the release pipeline",
                "Read .github/workflows/release-gate.yml. Do not execute a deployment pipeline."),
-        Step(507, 511, "Edit the smaller-model prompt yourself", "edit", optional="tuning",
+        Step(509, 512, "Edit the smaller-model prompt yourself", "edit", optional="tuning",
              detail="Review the nano report; edit only src/agents/triage.md for the optional exercise."),
-        publish(513, 516, "gpt-5-nano", optional="tuning"),
-        gate(513, 516, "pack-observe", optional="tuning"),
-        gate(518, 518, "pack-observe", optional="tuning"),
-        restore(522, 525, optional="tuning"),
-        publish(522, 525, optional="tuning"),
-        manual(590, 594, "Read the attack cases",
+        publish(515, 518, "gpt-5-nano", optional="tuning"),
+        gate(515, 518, "pack-observe", optional="tuning"),
+        gate(520, 520, "pack-observe", optional="tuning"),
+        restore(524, 527, optional="tuning"),
+        publish(524, 527, optional="tuning"),
+        manual(592, 596, "Read the attack cases",
                "Open evals/attacks.json and identify document-borne versus caller-borne attacks."),
-        team(596, 598, "pack-observe", "--foundry"),
-        team(606, 610, "attack", "JB-01"),
-        team(606, 610, "attack", "HRM-01"),
-        team(606, 610, "attack", "HRM-02"),
-        manual(618, 625, "Inspect the Foundry guardrail",
+        team(598, 600, "pack-observe", "--foundry"),
+        team(608, 612, "attack", "JB-01"),
+        team(608, 612, "attack", "HRM-01"),
+        team(608, 612, "attack", "HRM-02"),
+        manual(620, 627, "Inspect the Foundry guardrail",
                "Read Microsoft.DefaultV2 on gpt-5-mini: content categories, severity and jailbreak detection."),
-        Step(634, 636, "Compare the helpful prompt", args=(
+        Step(636, 638, "Compare the helpful prompt", args=(
             "git", "--no-pager", "diff", "--no-index",
             "src/agents/triage.md", "src/agents/variants/triage.helpful.md"), expect="diff"),
-        Step(641, 645, "Apply the helpful prompt", "copy", args=("src/agents/variants/triage.helpful.md",)),
-        publish(641, 645),
-        team(641, 645, "pack-fail"),
-        team(651, 653, "attack", "JB-02"),
-        switch(663, 665, "prompt-shields", "on"),
-        team(669, 671),
-        manual(673, 679, "Inspect layered protections",
+        Step(643, 647, "Apply the helpful prompt", "copy", args=("src/agents/variants/triage.helpful.md",)),
+        publish(643, 647),
+        team(643, 647, "pack-fail"),
+        team(653, 655, "attack", "JB-02"),
+        switch(665, 667, "prompt-shields", "on"),
+        team(671, 673),
+        manual(675, 681, "Inspect layered protections",
                "Compare prompt_attack_detected blocks with IPI-02, IPI-04 and JB-02. "
                "Record the outcomes actually observed, not the guide's illustrative outcomes."),
-        gate(683, 685),
-        restore(693, 697),
-        publish(693, 697),
-        team(693, 697),
-        manual(701, 707, "Review red-team evidence and the Foundry scan",
+        gate(685, 687),
+        restore(695, 699),
+        publish(695, 699),
+        team(695, 699),
+        manual(703, 709, "Review red-team evidence and the Foundry scan",
                "Read the latest red-team report/results and the Foundry scan by category/disguise. "
                "Wait for the Foundry scan to complete; starting it does not prove it finished."),
-        manual(766, 768, "Review use-case intake",
+        manual(768, 770, "Review use-case intake",
                "Read UC-001 in governance/use-cases.json before requesting approval."),
-        uv(770, 772, "Observe the initial intake refusal", "src/intake.py", "UC-001", expect="intake-deny"),
-        manual(785, 796, "Review the data policy",
+        uv(772, 774, "Observe the initial intake refusal", "src/intake.py", "UC-001", expect="intake-deny"),
+        manual(787, 798, "Review the data policy",
                "Read governance/data-policy.json and explain which agents may receive each field and document. "
                "The next action sets only enforce to true."),
-        Step(796, 796, "Enforce the data policy", "enforce"),
-        gate(798, 801),
-        team(798, 801),
-        manual(805, 814, "Review the evidence agent's data boundary",
+        Step(798, 798, "Enforce the data policy", "enforce"),
+        gate(800, 803),
+        team(800, 803),
+        manual(807, 816, "Review the evidence agent's data boundary",
                "Research goes by approved topic only, to official sources. The next command sends a fictional, "
                "PII-free scenario to the hosted agent; Web IQ calls are billable."),
-        Step(816, 818, "Ask the hosted evidence agent for a brief", args=(
+        Step(818, 820, "Ask the hosted evidence agent for a brief", args=(
             "azd", "ai", "agent", "invoke", "evidence-agent",
             "Review this fictional, PII-free scenario: unfamiliar incoming transfers are forwarded to a "
             "cryptocurrency exchange; the holder says a remote payment-assistant job requires this, but no "
             "employer contract or sales records are supplied. Provide a cited evidence brief with alternatives "
             "and missing evidence, not a decision.",
             "--protocol", "responses", "--new-session")),
-        manual(822, 826, "Review the decision acceptance exercise",
+        manual(824, 828, "Review the decision acceptance exercise",
                "Default mode scripts a labeled lab-test acceptance for ALT-1008. With --interactive-decisions, "
                "review the recommendation and choose yourself under your Entra identity."),
-        uv(828, 830, "Decide ALT-1008", "src/decide.py", "ALT-1008",
+        uv(830, 832, "Decide ALT-1008", "src/decide.py", "ALT-1008",
            expect="decision-approve", interactive=True),
-        manual(834, 834, "Review the decision override exercise",
+        manual(836, 836, "Review the decision override exercise",
                "Default mode scripts a labeled lab-test override to request_info for ALT-1014 with a test reason. "
                "With --interactive-decisions, the guide suggests n and a reason, but either valid choice is accepted."),
-        uv(836, 838, "Decide ALT-1014", "src/decide.py", "ALT-1014",
+        uv(838, 840, "Decide ALT-1014", "src/decide.py", "ALT-1014",
            expect="decision-override", interactive=True),
-        manual(842, 842, "Inspect recorded decisions",
+        manual(844, 844, "Inspect recorded decisions",
                "Scripted records are in tests/e2e/artifacts/decisions.jsonl; interactive records are in "
                "evidence/decisions.jsonl. Verify actor, reasons, timestamps and published versions."),
-        uv(846, 848, "Request use-case approval again", "src/intake.py", "UC-001", expect="intake-approve"),
-        manual(854, 856, "Inspect Azure Policy",
+        uv(848, 850, "Request use-case approval again", "src/intake.py", "UC-001", expect="intake-approve"),
+        manual(856, 858, "Inspect Azure Policy",
                "Inspect approved-ai-models in the portal and read its approved list without changing it."),
-        Step(860, 871, "Test the unapproved model deployment", args=(
+        Step(860, 873, "Test the unapproved model deployment", args=(
             "az", "cognitiveservices", "account", "deployment", "create",
             "-g", "{resource_group}", "-n", "{FOUNDRY_NAME}", "--deployment-name", "unapproved",
             "--model-name", "gpt-4.1-mini", "--model-version", "2025-04-14", "--model-format", "OpenAI",
             "--sku-name", "GlobalStandard", "--sku-capacity", "1"), expect="policy-deny",
              detail="RequestDisallowedByPolicy demonstrates policy denial. AuthorizationFailed demonstrates "
                     "role-based refusal instead; the policy remains unverified and needs portal review."),
-        gate(930, 932),
-        manual(934, 936, "Read the cost baseline",
+        gate(934, 936),
+        manual(938, 942, "Read the cost baseline",
                "Inspect the new Evidence Pack's total and per-alert cost and evals/prices.json."),
-        switch(942, 945, "model-routing", "on"),
-        gate(942, 945, "pack-observe"),
-        manual(947, 953, "Compare routed cost and quality",
+        switch(950, 953, "model-routing", "on"),
+        gate(950, 953, "pack-observe"),
+        manual(955, 961, "Compare routed cost and quality",
                "Compare the new report with the baseline, including triage-lite alerts and reviewer agreement."),
-        switch(955, 957, "model-routing", "off"),
-        switch(963, 965, "token-limit", "3000"),
-        Step(969, 973, "Investigate with scoped OPENAI_LOG=info", "logged-investigation",
+        switch(965, 967, "model-routing", "off"),
+        uv(985, 987, "Decision-1 chooses, GPT explains, Decision-1 reviews",
+           "python", "src/decisions/triage_systemone.py", "ALT-1001", expect="choice-explain"),
+        manual(989, 996, "Review explanation cost and citations",
+               "Compare the choosing call with the total time and cost. Read reasons, gaps and conflicts "
+               "and check citations; GPT writes an explanation, not another vote."),
+        uv(996, 996, "Inspect the optional full Decision-1 explanation record",
+           "python", "src/decisions/triage_systemone.py", "ALT-1001", "--json",
+           expect="choice-json", optional="decision-json"),
+        uv(1002, 1004, "Decision-1 triage and challenged review",
+           "python", "src/decisions/investigate_decisions.py", "ALT-1008", "--challenge",
+           expect="choice-review"),
+        manual(1006, 1013, "Review the challenged verdicts",
+               "Inspect escalation, reviewer agreement and both wrong-disposition challenges. "
+               "Consider whether the analyst needs a written explanation; no GPT is called on this path."),
+        uv(1021, 1023, "Compare seven investigations",
+           "python", "src/decisions/compare_investigations.py",
+           "ALT-1001", "ALT-1002", "ALT-1005", "ALT-1006", "ALT-1008", "ALT-1010", "ALT-1013",
+           "--workers", "2", expect="investigation-compare",
+           detail="Allow about 1-1.5 minutes. Classic GPT runs first, then Decision-1. Both use the same "
+                  "policy-filtered cases; GPT writes reasons and reviewer issues, Decision-1 returns "
+                  "typed choices and verdicts. Read along while the command streams its output."),
+        manual(1035, 1041, "Review golden matches, reviewer verdicts and cost",
+               "Read cost and time per alert, triage matches, escalation recall and unavailable calls. "
+               "Check ALT-1005 should escalate. A correctness checkmark is separate from reviewer agreement. "
+               "Inspect evidence/investigation-comparison; Decision-1 output tokens are free."),
+        uv(1043, 1043, "Optionally compare all 14 investigations",
+           "python", "src/decisions/compare_investigations.py", "--workers", "2",
+           expect="investigation-compare", optional="full-comparison"),
+        switch(1051, 1053, "token-limit", "3000"),
+        Step(1057, 1061, "Investigate with scoped OPENAI_LOG=info", "logged-investigation",
              args=("uv", "run", "src/investigate.py", "ALT-1001")),
-        switch(977, 979, "token-limit", "200000"),
-        manual(983, 1003, "Attribute cost by cost center",
+        switch(1067, 1069, "token-limit", "200000"),
+        manual(1075, 1097, "Attribute cost by cost center",
                "Run the displayed Kusto query in Application Insights Logs and inspect unassigned costs."),
-        manual(1005, 1005, "Attribute cost by caller",
+        manual(1099, 1099, "Attribute cost by caller",
                "Change by CostCenter on the query's last summarize line to by Caller, run it again in the portal, "
                "and check the cost per person."),
-        manual(1009, 1030, "Wrap up Labs 0-4",
+        manual(1102, 1128, "Wrap up Labs 0-4",
                "Explain cost per alert, cost attribution and the cost/quality tradeoff from your actual results, "
                "then answer each stakeholder from the evidence you produced."),
     ]
@@ -562,6 +597,124 @@ class Runner:
         return {path: (path.stat().st_mtime_ns, path.read_bytes())
                 for path in self.safe_path("evidence").glob("*/manifest.json")}
 
+    def decision_snapshot(self, expect):
+        paths = (self.safe_path(path) for path in
+                 self.safe_path(DECISION_REPORTS[expect]).glob("*/results.json"))
+        return {path: (path.stat().st_mtime_ns, path.read_bytes()) for path in paths}
+
+    def golden_choices(self, step):
+        golden = {row["alert_id"]: row["expected_disposition"] for row in
+                  (json.loads(line) for line in self.safe_path("data/golden.jsonl").read_text(
+                      encoding="utf-8").splitlines() if line.strip())}
+        requested = [arg for arg in step.args if arg.startswith("ALT-")] or list(golden)
+        if not requested or any(alert not in golden for alert in requested):
+            raise WalkthroughError("The Decision-1 exercise needs matching golden alerts.")
+        return {alert: golden[alert] for alert in requested}
+
+    def check_choices(self, rows, golden, *, nested):
+        if (not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows)
+                or len(rows) != len(golden) or {row.get("alert_id") for row in rows} != set(golden)):
+            raise WalkthroughError("The Decision-1 report does not cover exactly the requested alerts.")
+        stats = {"alerts": len(rows), "triage_correct": 0, "reviewer_agrees": 0,
+                 "reviewer_disagrees": 0, "unavailable": 0}
+        for row in rows:
+            triage, review = (row.get("triage"), row.get("review")) if nested else (row, row)
+            if (not isinstance(triage, dict) or not isinstance(review, dict)
+                    or triage.get("status") != "ok" or review.get("status") != "ok"):
+                raise WalkthroughError(f"{row['alert_id']}: unavailable triage or reviewer; exercise incomplete.")
+            if (triage.get("disposition") not in ("escalate", "close_false_positive", "request_info")
+                    or review.get("verdict") not in ("agree", "disagree")
+                    or row.get("expected") != golden[row["alert_id"]]):
+                raise WalkthroughError("The Decision-1 report contains an invalid choice, verdict or golden answer.")
+            stats["triage_correct"] += triage["disposition"] == row["expected"]
+            stats["reviewer_agrees"] += review["verdict"] == "agree"
+            stats["reviewer_disagrees"] += review["verdict"] == "disagree"
+        return stats
+
+    def check_decision_report(self, step, code, before):
+        fresh = [path for path, signature in self.decision_snapshot(step.expect).items()
+                 if before.get(path) != signature]
+        if len(fresh) != 1:
+            raise WalkthroughError("The command did not produce exactly one fresh Decision-1 report.")
+        report = checked_json(fresh[0])
+        if not isinstance(report, dict):
+            raise WalkthroughError("The Decision-1 report must be an object.")
+        golden = self.golden_choices(step)
+        if step.expect == "choice-review":
+            stats = self.check_choices(report.get("rows"), golden, nested=True)
+            challenges = report.get("challenges")
+            pairs = {(alert, label) for alert, expected in golden.items()
+                     for label in ("escalate", "close_false_positive", "request_info") if label != expected}
+            required = pairs if "--challenge" in step.args else set()
+            if (report.get("gpt_calls") != 0 or not isinstance(challenges, list)
+                    or not all(isinstance(item, dict) for item in challenges)
+                    or len(challenges) != len(required)
+                    or {(item.get("alert_id"), item.get("recommended")) for item in challenges} != required):
+                raise WalkthroughError("The Decision-1 report is missing the requested wrong-disposition challenges.")
+            caught = 0
+            for item in challenges:
+                review = item.get("review")
+                if (not isinstance(review, dict) or review.get("status") != "ok"
+                        or review.get("verdict") not in ("agree", "disagree")
+                        or item.get("expected") != golden[item["alert_id"]]):
+                    raise WalkthroughError("A Decision-1 challenge reviewer is unavailable or invalid.")
+                caught += review["verdict"] == "disagree"
+            if challenges:
+                stats.update(challenges=len(challenges), challenges_caught=caught, challenges_unavailable=0)
+            summary = report.get("summary")
+            if not isinstance(summary, dict) or any(summary.get(key) != value for key, value in stats.items()):
+                raise WalkthroughError("The Decision-1 summary contradicts its results.")
+            clean = stats["triage_correct"] == stats["reviewer_agrees"] == len(golden) and caught == len(challenges)
+            if code != (0 if clean else 1):
+                raise WalkthroughError("Decision-1 evidence does not match the process exit code.")
+        else:
+            alerts = report.get("alerts")
+            requested = [arg for arg in step.args if arg.startswith("ALT-")]
+            if (code != 0 or not isinstance(alerts, list) or not all(isinstance(alert, str) for alert in alerts)
+                    or len(alerts) != len(golden) or set(alerts) != set(golden)
+                    or requested and alerts != requested or report.get("workers") != 2
+                    or not isinstance(report.get("metrics"), dict)):
+                raise WalkthroughError("The investigation comparison is incomplete or used different alerts/workers.")
+            clean = True
+            for name, key, nested in (("Classic (GPT)", "classic", False), ("Decision-1", "decision1", True)):
+                run, metrics = report.get(key), report["metrics"].get(name)
+                if not isinstance(run, dict) or not isinstance(metrics, dict):
+                    raise WalkthroughError(f"The comparison is missing {name} results.")
+                stats = self.check_choices(run.get("rows"), golden, nested=nested)
+                if any(metrics.get(key) != value for key, value in stats.items()):
+                    raise WalkthroughError(f"The {name} comparison metrics contradict its results.")
+                clean = clean and stats["triage_correct"] == stats["reviewer_agrees"] == len(golden)
+        self.say(f"Evidence: {fresh[0].parent.relative_to(self.root)}")
+        return "PASS" if clean else "OBSERVED FAIL"
+
+    def check_explanation(self, step, code, output):
+        golden = self.golden_choices(step)
+        alert = next(iter(golden))
+        if code != 0:
+            raise WalkthroughError(f"Decision-1 explanation failed (exit {code}).")
+        if step.expect == "choice-json":
+            try:
+                record, _ = json.JSONDecoder().raw_decode(output.lstrip())
+            except ValueError:
+                raise WalkthroughError("The command did not print a complete Decision-1 JSON record.") from None
+            if not isinstance(record, dict) or record.get("alert_id") != alert:
+                raise WalkthroughError("The explanation record does not match the requested alert.")
+            assessment, explanation, review = (record.get(key) for key in ("assessment", "explanation", "review"))
+            if (not isinstance(explanation, dict) or not explanation.get("reasons")
+                    or not isinstance(assessment, dict) or explanation.get("disposition") != assessment.get("disposition")):
+                raise WalkthroughError("The Decision-1 explanation is missing or changed the chosen disposition.")
+        else:
+            choice = re.search(rf"(?m)^{re.escape(alert)}: Decision-1 chooses (\w+)", output)
+            verdict = re.search(r"(?m)^Reviewer: (agree|disagree) \(", output)
+            if (not choice or not verdict or "\nReasons\n" not in output
+                    or "What was called, and what it cost" not in output):
+                raise WalkthroughError("The Decision-1 explanation or reviewer is unavailable or incomplete.")
+            assessment = {"status": "ok", "disposition": choice[1]}
+            review = {"status": "ok", "verdict": verdict[1]}
+        stats = self.check_choices([{"alert_id": alert, "expected": golden[alert],
+                                    "triage": assessment, "review": review}], golden, nested=True)
+        return "PASS" if stats["triage_correct"] == stats["reviewer_agrees"] == 1 else "OBSERVED FAIL"
+
     def check_pack(self, before, code, expect, redteam):
         after = self.pack_snapshot()
         fresh = [path for path, signature in after.items()
@@ -604,6 +757,10 @@ class Runner:
     def check_result(self, step, code, output, before):
         if step.expect.startswith("pack-"):
             return self.check_pack(before, code, step.expect, "src/redteam.py" in step.args)
+        if step.expect in DECISION_REPORTS:
+            return self.check_decision_report(step, code, before)
+        if step.expect in ("choice-explain", "choice-json"):
+            return self.check_explanation(step, code, output)
         if step.expect == "diff":
             if code in (0, 1):
                 return "PASS"
@@ -731,6 +888,8 @@ class Runner:
         before = None
         if step.expect.startswith("pack-"):
             before = self.pack_snapshot()
+        elif step.expect in DECISION_REPORTS:
+            before = self.decision_snapshot(step.expect)
         elif step.expect.startswith("decision-"):
             path = self.safe_path(self.decision_path())
             before = len(path.read_text(encoding="utf-8").splitlines()) if path.exists() else 0
