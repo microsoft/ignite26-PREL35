@@ -1,0 +1,110 @@
+<policies>
+	<inbound>
+		<base />
+		__AUTH__
+		<rate-limit-by-key calls="30" renewal-period="60" counter-key="@(((Jwt)context.Variables[&quot;systemone-jwt&quot;]).Claims.GetValueOrDefault(&quot;oid&quot;, &quot;unknown&quot;))" />
+		<set-variable name="rawInput" value="@(context.Request.Body.As&lt;string&gt;(preserveContent: true))" />
+		<set-variable name="input" value="@{ try { var body = JToken.Parse((string)context.Variables[&quot;rawInput&quot;]); if (body is JArray) { return new JObject(new JProperty(&quot;cases&quot;, body)).ToString(Newtonsoft.Json.Formatting.None); } return body.ToString(Newtonsoft.Json.Formatting.None); } catch { return (string)context.Variables[&quot;rawInput&quot;]; } }" />
+		<set-variable name="batchReference" value="@{ var text = ((string)context.Variables[&quot;rawInput&quot;]).Trim(); if (System.Text.RegularExpressions.Regex.IsMatch(text, &quot;^[a-f0-9]{32}$&quot;)) { return text; } try { var body = JToken.Parse((string)context.Variables[&quot;rawInput&quot;]); if (body.Type == JTokenType.String) { return (string)body; } if (body is JObject &amp;&amp; ((JObject)body).Properties().Count() == 1 &amp;&amp; body[&quot;batch_reference&quot;]?.Type == JTokenType.String) { return (string)body[&quot;batch_reference&quot;]; } return &quot;&quot;; } catch { return &quot;&quot;; } }" />
+		<choose>
+			<when condition="@(!string.IsNullOrEmpty((string)context.Variables[&quot;batchReference&quot;]))">
+				<choose>
+					<when condition="@(!System.Text.RegularExpressions.Regex.IsMatch((string)context.Variables[&quot;batchReference&quot;], &quot;^[a-f0-9]{32}$&quot;))">
+						<return-response>
+							<set-status code="400" reason="Invalid batch reference" />
+							<set-header name="Content-Type" exists-action="override">
+								<value>application/json</value>
+							</set-header>
+							<set-body>{"error":{"code":"invalid_batch_reference","message":"Use the exact reference issued by the authorized staging operation."}}</set-body>
+						</return-response>
+					</when>
+				</choose>
+				<cache-lookup-value key="@(&quot;alert-disposition:batch:&quot; + (string)context.Variables[&quot;batchReference&quot;])" variable-name="stagedInput" />
+				<choose>
+					<when condition="@(!context.Variables.ContainsKey(&quot;stagedInput&quot;))">
+						<return-response>
+							<set-status code="404" reason="Batch reference unavailable" />
+							<set-header name="Content-Type" exists-action="override">
+								<value>application/json</value>
+							</set-header>
+							<set-body>{"error":{"code":"staged_batch_unavailable","message":"The immutable batch is missing or expired. Stage the original permitted cases again; no inference was performed."}}</set-body>
+						</return-response>
+					</when>
+				</choose>
+				<set-variable name="input" value="@((string)context.Variables[&quot;stagedInput&quot;])" />
+			</when>
+		</choose>
+		<set-variable name="envelopeValid" value="@{ try { var text = (string)context.Variables[&quot;input&quot;]; if (System.Text.Encoding.UTF8.GetByteCount((string)context.Variables[&quot;rawInput&quot;]) > 1048576) { return false; } var root = JObject.Parse(text); var cases = root[&quot;cases&quot;] as JArray; if (root.Properties().Count() != 1 || cases == null || cases.Count &lt; 1 || cases.Count > 50) { return false; } var ids = cases.OfType&lt;JObject&gt;().Select(c => (string)c[&quot;alert&quot;]?[&quot;id&quot;]).Where(id => !string.IsNullOrEmpty(id)).ToArray(); return ids.Distinct().Count() == ids.Length; } catch { return false; } }" />
+		<choose>
+			<when condition="@(!(bool)context.Variables[&quot;envelopeValid&quot;])">
+				<return-response>
+					<set-status code="400" reason="Invalid batch" />
+					<set-header name="Content-Type" exists-action="override">
+						<value>application/json</value>
+					</set-header>
+					<set-body>@{ var error = new JObject(new JProperty("code", "invalid_batch"), new JProperty("message", "Supply only cases, an array of 1..50 complete permitted case files with unique alert IDs; maximum UTF-8 payload size is 1 MiB.")); try { var root = JToken.Parse((string)context.Variables["input"]); error["root_type"] = root.Type.ToString(); if (root is JObject) { error["property_names"] = new JArray(((JObject)root).Properties().Select(p => p.Name)); error["cases_type"] = root["cases"] == null ? "missing" : root["cases"].Type.ToString(); } } catch { error["root_type"] = "invalid_json"; } return new JObject(new JProperty("error", error)).ToString(); }</set-body>
+				</return-response>
+			</when>
+		</choose>
+		<set-variable name="count" value="@(((JArray)JObject.Parse((string)context.Variables[&quot;input&quot;])[&quot;cases&quot;]).Count)" />
+		<choose>
+			<when condition="@((string)context.Operation.Id == &quot;stage_batch&quot;)">
+				<set-variable name="batchReference" value="@(Guid.NewGuid().ToString(&quot;N&quot;))" />
+				<cache-store-value key="@(&quot;alert-disposition:batch:&quot; + (string)context.Variables[&quot;batchReference&quot;])" value="@((string)context.Variables[&quot;input&quot;])" duration="600" />
+				<return-response>
+					<set-status code="201" reason="Permitted batch staged" />
+					<set-header name="Content-Type" exists-action="override">
+						<value>application/json</value>
+					</set-header>
+					<set-body>@(new JObject( new JProperty("batch_reference", (string)context.Variables["batchReference"]), new JProperty("count", (int)context.Variables["count"]), new JProperty("expires_in_seconds", 600) ).ToString())</set-body>
+				</return-response>
+			</when>
+		</choose>
+		<set-variable name="index" value="@(0)" />
+		<set-variable name="results" value="[]" />
+		<set-variable name="started" value="@(DateTime.UtcNow)" />
+		<set-variable name="rules" value="{{systemone-triage-rules}}" />
+		<retry condition="@((int)context.Variables[&quot;index&quot;] &lt; (int)context.Variables[&quot;count&quot;])" count="49" interval="1" first-fast-retry="true">
+			<set-variable name="currentCase" value="@(((JArray)JObject.Parse((string)context.Variables[&quot;input&quot;])[&quot;cases&quot;])[(int)context.Variables[&quot;index&quot;]].ToString(Newtonsoft.Json.Formatting.None))" />
+			<set-variable name="caseValid" value="@{ try { var c = JObject.Parse((string)context.Variables[&quot;currentCase&quot;]); return c[&quot;alert&quot;] is JObject &amp;&amp; c[&quot;alert&quot;][&quot;id&quot;]?.Type == JTokenType.String &amp;&amp; !string.IsNullOrWhiteSpace((string)c[&quot;alert&quot;][&quot;id&quot;]) &amp;&amp; c[&quot;customer&quot;] is JObject &amp;&amp; c[&quot;transactions&quot;] is JArray &amp;&amp; c[&quot;prior_cases&quot;] is JArray &amp;&amp; c[&quot;documents&quot;] is JArray &amp;&amp; c[&quot;screening_lists&quot;] is JObject; } catch { return false; } }" />
+			<set-variable name="oneResult" value="@{ var c = JToken.Parse((string)context.Variables[&quot;currentCase&quot;]) as JObject; var hash = System.Security.Cryptography.SHA256.Create().ComputeHash(System.Text.Encoding.UTF8.GetBytes((string)context.Variables[&quot;currentCase&quot;])); return new JObject( new JProperty(&quot;index&quot;, (int)context.Variables[&quot;index&quot;]), new JProperty(&quot;alert_id&quot;, c == null ? null : (string)c[&quot;alert&quot;]?[&quot;id&quot;]), new JProperty(&quot;case_sha256&quot;, BitConverter.ToString(hash).Replace(&quot;-&quot;, &quot;&quot;).ToLowerInvariant()), new JProperty(&quot;status&quot;, &quot;invalid_case&quot;), new JProperty(&quot;disposition&quot;, null), new JProperty(&quot;error&quot;, new JObject(new JProperty(&quot;code&quot;, &quot;invalid_case&quot;), new JProperty(&quot;message&quot;, &quot;Require alert.id, customer, transactions, prior_cases, documents and screening_lists with their documented types.&quot;))) ).ToString(Newtonsoft.Json.Formatting.None); }" />
+			<choose>
+				<when condition="@((DateTime.UtcNow - (DateTime)context.Variables[&quot;started&quot;]).TotalSeconds >= __DEADLINE__)">
+					<set-variable name="results" value="@{ var cases = (JArray)JObject.Parse((string)context.Variables[&quot;input&quot;])[&quot;cases&quot;]; var results = JArray.Parse((string)context.Variables[&quot;results&quot;]); for (var i = (int)context.Variables[&quot;index&quot;]; i &lt; (int)context.Variables[&quot;count&quot;]; i++) { var c = cases[i] as JObject; var text = cases[i].ToString(Newtonsoft.Json.Formatting.None); var hash = System.Security.Cryptography.SHA256.Create().ComputeHash(System.Text.Encoding.UTF8.GetBytes(text)); results.Add(new JObject( new JProperty(&quot;index&quot;, i), new JProperty(&quot;alert_id&quot;, c == null ? null : (string)c[&quot;alert&quot;]?[&quot;id&quot;]), new JProperty(&quot;case_sha256&quot;, BitConverter.ToString(hash).Replace(&quot;-&quot;, &quot;&quot;).ToLowerInvariant()), new JProperty(&quot;status&quot;, &quot;not_attempted_deadline&quot;), new JProperty(&quot;disposition&quot;, null), new JProperty(&quot;error&quot;, new JObject(new JProperty(&quot;code&quot;, &quot;not_attempted_deadline&quot;), new JProperty(&quot;message&quot;, &quot;The synchronous deadline was reached. This case was not sent to the model.&quot;))) )); } return results.ToString(Newtonsoft.Json.Formatting.None); }" />
+					<set-variable name="oneResult" value="@(&quot;&quot;)" />
+					<set-variable name="index" value="@((int)context.Variables[&quot;count&quot;] - 1)" />
+				</when>
+				<when condition="@((bool)context.Variables[&quot;caseValid&quot;])">
+					<send-request mode="new" response-variable-name="decision" timeout="5" ignore-error="true">
+						<set-url>__FOUNDRY_ENDPOINT__/providers/microsoft/v1/systemone</set-url>
+						<set-method>POST</set-method>
+						<set-header name="Content-Type" exists-action="override">
+							<value>application/json</value>
+						</set-header>
+						<set-body>@(new JObject( new JProperty("model", "decision-1"), new JProperty("state", (string)context.Variables["currentCase"]), new JProperty("questions", new JObject(new JProperty("disposition", new JObject( new JProperty("type", "choice"), new JProperty("instructions", (string)context.Variables["rules"]), new JProperty("criteria", new JObject( new JProperty("escalate", "Actual evidence establishes a defined financial-crime red flag. Missing information alone is insufficient."), new JProperty("close_false_positive", "No established red flag; the profile or permitted independent evidence explains the activity, or screening is a false positive."), new JProperty("request_info", "No established red flag, but the activity is unexplained or necessary KYC/evidence is incomplete.") )) )))) ).ToString(Newtonsoft.Json.Formatting.None))</set-body>
+						<authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+					</send-request>
+					<set-variable name="oneResult" value="@{ var r = JObject.Parse((string)context.Variables[&quot;oneResult&quot;]); r[&quot;status&quot;] = &quot;upstream_error&quot;; var response = context.Variables[&quot;decision&quot;] as IResponse; var code = response == null ? &quot;decision_timeout&quot; : &quot;decision_http_&quot; + response.StatusCode.ToString(); r[&quot;error&quot;] = new JObject(new JProperty(&quot;code&quot;, code), new JProperty(&quot;message&quot;, &quot;No business disposition is available for this case.&quot;)); if (response == null || response.StatusCode != 200) { return r.ToString(Newtonsoft.Json.Formatting.None); } try { var raw = response.Body.As&lt;JObject&gt;(preserveContent: true); var a = raw[&quot;answers&quot;]?[&quot;disposition&quot;] as JObject; var labels = new string[] { &quot;escalate&quot;, &quot;close_false_positive&quot;, &quot;request_info&quot; }; var p = a?[&quot;probabilities&quot;] as JObject; var confidence = a?[&quot;confidence&quot;]; var usage = raw[&quot;usage&quot;] as JObject; var valid = (string)raw[&quot;model&quot;] == &quot;microsoft-decision-1&quot; &amp;&amp; (string)a?[&quot;type&quot;] == &quot;choice&quot; &amp;&amp; labels.Contains((string)a?[&quot;choice&quot;]) &amp;&amp; p != null &amp;&amp; p.Properties().Count() == 3 &amp;&amp; labels.All(k => p[k] != null &amp;&amp; (p[k].Type == JTokenType.Float || p[k].Type == JTokenType.Integer) &amp;&amp; (double)p[k] >= 0 &amp;&amp; (double)p[k] &lt;= 1) &amp;&amp; Math.Abs(labels.Sum(k => (double)p[k]) - 1) &lt;= 0.01 &amp;&amp; confidence != null &amp;&amp; (confidence.Type == JTokenType.Float || confidence.Type == JTokenType.Integer) &amp;&amp; (double)confidence >= 0 &amp;&amp; (double)confidence &lt;= 1 &amp;&amp; usage != null &amp;&amp; usage[&quot;input_tokens&quot;]?.Type == JTokenType.Integer &amp;&amp; (int)usage[&quot;input_tokens&quot;] >= 0 &amp;&amp; usage[&quot;output_tokens&quot;]?.Type == JTokenType.Integer &amp;&amp; (int)usage[&quot;output_tokens&quot;] >= 0; if (!valid) { throw new Exception(&quot;Invalid Decision-1 typed result&quot;); } r[&quot;status&quot;] = &quot;ok&quot;; r[&quot;disposition&quot;] = a[&quot;choice&quot;]; r[&quot;confidence&quot;] = confidence; r[&quot;probabilities&quot;] = p; r[&quot;usage&quot;] = usage; r[&quot;model&quot;] = raw[&quot;model&quot;]; r.Remove(&quot;error&quot;); } catch { r[&quot;status&quot;] = &quot;invalid_model_response&quot;; r[&quot;error&quot;] = new JObject(new JProperty(&quot;code&quot;, &quot;invalid_model_response&quot;), new JProperty(&quot;message&quot;, &quot;Decision-1 returned an invalid typed choice, probabilities, confidence or usage.&quot;)); } return r.ToString(Newtonsoft.Json.Formatting.None); }" />
+				</when>
+			</choose>
+			<set-variable name="results" value="@{ if ((string)context.Variables[&quot;oneResult&quot;] == &quot;&quot;) { return (string)context.Variables[&quot;results&quot;]; } var a = JArray.Parse((string)context.Variables[&quot;results&quot;]); a.Add(JObject.Parse((string)context.Variables[&quot;oneResult&quot;])); return a.ToString(Newtonsoft.Json.Formatting.None); }" />
+			<set-variable name="index" value="@((int)context.Variables[&quot;index&quot;] + 1)" />
+		</retry>
+		<return-response>
+			<set-status code="200" reason="Batch assessed" />
+			<set-header name="Content-Type" exists-action="override">
+				<value>application/json</value>
+			</set-header>
+			<set-body>@(new JObject( new JProperty("rules_version", "triage-systemone-v2"), new JProperty("model_deployment", "decision-1"), new JProperty("count", (int)context.Variables["count"]), new JProperty("assessments", JArray.Parse((string)context.Variables["results"])) ).ToString(Newtonsoft.Json.Formatting.None))</set-body>
+		</return-response>
+	</inbound>
+	<backend>
+		<base />
+	</backend>
+	<outbound>
+		<base />
+	</outbound>
+	<on-error>
+		<base />
+	</on-error>
+</policies>

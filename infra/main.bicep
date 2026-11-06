@@ -30,7 +30,7 @@ param models array = [
   { name: 'gpt-5-mini', version: '2025-08-07', capacity: 60, sku: 'GlobalStandard' }
   { name: 'gpt-5-nano', version: '2025-08-07', capacity: 30, sku: 'GlobalStandard' } // Lab 1: the replacement in the model swap
   { name: 'text-embedding-3-small', version: '1', capacity: 10, sku: 'Standard' }
-  { name: 'Microsoft-Decision-1', deploymentName: 'decision-1', format: 'Microsoft', registry: 'azureml-msr', version: '1', capacity: 10, sku: 'DataZoneStandard' }
+  { name: 'Microsoft-Decision-1', deploymentName: 'decision-1', format: 'Microsoft', registry: 'azureml-msr', version: '1', capacity: 200, sku: 'DataZoneStandard' }
 ]
 
 var token = toLower(uniqueString(resourceGroup().id))
@@ -239,6 +239,43 @@ resource agentsApiDiagnostics 'Microsoft.ApiManagement/service/apis/diagnostics@
   }
 }
 
+// Gateway-wide request logging: every API, including the MCP server, reports to Application Insights.
+resource apimDiagnostics 'Microsoft.ApiManagement/service/diagnostics@2024-05-01' = {
+  parent: apim
+  name: 'applicationinsights'
+  properties: {
+    loggerId: apimLogger.id
+    alwaysLog: 'allErrors'
+    logClientIp: true
+    sampling: { samplingType: 'fixed', percentage: 100 }
+    verbosity: 'information'
+  }
+}
+
+// Gateway logs, including the MCP request log, in resource-specific Log Analytics tables.
+resource apimGatewayLogs 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  scope: apim
+  name: 'gateway-logs'
+  properties: {
+    workspaceId: logs.id
+    logAnalyticsDestinationType: 'Dedicated'
+    logs: [{ categoryGroup: 'allLogs', enabled: true }]
+  }
+}
+
+// ---------------------------------------------------------------- Decision-1 MCP on the existing gateway
+module systemone './systemone.bicep' = {
+  name: 'systemone'
+  params: {
+    apimName: apim.name
+    foundryAccountName: foundry.name
+    foundryProjectName: project.name
+    projectPrincipalId: project.identity.principalId
+    callerPrincipalIds: foundryUsers
+  }
+  dependsOn: [agentsApiPolicy, apimFoundryUser, deployments]
+}
+
 // ---------------------------------------------------------------- roles
 resource apimFoundryUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: foundry
@@ -290,6 +327,10 @@ output APPLICATIONINSIGHTS_CONNECTION_STRING string = appInsights.properties.Con
 output APPLICATIONINSIGHTS_NAME string = appInsights.name
 output FOUNDRY_NAME string = foundry.name
 output FOUNDRY_PROJECT_NAME string = project.name
+output SYSTEMONE_REST_URL string = systemone.outputs.REST_URL
+output SYSTEMONE_MCP_URL string = systemone.outputs.MCP_URL
+output SYSTEMONE_AGENT_URL string = systemone.outputs.AGENT_URL
+output SYSTEMONE_CONNECTION_NAME string = systemone.outputs.CONNECTION_NAME
 output AZURE_SEARCH_SERVICE_NAME string = investigator.outputs.AZURE_SEARCH_SERVICE_NAME
 output AZURE_SEARCH_ENDPOINT string = investigator.outputs.AZURE_SEARCH_ENDPOINT
 output AZURE_SEARCH_LOCATION string = investigator.outputs.AZURE_SEARCH_LOCATION

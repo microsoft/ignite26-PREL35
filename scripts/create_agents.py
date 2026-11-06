@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 from azure.ai.projects import AIProjectClient
-from azure.ai.projects.models import PromptAgentDefinition, Reasoning
+from azure.ai.projects.models import MCPTool, PromptAgentDefinition, Reasoning
 from azure.core.exceptions import HttpResponseError
 from azure.identity import DefaultAzureCredential
 
@@ -31,14 +31,20 @@ def main(argv=None):
     model = args.model or env["MODEL_DEPLOYMENT"]
     agents_path = ROOT / "src" / "agents"
     # Lab 4 routes low-risk alerts to triage-lite on the smaller model.
-    agents = [(path.stem, path, model) for path in sorted(agents_path.glob("*.md"))]
+    agents = [(path.stem.replace("_", "-"), path, model) for path in sorted(agents_path.glob("*.md"))]
     agents.append(("triage-lite", agents_path / "triage.md", "gpt-5-nano"))
+    # triage-systemone gets its Decision-1 assessment from the MCP server that infra/systemone.bicep publishes.
+    gateway = env["APIM_GATEWAY_URL"].rstrip("/") + "/alert-disposition-mcp/mcp"
+    mcp_tools = {"triage-systemone": [MCPTool(
+        server_label="disposition", server_url=gateway, project_connection_id="alert-disposition-mcp",
+        allowed_tools=["asses_next_step"], require_approval="always")]}
 
     for name, path, agent_model in agents:
         # Low reasoning effort keeps calls short; the release gate checks accuracy.
         definition = PromptAgentDefinition(
             model=agent_model, instructions=path.read_text(encoding="utf-8"), reasoning=Reasoning(effort="low"),
             text={"format": {"type": "json_object"}},
+            **({"tools": mcp_tools[name]} if name in mcp_tools else {}),
         )
         # New role assignments can take a few minutes to reach the Foundry data plane.
         for attempt in range(10):

@@ -10,12 +10,13 @@ from scripts import create_agents
 @pytest.fixture
 def publisher(tmp_path, monkeypatch):
     (tmp_path / ".env").write_text(
-        "FOUNDRY_PROJECT_ENDPOINT=https://fixture.example\nMODEL_DEPLOYMENT=gpt-5-mini\n",
+        "FOUNDRY_PROJECT_ENDPOINT=https://fixture.example\nMODEL_DEPLOYMENT=gpt-5-mini\n"
+        "APIM_GATEWAY_URL=https://gateway.example/\n",
         encoding="utf-8-sig",
     )
     prompts = tmp_path / "src" / "agents"
     prompts.mkdir(parents=True)
-    for name in ("triage", "reviewer"):
+    for name in ("triage", "reviewer", "triage_systemone"):
         (prompts / f"{name}.md").write_text(f"{name} instructions", encoding="utf-8")
     (prompts / "evidence").mkdir()
     (prompts / "evidence" / "agent.md").write_text("hosted instructions", encoding="utf-8")
@@ -51,13 +52,26 @@ def test_publishes_only_top_level_prompts_and_preserves_triage_lite(publisher, a
         endpoint="https://fixture.example", credential=credential.return_value,
     )
     calls = client.return_value.agents.create_version.call_args_list
-    assert [call.kwargs["agent_name"] for call in calls] == ["reviewer", "triage", "triage-lite"]
-    assert [call.kwargs["definition"].model for call in calls] == [model, model, "gpt-5-nano"]
+    assert [call.kwargs["agent_name"] for call in calls] == ["reviewer", "triage", "triage-systemone", "triage-lite"]
+    assert [call.kwargs["definition"].model for call in calls] == [model, model, model, "gpt-5-nano"]
     assert [call.kwargs["definition"].instructions for call in calls] == [
-        "reviewer instructions", "triage instructions", "triage instructions",
+        "reviewer instructions", "triage instructions", "triage_systemone instructions", "triage instructions",
     ]
     assert all(call.kwargs["definition"].reasoning.effort == "low" for call in calls)
     assert all(call.kwargs["definition"].as_dict()["text"]["format"] == {"type": "json_object"} for call in calls)
+
+
+def test_triage_systemone_is_the_only_agent_with_the_mcp_tool(publisher):
+    client, _ = publisher
+    assert create_agents.main([]) == 0
+    definitions = {call.kwargs["agent_name"]: call.kwargs["definition"].as_dict()
+                   for call in client.return_value.agents.create_version.call_args_list}
+    tool = definitions["triage-systemone"]["tools"][0]
+    assert tool["server_url"] == "https://gateway.example/alert-disposition-mcp/mcp"
+    assert tool["project_connection_id"] == "alert-disposition-mcp"
+    assert tool["allowed_tools"] == ["asses_next_step"]
+    assert tool["require_approval"] == "always"
+    assert all("tools" not in d for n, d in definitions.items() if n != "triage-systemone")
 
 
 @pytest.mark.parametrize("status,exhausted", [(403, False), (403, True), (401, False), (500, False)])
@@ -67,7 +81,7 @@ def test_retries_only_forbidden_errors_and_stops_after_ten_attempts(publisher, m
     error = HttpResponseError("fixture failure")
     error.status_code = status
     success = Mock(name="fixture-agent", version="1")
-    publish.side_effect = [error] * 10 if exhausted else [error, success, success, success]
+    publish.side_effect = [error] * 10 if exhausted else [error, success, success, success, success]
     sleep = Mock()
     monkeypatch.setattr(create_agents.time, "sleep", sleep)
     if status != 403 or exhausted:
@@ -77,5 +91,5 @@ def test_retries_only_forbidden_errors_and_stops_after_ten_attempts(publisher, m
         assert sleep.call_count == (9 if exhausted else 0)
     else:
         assert create_agents.main([]) == 0
-        assert publish.call_count == 4
+        assert publish.call_count == 5
         sleep.assert_called_once_with(30)
