@@ -31,7 +31,7 @@ def main(argv=None):
     model = args.model or env["MODEL_DEPLOYMENT"]
     agents_path = ROOT / "src" / "agents"
     # Lab 4 routes low-risk alerts to triage-lite on the smaller model.
-    agents = [(path.stem, path, model) for path in sorted(agents_path.glob("*.md"))]
+    agents = [(path.stem.replace("_", "-"), path, model) for path in sorted(agents_path.glob("*.md"))]
     agents.append(("triage-lite", agents_path / "triage.md", "gpt-5-nano"))
 
     for name, path, agent_model in agents:
