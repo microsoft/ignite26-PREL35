@@ -12,8 +12,11 @@ subscription-level `LOD Reader` and `LOD Contributor` learners; neither grants r
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, on Tearing Down, blocking | [teardown.ps1](teardown.ps1): deletes and purges the Foundry account, which Skillable requires for `Microsoft.CognitiveServices/accounts` |
 | **Access control policy** | [acp-v4.json](acp-v4.json) |
 | **Instructions** | [instructions/skillable/content.md](../../instructions/skillable/content.md), linked from GitHub |
-| **Lab VM** | Azure CLI, Git, PowerShell 7 for the lab's terminal examples, [uv](https://docs.astral.sh/uv/), the source download below, and then `uv sync` in the lab directory |
+| **Lab VM** | Azure CLI, Git, PowerShell (5.1 or 7) for the lab's terminal examples, [uv](https://docs.astral.sh/uv/), the source download below, and then `uv sync` in the lab directory |
 | **Subscription** | Access to `gpt-5-mini` and `gpt-5-nano` (`GlobalStandard`). Without it the template fails with `SpecialFeatureOrQuotaIdRequired`; ask Skillable to enable both models |
+
+Organizer provisioning with `azd` on Windows still needs PowerShell 7 for the `postprovision` hook in
+[azure.yaml](../../azure.yaml). Learner setup uses Python through uv, and `azd deploy` does not run that hook.
 
 Replace the old Foundry-only setup and role-cleanup snippets with this pair. Keep the separate Foundry
 deletion/purge action. See [the setup sequence](../README.md#skillable-post-build-setup) for roles and learner commands.
