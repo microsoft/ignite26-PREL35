@@ -55,8 +55,7 @@ investigate.py  ──(your Entra ID token)──►  API Management  ──(its
 ## Prerequisites
 
 Provided on the lab VM: Azure CLI, Azure Developer CLI (`azd`) with the extensions listed in
-[azure.yaml](../../azure.yaml), PowerShell (Windows PowerShell 5.1 or PowerShell 7) for the terminal examples,
-uv with Python 3.12, and this repository.
+[azure.yaml](../../azure.yaml), PowerShell, uv with Python 3.12, and this repository.
 The Python packages and setup commands are defined in [pyproject.toml](../../pyproject.toml). Your resource group and sign-in details are on the
 **Resources** tab of the lab instructions.
 
@@ -64,8 +63,7 @@ The Python packages and setup commands are defined in [pyproject.toml](../../pyp
 
 ### 1. Sign in and connect (3 min)
 
-Open a **PowerShell** terminal in the repository folder. Windows PowerShell 5.1 and PowerShell 7 both work for
-the learner commands; setup runs Python through uv. Every command in these labs runs from this folder.
+Open a **PowerShell** terminal in the repository folder. Every command in these labs runs from this folder.
 
 Sign in. Use the username `<lab-username>` and the password `<lab-password>`:
 
