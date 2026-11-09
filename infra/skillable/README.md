@@ -67,11 +67,11 @@ az bicep build --file infra/main.bicep --stdout | Set-Clipboard
 
 ## Instructions
 
-Skillable reads one Markdown file. After changing any lab README, rebuild it and commit:
-
-```powershell
-uv run scripts/build_skillable.py
-```
+Skillable reads one Markdown file: [instructions/skillable/content.md](../../instructions/skillable/content.md). It is the
+source of truth for the lab guide, so edit it directly; the lab READMEs under `instructions/` are not kept in sync with
+it. Screenshots use Skillable's syntax, `!IMAGE[name.png](instructions361796/name.png)`, and each PNG in
+`instructions/images` must also be uploaded to the lab profile. After any change, update `SOURCE_SHA256` and the step
+line numbers in `tests/e2e/run_lab.py`; CI checks them with `uv run tests/e2e/run_lab.py --plan`.
 
 Linking needs a GitHub account that is a full admin of the repository.
 

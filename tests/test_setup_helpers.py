@@ -5,7 +5,6 @@ from unittest.mock import Mock
 import pytest
 
 from scripts import common, console_output, set_gateway, setup_obo
-from scripts.build_skillable import convert
 
 
 @pytest.mark.parametrize("name,value", [
@@ -109,13 +108,3 @@ def test_console_colors_respect_terminal_and_environment(disabled, monkeypatch):
     stream.isatty.return_value = disabled != "redirected"
     rendered = console_output.color("Ready", "green", stream=stream)
     assert rendered == ("\033[32mReady\033[0m" if disabled == "enabled" else "Ready")
-
-
-@pytest.mark.parametrize("markdown,expected", [
-    ("See [the file](../../a.md) and [docs](https://x.y).", "See the file and [docs](https://x.y)."),
-    ("Use `<lab-password>`", "Use ++@lab.CloudPortalCredential(User1).Password++"),
-    ("uv run setup-lab --resource-group <your-resource-group>",
-     "uv run setup-lab --resource-group @lab.CloudResourceGroup(1).Name"),
-])
-def test_skillable_guidance_keeps_python_commands_and_replaces_tokens(markdown, expected):
-    assert convert(markdown) == expected

@@ -278,11 +278,13 @@ Find your resource group @lab.CloudResourceGroup(PREL35).Name and deployed resou
 
 !IMAGE[0-4-apim-published-agents.png](instructions361796/0-4-apim-published-agents.png)
 
+!IMAGE[0-4-apim-policy.png](instructions361796/0-4-apim-policy.png)
+
 Then open the **Foundry portal** `https://ai.azure.com`. By either going direct to the URL, or through Azure Portal ──► Foundry ──► blue button "Go to Foundry Portal".
 
 - [] Open the Foundry Portal
 
-Select the `fincrime` project, and open **Build** ──► **Agents**. You see **triage** and **reviewer**. Open triage and read its instructions: they're the same text as `src/agents/triage.md`. When `azd deploy` has finished, **Agents** also shows **evidence-agent** as a hosted agent.
+Select the `fincrime` project, and open **Build** ──► **Agents**. You see the four agents you published: **triage**, **reviewer**, **triage-lite** and **triage-systemone**. Open triage and read its instructions: they're the same text as `src/agents/triage.md`. When `azd deploy` has finished, **Agents** also shows **evidence-agent** as a hosted agent.
 
 !IMAGE[0-4-foundry-agents.png](instructions361796/0-4-foundry-agents.png)
 
@@ -511,8 +513,12 @@ dependencies
 You see one row per agent version: the concise prompt was the fastest version, and it was the one the gate blocked.
 Traces take a few minutes to arrive. If your latest versions are missing, run the query again shortly.
 
+!IMAGE[1-6-trace-query.png](instructions361796/1-6-trace-query.png)
+
 Then open the **Foundry portal** `https://ai.azure.com`, select the `fincrime` project, and open **Evaluations**.
 - [] Open the run named **Release gate** with the date and time of step 1; its **Agent ID** is `triage`. The **Task adherence** column shows the AI judge's verdict for each alert, and **Task adherence.reason** its reasoning. If the run still shows as running, come back to it at the end of the lab.
+
+!IMAGE[1-6-release-gate-run.png](instructions361796/1-6-release-gate-run.png)
 
 ### 7. The same gate in a pipeline \(3 min\)
 
@@ -635,7 +641,7 @@ In both, what stopped the attack is the model and the agent's own instructions: 
 
 Open the **Foundry portal** `https://ai.azure.com`, select the `fincrime` project, and open **Guardrails**. Open the guardrail on `gpt-5-mini` (`Microsoft.DefaultV2`) and note:
 
-!IMAGE[2-2-guardrails.png](instructions361796/2-2-guardrails.png)
+!IMAGE[2-2-guardrail.png](instructions361796/2-2-guardrail.png)
 
 - The content categories and the severity at which they block, on both the prompt and the completion;
 - Jailbreak detection on the user prompt, which blocked `JB-01`;
@@ -872,6 +878,10 @@ Don't publish anything now. If anyone publishes a new triage version later, inta
 ### 6. See Azure Policy deny a model \(6 min\)
 
 Intake governs a use case. Azure Policy governs the platform underneath it, for every team. In the **Azure portal** +++@lab.CloudPortal.Url+++, open your resource group, select **Policies**, and open **Only approved AI models can be deployed**. It uses the built-in policy *Foundry model deployments should only use approved models*, with the effect **Deny** and four approved models: `gpt-5-mini` and `gpt-5-nano` for the agents, `text-embedding-3-small` for the Search knowledge base, and `decision-1`, a preview decision model.
+
+!IMAGE[3-6-policy-wide.png](instructions361796/3-6-policy-wide.png)
+
+!IMAGE[3-6-policy.png](instructions361796/3-6-policy.png)
 
 Try to deploy a model that isn't approved:
 
@@ -1111,6 +1121,8 @@ customMetrics
 ```
 
 Model validation is most of the bill: you ran the gate more often today than anyone triaged an alert.
+
+!IMAGE[4-4-cost-by-cost-center.png](instructions361796/4-4-cost-by-cost-center.png)
 
 - [] Change `by CostCenter` on the last `summarize` line to `by Caller` and run the query again to see the cost per person.
 
