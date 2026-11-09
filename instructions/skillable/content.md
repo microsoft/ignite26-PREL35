@@ -803,6 +803,17 @@ Then open the **Foundry portal** `https://ai.azure.com`, select the `fincrime` p
 
 Open `.github/workflows/release-gate.yml`. It runs the commands you ran: connect, publish the agents from the commit, run the gate, and keep the Evidence Pack. A failing gate fails the job, so the change can't be merged or released.
 
+### 8. Check your understanding \(1 min\)
+
+> [+help] Why isn't one successful agent response enough to approve a release? (click to expand for answer)
+> - *Agent responses can vary, and one example cannot establish performance across the task. Evaluate representative cases with known expected outcomes before deciding whether a change is good enough.*
+
+> [+help] What does a reviewer agent add to a triage agent's recommendation? (click to expand for answer)
+> - *It provides a separate checking step: examining the supporting evidence, challenging unsupported conclusions, and flagging missed risks before a person decides. This complements evaluation and human oversight rather than replacing them.*
+
+> [+help] Why should a prompt change go through evaluation just as a model change does? (click to expand for answer)
+> - *Both can change the system's behavior, even when the application code stays the same. Compare the changed workflow against the same representative cases and requirements before releasing it.*
+
 ### Bonus challenge
 
 Make `gpt-5-nano` pass the quality gate by changing its instructions.
@@ -1058,6 +1069,17 @@ Look at the attack success rate by category and by disguise: the scan tests the 
 
 Together with the release gate's Evidence Pack, these are the security input to the approval in Lab 3.
 
+### 7. Check your understanding \(1 min\)
+
+> [+help] Can an agent perform well on normal tasks and still be vulnerable to attack? Why? (click to expand for answer)
+> - *Yes. Normal-task evaluations do not establish how the agent behaves when someone tries to manipulate it. Adversarial testing examines different failure modes.*
+
+> [+help] Why shouldn't an agent follow instructions simply because they appear in a document it is investigating? (click to expand for answer)
+> - *The document is input to assess, not authority to change the task. Treating its instructions as trusted lets an attacker redirect the agent.*
+
+> [+help] Why use several security layers instead of relying on one filter? (click to expand for answer)
+> - *Different controls catch different attacks, and each has gaps. Gateway checks, model guardrails, and agent instructions provide complementary protection, but none guarantees safety.*
+
 ## Click next to continue
 
 Continue to Lab 3 - Governance.
@@ -1277,6 +1299,17 @@ The deployment is refused. The error code depends on what your lab account may d
 - **`AuthorizationFailed`:** your account can't deploy models at all, so Azure refused the request before it checked any policy.
 
 These are two separate controls. Role-based access decides *who* can deploy; Azure Policy decides *what* can be deployed, even by someone who is allowed to deploy. Nobody needs to remember the approved list: the platform enforces it, whoever deploys and however they do it.
+
+### 7. Check your understanding \(1 min\)
+
+> [+help] Why isn't approving an AI use case a one-time sign-off? (click to expand for answer)
+> - *Approval rests on evidence about a particular version and configuration. When they change, reassess whether that evidence still supports using the system.*
+
+> [+help] Does protecting customer data mean removing every personal field before an agent runs? (click to expand for answer)
+> - *No. Give each agent the data it needs for its purpose. Models sold by Azure in Microsoft Foundry do not store prompts or responses in the model, and those prompts and responses are not used to train, retrain, or improve the base models. The service still processes your data, and some features retain it. Follow your organization's data policies and the data protection laws and regulations that apply in your jurisdiction, including requirements for where data is processed and stored.*
+
+> [+help] What makes human oversight meaningful rather than a rubber stamp? (click to expand for answer)
+> - *Give the person both the LLM's recommendation and deterministic information, such as source records, calculated values, and policy-check results. They must be able to compare them, challenge the recommendation, and choose a different outcome, with a traceable decision.*
 
 ## Click next to continue
 
@@ -1542,6 +1575,17 @@ You can now answer the Finance Controller with the three numbers a FinOps review
 (from the gate), who consumed it (per cost center and caller, from the gateway), and what a cheaper option would do
 to quality (from the gate, with routing on). The decision-model experiment adds a fourth question: how much
 work needs a generated explanation, and what does that explanation add to the cost?
+
+### 7. Check your understanding \(1 min\)
+
+> [+help] What should you compare before deciding that a cheaper model is a better choice? (click to expand for answer)
+> - *Compare cost per completed task, quality, latency, and the human review it creates. A lower token price is not a saving if mistakes or extra work outweigh it.*
+
+> [+help] When is separating a decision from its explanation useful? (click to expand for answer)
+> - *A fast, low-cost decision model can handle structured choices, while a language model generates explanations only where the workflow needs them. Architecting these as separate steps can reduce latency and cost without making every decision pay for a generated narrative.*
+
+> [+help] What do you need to know to hold teams accountable for AI spending? (click to expand for answer)
+> - *Measure usage, apply the relevant model prices, and attribute it to the teams and callers responsible. Include every calling path, not just the traffic visible to one gateway.*
 
 ## You've completed the labs
 
