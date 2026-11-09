@@ -245,6 +245,8 @@ uv run configure-evidence-agent
 
 If you're asked for a key, the command opens the Web IQ portal. 
 
+!IMAGE[0-3-webiq-resource.png](instructions361796/0-3-webiq-resource.png)
+
 !IMAGE[0-3-webiq-api-key.png](instructions361796/0-3-webiq-api-key.png)
 
 Select the profile linked to the billing resource shown in the terminal. You'll see "You're ready to use WebIQ", select **Skip** on that screen. Then create an API key with the **web** service enabled, and paste it into the hidden prompt. The key is saved in `.env`, which Git ignores.
@@ -264,17 +266,25 @@ repository folder, and carry on with step 4. You use the evidence agent in Lab 3
 
 Find your resource group @lab.CloudResourceGroup(PREL35).Name and deployed resources:
 
+!IMAGE[0-4-resource-group.png](instructions361796/0-4-resource-group.png)
+
 | Resource | Look for |
 | -------- | -------- |
 | Foundry (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[FOUNDRY_NAME]`) | **Resource Management > Keys and Endpoint**: local (key) authentication is disabled |
 | API Management (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APIM_NAME]`) | **APIs > Published agents**: one operation per agent. Select **All operations**, then the **</>** icon under **Inbound processing** to open the policy: token check, rate limit, managed identity |
 | Application Insights (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) | Where agent traces land. You use it in Lab 1 |
 
+!IMAGE[0-4-foundry-keys.png](instructions361796/0-4-foundry-keys.png)
+
+!IMAGE[0-4-apim-published-agents.png](instructions361796/0-4-apim-published-agents.png)
+
 Then open the **Foundry portal** `https://ai.azure.com`. By either going direct to the URL, or through Azure Portal ──► Foundry ──► blue button "Go to Foundry Portal".
 
 - [] Open the Foundry Portal
 
 Select the `fincrime` project, and open **Build** ──► **Agents**. You see **triage** and **reviewer**. Open triage and read its instructions: they're the same text as `src/agents/triage.md`. When `azd deploy` has finished, **Agents** also shows **evidence-agent** as a hosted agent.
+
+!IMAGE[0-4-foundry-agents.png](instructions361796/0-4-foundry-agents.png)
 
 ### 5. Run your first investigation \(4 min\)
 
@@ -482,6 +492,10 @@ Every agent call was traced. In the **Azure portal** +++@lab.CloudPortal.Url+++,
 
 > You may need to disable the "Agent" experience and switch from "Simple mode" to "KQL mode".
 
+!IMAGE[1-6-logs-menu.png](instructions361796/1-6-logs-menu.png)
+
+!IMAGE[1-6-logs-kql.png](instructions361796/1-6-logs-kql.png)
+
 - [] Paste the query below into the query editor (it's KQL, not PowerShell) and select **Run**:
 
 ```kusto
@@ -620,6 +634,8 @@ In both, what stopped the attack is the model and the agent's own instructions: 
 ### 2. See the guardrail in Foundry \(4 min\)
 
 Open the **Foundry portal** `https://ai.azure.com`, select the `fincrime` project, and open **Guardrails**. Open the guardrail on `gpt-5-mini` (`Microsoft.DefaultV2`) and note:
+
+!IMAGE[2-2-guardrails.png](instructions361796/2-2-guardrails.png)
 
 - The content categories and the severity at which they block, on both the prompt and the completion;
 - Jailbreak detection on the user prompt, which blocked `JB-01`;
