@@ -4,8 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from scripts import common, console_output, set_gateway, setup_obo
-from scripts.build_skillable import OUT, build, convert
+from scripts import build_skillable, common, console_output, set_gateway, setup_obo
 
 
 @pytest.mark.parametrize("name,value", [
@@ -120,9 +119,18 @@ def test_console_colors_respect_terminal_and_environment(disabled, monkeypatch):
      "!IMAGE[0-4-foundry-agents.png](instructions361796/0-4-foundry-agents.png) and Lab 1"),
 ])
 def test_skillable_guidance_keeps_python_commands_and_replaces_tokens(markdown, expected):
-    assert convert(markdown) == expected
+    assert build_skillable.convert(markdown) == expected
 
 
-def test_skillable_guide_matches_the_lab_readmes():
-    built = OUT.read_text(encoding="utf-8").replace("\r\n", "\n")
-    assert build() == built, "Run uv run scripts/build_skillable.py after editing a lab README, not content.md"
+def test_skillable_builder_converts_and_joins_fixture_pages(tmp_path, monkeypatch):
+    introduction = tmp_path / "introduction.md"
+    introduction.write_text("# Introduction\n\nSee [the lab](lab-0/README.md).\n", encoding="utf-8")
+    lab = tmp_path / "lab.md"
+    lab.write_text("# Lab 0\n\nUse +++<lab-username>+++\n", encoding="utf-8")
+    monkeypatch.setattr(build_skillable, "LABS", [introduction, lab])
+
+    assert build_skillable.build() == (
+        build_skillable.HEADER
+        + "\n\n# Introduction\n\nSee the lab."
+        + "\n\n===\n\n# Lab 0\n\nUse +++@lab.CloudPortalCredential(User1).Username+++\n"
+    )
