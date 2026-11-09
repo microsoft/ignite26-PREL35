@@ -1,4 +1,4 @@
-"""Offline checks for starting the generated walkthrough at a numbered step."""
+"""Offline checks for source-mapped reviews and starting the walkthrough at a numbered step."""
 
 import contextlib
 import io
@@ -207,6 +207,48 @@ class StartStepTests(unittest.TestCase):
         self.write(lab.GUIDE, b"Changed guide\n")
         with self.assertRaisesRegex(lab.WalkthroughError, "instructions changed"):
             lab.Runner(self.root, start_step=len(self.steps))
+
+    def test_every_lab_maps_its_three_knowledge_checks_to_a_required_review(self):
+        runner = lab.Runner(self.root)
+        lines = (self.root / lab.GUIDE).read_text().splitlines()
+        headings = [number for number, line in enumerate(lines, 1)
+                    if line.startswith("### ") and "Check your understanding" in line]
+        reviews = [step for step in runner.steps if step.title == "Check your understanding"]
+        self.assertEqual(len(headings), 5)
+        self.assertEqual([step.start for step in reviews], headings)
+        for index, step in enumerate(reviews):
+            with self.subTest(lab=index):
+                section_end = next(number for number in range(step.start + 1, len(lines) + 1)
+                                   if lines[number - 1].startswith("#"))
+                section = lines[step.start - 1:section_end - 1]
+                while not section[-1].strip():
+                    section.pop()
+                self.assertEqual(step.end, step.start + len(section) - 1)
+                self.assertEqual(sum(line.startswith("> [+help]") for line in section), 3)
+                self.assertEqual(sum(line.startswith("> - *") for line in section), 3)
+                self.assertTrue(runner.guide.context[step.start][0].startswith(f"Lab {index} - "))
+                self.assertEqual(step.kind, "manual")
+                self.assertFalse(step.optional)
+                self.assertFalse(step.args)
+
+    def test_knowledge_checks_remain_unverified_without_prompts_or_commands(self):
+        runner = lab.Runner(self.root)
+        runner.steps = [step for step in runner.steps if step.title == "Check your understanding"]
+        output = io.StringIO()
+        forbidden = AssertionError("A knowledge check attempted an automated or interactive action")
+        with (contextlib.redirect_stdout(output),
+              patch.object(runner, "preflight"),
+              patch.object(runner, "process", side_effect=forbidden),
+              patch.object(lab.subprocess, "run", side_effect=forbidden),
+              patch.object(lab.subprocess, "Popen", side_effect=forbidden),
+              patch.object(lab.time, "sleep", side_effect=forbidden),
+              patch.object(lab.urllib.request, "build_opener", side_effect=forbidden),
+              patch("builtins.input", side_effect=forbidden),
+              patch.object(Path, "write_bytes", side_effect=forbidden),
+              patch.object(Path, "write_text", side_effect=forbidden)):
+            self.assertEqual(runner.run(execute=True), 0)
+        self.assertEqual([item.status for item in runner.outcomes], ["REVIEW NEEDED"] * 5)
+        self.assertIn("5 manual review item(s) remain unverified", " ".join(output.getvalue().split()))
 
     def test_refreshed_cost_query_and_caller_review_are_planned_but_not_verified(self):
         number = self.number(lambda step: step.title == "Attribute cost by cost center")
