@@ -29,7 +29,7 @@ DECISION_INPUT_USD_PER_M = 0.042
 
 
 def price_decision(input_tokens):
-    # Only the input rate is published for Decision-1; its ~1 output token per case is not priced.
+    # Decision-1 output tokens are free.
     return input_tokens * DECISION_INPUT_USD_PER_M / 1_000_000
 
 
@@ -149,8 +149,8 @@ def main(argv=None):
             print(color(f"  missed: {', '.join(misses)}", "red"))
         report[name] = {"runs": runs, "scores": scores, "median_wall_seconds": wall, "cost_per_case_usd": cost}
     print_steps(steps, total_label="Both models")
-    print("\nCaveats: 14 known cases are indicative only. Decision-1 cost uses $0.042 per 1M input tokens and ignores its"
-          f" ~1 output token. {args.model} cost includes reasoning tokens (effort={args.effort}).")
+    print("\nCaveats: 14 known cases are indicative only. Decision-1 cost uses $0.042 per 1M input tokens;"
+          f" output tokens are free. {args.model} cost includes reasoning tokens (effort={args.effort}).")
     out = ROOT / "evidence" / "decision1-comparison" / f"{datetime.now(timezone.utc):%Y%m%d-%H%M%S}"
     out.mkdir(parents=True)
     (out / "results.json").write_text(json.dumps({"effort": args.effort, "workers": args.workers, "cases": n,

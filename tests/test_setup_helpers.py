@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 
 from scripts import common, console_output, set_gateway, setup_obo
-from scripts.build_skillable import convert
+from scripts.build_skillable import OUT, build, convert
 
 
 @pytest.mark.parametrize("name,value", [
@@ -113,9 +113,16 @@ def test_console_colors_respect_terminal_and_environment(disabled, monkeypatch):
 
 @pytest.mark.parametrize("markdown,expected", [
     ("See [the file](../../a.md) and [docs](https://x.y).", "See the file and [docs](https://x.y)."),
-    ("Use `<lab-password>`", "Use ++@lab.CloudPortalCredential(User1).Password++"),
+    ("Use +++<lab-username>+++", "Use +++@lab.CloudPortalCredential(User1).Username+++"),
     ("uv run setup-lab --resource-group <your-resource-group>",
-     "uv run setup-lab --resource-group @lab.CloudResourceGroup(1).Name"),
+     "uv run setup-lab --resource-group @lab.CloudResourceGroup(PREL35).Name"),
+    ("![Foundry: Agents](../images/0-4-foundry-agents.png) and [Lab 1](../lab-1/README.md)",
+     "!IMAGE[0-4-foundry-agents.png](instructions361796/0-4-foundry-agents.png) and Lab 1"),
 ])
 def test_skillable_guidance_keeps_python_commands_and_replaces_tokens(markdown, expected):
     assert convert(markdown) == expected
+
+
+def test_skillable_guide_matches_the_lab_readmes():
+    built = OUT.read_text(encoding="utf-8").replace("\r\n", "\n")
+    assert build() == built, "Run uv run scripts/build_skillable.py after editing a lab README, not content.md"

@@ -124,13 +124,17 @@ class RunnerChecks(unittest.TestCase):
         lab.Runner(self.root)
 
     def test_removed_command_block_mapping_is_detected(self):
-        steps = [step for step in self.runner.steps if not (step.start <= 251 and step.end >= 253)]
-        with self.assertRaisesRegex(lab.WalkthroughError, "251"):
+        deployment = next(step for step in self.runner.steps if step.args == ("azd", "deploy"))
+        steps = [step for step in self.runner.steps if step != deployment]
+        with self.assertRaisesRegex(lab.WalkthroughError, str(deployment.start)):
             self.runner.guide.check_coverage(steps)
 
     def test_missing_command_inside_a_still_mapped_block_is_detected(self):
-        steps = [step for step in self.runner.steps if not (step.start == 411 and step.expect == "pack-fail")]
-        with self.assertRaisesRegex(lab.WalkthroughError, "414"):
+        gate = next(step for step in self.runner.steps if step.expect == "pack-fail")
+        steps = [step for step in self.runner.steps if step != gate]
+        command_line = next(start for start, end, command in self.runner.guide.commands
+                            if gate.start <= start <= end <= gate.end and self.runner.guide.matches(command, gate))
+        with self.assertRaisesRegex(lab.WalkthroughError, str(command_line)):
             self.runner.guide.check_coverage(steps)
 
     def test_mismatched_environment_is_not_retargeted(self):

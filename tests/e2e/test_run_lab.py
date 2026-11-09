@@ -223,6 +223,22 @@ class StartStepTests(unittest.TestCase):
         self.assertNotIn("query discrepancy", text)
         self.assertTrue(all(item.status == "PLAN" for item in runner.outcomes[number - 1:]))
 
+    def test_refreshed_web_iq_and_policy_guidance_is_visible_without_execution(self):
+        runner = lab.Runner(self.root)
+        output = io.StringIO()
+        with (contextlib.redirect_stdout(output),
+              patch.object(runner, "process", side_effect=AssertionError("Plan executed a command")),
+              patch("builtins.input", side_effect=AssertionError("Plan requested input"))):
+            self.assertEqual(runner.run(), 0)
+        text = " ".join(output.getvalue().split())
+        self.assertIn("Select Skip on the 'You're ready to use WebIQ' screen", text)
+        self.assertIn("billing resource shown in the terminal", text)
+        self.assertIn("paste it into the hidden prompt", text)
+        self.assertIn("Web IQ calls are billable", text)
+        self.assertIn("AuthorizationFailed demonstrates role-based refusal instead", text)
+        self.assertIn("policy remains unverified", text)
+        self.assertTrue(all(item.status == "PLAN" for item in runner.outcomes))
+
     def test_resume_in_gateway_exercise_reports_recovery_when_command_fails(self):
         number = self.number(lambda step: step.kind == "logged-investigation")
         runner = lab.Runner(self.root, start_step=number)
@@ -233,6 +249,189 @@ class StartStepTests(unittest.TestCase):
             self.assertEqual(runner.run(execute=True), 1)
         self.assertIn("uv run set-gateway token-limit 200000", output.getvalue())
         self.assertEqual(json.loads((self.root / lab.DATA_POLICY).read_text()), {"enforce": True})
+
+
+class DecisionModelTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.write(lab.GUIDE, (lab.ROOT / lab.GUIDE).read_bytes())
+        self.write("data/golden.jsonl", (lab.ROOT / "data/golden.jsonl").read_bytes())
+        self.write(lab.REGISTER, b'[{"id":"UC-001","approval":null}]\n')
+        self.write("evidence/decisions.jsonl", b"Existing learner records\n")
+        self.golden = {row["alert_id"]: row["expected_disposition"] for row in
+                       map(json.loads, (self.root / "data/golden.jsonl").read_text().splitlines())}
+        self.runner = lab.Runner(self.root)
+        self.reports = 0
+
+    def write(self, relative, content):
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        return path
+
+    def step(self, expect, optional=""):
+        return next(step for step in self.runner.steps if step.expect == expect and step.optional == optional)
+
+    def report(self, step):
+        alerts = [arg for arg in step.args if arg.startswith("ALT-")] or list(self.golden)
+        rows = [{"alert_id": alert, "expected": self.golden[alert],
+                 "triage": {"status": "ok", "disposition": self.golden[alert]},
+                 "review": {"status": "ok", "verdict": "agree"}} for alert in alerts]
+        stats = {"alerts": len(alerts), "triage_correct": len(alerts), "reviewer_agrees": len(alerts),
+                 "reviewer_disagrees": 0, "unavailable": 0}
+        if step.expect == "choice-review":
+            challenges = [{"alert_id": alert, "expected": self.golden[alert], "recommended": label,
+                           "review": {"status": "ok", "verdict": "disagree"}}
+                          for alert in alerts for label in ("escalate", "close_false_positive", "request_info")
+                          if label != self.golden[alert]]
+            return {"rows": rows, "challenges": challenges, "gpt_calls": 0,
+                    "summary": stats | {"challenges": len(challenges), "challenges_caught": len(challenges),
+                                        "challenges_unavailable": 0}}
+        classic = [{"alert_id": row["alert_id"], "expected": row["expected"], "status": "ok",
+                    "disposition": row["expected"], "verdict": "agree"} for row in rows]
+        return {"alerts": alerts, "workers": 2, "classic": {"rows": classic}, "decision1": {"rows": rows},
+                "metrics": {"Classic (GPT)": dict(stats), "Decision-1": dict(stats)}}
+
+    def run_report(self, step, report, code=0):
+        def process(args, **kwargs):
+            self.assertEqual(args, list(step.args))
+            self.assertFalse(kwargs["interactive"])
+            self.reports += 1
+            self.write(Path(lab.DECISION_REPORTS[step.expect]) / f"run-{self.reports}" / "results.json",
+                       json.dumps(report).encode())
+            return code, "Fixture output streamed\n"
+
+        with patch.object(self.runner, "process", side_effect=process), contextlib.redirect_stdout(io.StringIO()):
+            return self.runner.command(step)
+
+    def test_new_commands_follow_source_and_optional_runs_do_not_replay_publication(self):
+        source = [command for _, _, command in self.runner.guide.commands if "src/decisions/" in command]
+        required = [step for step in self.runner.steps
+                    if step.expect in (*lab.DECISION_REPORTS, "choice-explain") and not step.optional]
+        self.assertEqual(len(source), len(required))
+        self.assertTrue(all(any(self.runner.guide.matches(command, step) for step in required) for command in source))
+        comparison = self.step("investigation-compare")
+        self.assertEqual(len([arg for arg in comparison.args if arg.startswith("ALT-")]), 7)
+        self.assertEqual(comparison.args[-2:], ("--workers", "2"))
+        self.assertIn("ALT-1005", comparison.args)
+        start = self.runner.steps.index(self.step("choice-explain")) + 1
+        for groups in ((), ("decision-json",), ("full-comparison",), ("decision-json", "full-comparison")):
+            with self.subTest(groups=groups):
+                runner = lab.Runner(self.root, start_step=start, optional=groups)
+                with (patch.object(runner, "preflight"),
+                      patch.object(runner, "action", return_value="PASS") as action,
+                      contextlib.redirect_stdout(io.StringIO())):
+                    self.assertEqual(runner.run(execute=True), 0)
+                executed = [call.args[0] for call in action.call_args_list]
+                self.assertTrue(all(step in executed for step in required))
+                self.assertFalse(any("create-agents" in step.args for step in executed))
+                for step in (self.step("choice-json", "decision-json"),
+                             self.step("investigation-compare", "full-comparison")):
+                    self.assertEqual(step in executed, step.optional in groups)
+                    index = runner.steps.index(step)
+                    self.assertEqual(runner.outcomes[index].number, index + 1)
+                    self.assertEqual(runner.outcomes[index].status,
+                                     "PASS" if step.optional in groups else "SKIPPED OPTIONAL")
+
+    def test_successful_reports_use_real_commands_without_writing_learner_approvals(self):
+        paths = (lab.REGISTER, Path("evidence/decisions.jsonl"))
+        before = {path: (self.root / path).read_bytes() for path in paths}
+        for step in (self.step("choice-review"), self.step("investigation-compare"),
+                     self.step("investigation-compare", "full-comparison")):
+            with self.subTest(title=step.title):
+                self.assertEqual(self.run_report(step, self.report(step)), "PASS")
+        self.assertEqual({path: (self.root / path).read_bytes() for path in paths}, before)
+        self.assertFalse((self.root / "tests/e2e/artifacts/decisions.jsonl").exists())
+
+    def test_quality_mismatches_are_observed_but_must_match_pure_runner_exit(self):
+        step = self.step("choice-review")
+        for kind in ("triage", "challenge"):
+            report = self.report(step)
+            if kind == "triage":
+                report["rows"][0]["triage"]["disposition"] = "request_info"
+                report["summary"]["triage_correct"] = 0
+            else:
+                report["challenges"][0]["review"]["verdict"] = "agree"
+                report["summary"]["challenges_caught"] -= 1
+            with self.subTest(kind=kind):
+                self.assertEqual(self.run_report(step, report, 1), "OBSERVED FAIL")
+                with self.assertRaisesRegex(lab.WalkthroughError, "exit code"):
+                    self.run_report(step, report, 0)
+        step = self.step("investigation-compare")
+        report = self.report(step)
+        report["classic"]["rows"][0]["disposition"] = next(
+            label for label in ("escalate", "request_info") if label != report["classic"]["rows"][0]["expected"])
+        report["metrics"]["Classic (GPT)"]["triage_correct"] -= 1
+        self.assertEqual(self.run_report(step, report), "OBSERVED FAIL")
+
+    def test_unavailable_calls_are_rejected_even_when_exit_is_zero(self):
+        for expect, path in (("choice-review", ("rows", 0, "triage")),
+                             ("choice-review", ("rows", 0, "review")),
+                             ("choice-review", ("challenges", 0, "review")),
+                             ("investigation-compare", ("classic", "rows", 0)),
+                             ("investigation-compare", ("decision1", "rows", 0, "review"))):
+            step = self.step(expect)
+            report = self.report(step)
+            row = report
+            for key in path:
+                row = row[key]
+            row["status"] = "unavailable"
+            with self.subTest(expect=expect, path=path):
+                with self.assertRaisesRegex(lab.WalkthroughError, "unavailable"):
+                    self.run_report(step, report)
+
+    def test_report_must_be_fresh_complete_and_consistent(self):
+        for expect in lab.DECISION_REPORTS:
+            step = self.step(expect)
+            self.run_report(step, self.report(step))
+            with (self.subTest(expect=expect, issue="stale"),
+                  patch.object(self.runner, "process", return_value=(0, "")),
+                  self.assertRaisesRegex(lab.WalkthroughError, "fresh Decision-1 report")):
+                self.runner.command(step)
+            for issue in ("duplicate", "metric", "golden"):
+                report = self.report(step)
+                rows = report["rows"] if expect == "choice-review" else report["decision1"]["rows"]
+                if issue == "duplicate":
+                    rows.append(rows[0])
+                elif issue == "metric":
+                    stats = report["summary"] if expect == "choice-review" else report["metrics"]["Decision-1"]
+                    stats["triage_correct"] -= 1
+                else:
+                    rows[0]["expected"] = "made-up"
+                with self.subTest(expect=expect, issue=issue), self.assertRaises(lab.WalkthroughError):
+                    self.run_report(step, report)
+        step = self.step("choice-review")
+        report = self.report(step)
+        report["challenges"].pop()
+        with self.assertRaisesRegex(lab.WalkthroughError, "challenges"):
+            self.run_report(step, report)
+
+    def test_readable_explanation_requires_a_completed_reviewer(self):
+        step = self.step("choice-explain")
+        output = (f"ALT-1001: Decision-1 chooses {self.golden['ALT-1001']} (90% confident)\n"
+                  "Reviewer: agree (90% confident)\n\nWhat was called, and what it cost\n"
+                  "  1. Decision-1 chooses the disposition  0.1 s  $0.00001\n\n"
+                  "Reasons\n  - Fixture reason [TX-001]\n")
+        self.assertEqual(self.runner.check_result(step, 0, output, None), "PASS")
+        for incomplete in ("ALT-1001: Decision-1 was unavailable (fixture)\n",
+                           output.replace("Reviewer: agree (90% confident)\n", "")):
+            with self.subTest(output=incomplete), self.assertRaisesRegex(lab.WalkthroughError, "unavailable"):
+                self.runner.check_result(step, 0, incomplete, None)
+        self.assertEqual(self.runner.check_result(
+            step, 0, output.replace("Reviewer: agree", "Reviewer: disagree"), None), "OBSERVED FAIL")
+
+    def test_optional_json_checks_actual_outcomes_despite_trailing_cli_text(self):
+        step = self.step("choice-json", "decision-json")
+        record = {"alert_id": "ALT-1001", "assessment": {"status": "ok", "disposition": self.golden["ALT-1001"]},
+                  "explanation": {"disposition": self.golden["ALT-1001"], "reasons": ["Fixture [TX-001]"]},
+                  "review": {"status": "ok", "verdict": "agree"}}
+        output = json.dumps(record) + "\nThe agents recommend. A named analyst decides.\n"
+        self.assertEqual(self.runner.check_result(step, 0, output, None), "PASS")
+        record["review"]["status"] = "unavailable"
+        with self.assertRaisesRegex(lab.WalkthroughError, "unavailable"):
+            self.runner.check_result(step, 0, json.dumps(record), None)
 
 
 if __name__ == "__main__":
