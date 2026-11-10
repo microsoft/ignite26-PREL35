@@ -1,10 +1,9 @@
 # Docs
 
-<!-- IGNITE TEMPLATE PLACEHOLDER: remove this folder when the session needs no additional documentation. -->
+Reference material that goes beyond the lab steps.
 
-Use this folder for supporting documentation such as reference material and
-architecture/context.
+| Document | What it covers |
+| --- | --- |
+| [triage-systemone.md](triage-systemone.md) | How the Decision-1 triage runner, the `triage-systemone` explanation agent and the Decision-1 review fit together (Lab 4) |
 
-If this repository intentionally uses MkDocs or another docs-site pattern,
-attendee instructions can remain here. Link the attendee entry point clearly
-from the root README.
+Attendee step-by-step guidance is in [instructions/](../instructions/README.md).

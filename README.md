@@ -1,29 +1,3 @@
-## Before you're done
-
-This repo has been created for your Microsoft Ignite 2026 session. Here's how to get it ready.
-
-**Easiest path — use the agent (recommended):**
-
-- Open GitHub Copilot Chat and say `help me initialize repo`. The agent will walk you through getting the README populated.
-- When you're ready to publish, say `help me finalize repo`. The agent will clean up unused folders, validate everything, and remove this "Before you're done" section and other extra stuff that attendees don't need to see.
-- Curious how it works? Read the [agent workflow](.github/AGENT-WORKFLOW.md).
-
-**Doing it manually?**
-
-Fill in the sections below yourself, then:
-
-- Delete any placeholder folders you don't need (`data/`, `infra/`, etc.)
-- Delete this "Before you're done" section
-- Delete `.github/agents/`, `.github/tests/`, `.github/copilot-instructions.md`, and `.github/AGENT-WORKFLOW.md` — these are template tooling, not part of your published repo
-
-**Folder conventions:**
-
-- Attendee step-by-step guidance goes in `instructions/`. If you use MkDocs or a docs site instead, put it in `docs/` and link to it from this README.
-- Reference material and background reading go in `docs/`.
-- You can add a `.devcontainer/` folder if needed.
-
----
-
 <a name="start-building"></a>
 
 <p align="center">
@@ -35,27 +9,58 @@ Fill in the sections below yourself, then:
 ## 🔥PREL35: Building a path to production for agents
 ### Session description
 
-Move beyond AI prototypes and learn how to operationalize agents for enterprise use. In this 4-hour hands-on lab, you'll apply Microsoft's Path to Production framework to assess readiness, implement governance and security controls, deploy with Azure AI Foundry, and establish monitoring and observability practices. Leave with a practical blueprint, reference architectures, and operational guidance to build, deploy, and manage AI agents at scale.
+Move beyond AI prototypes and learn how to operationalize agents for enterprise use. In this 4-hour hands-on lab, you'll apply Microsoft's Path to Production framework to assess readiness, implement governance and security controls, deploy with Microsoft Foundry, and establish monitoring and observability practices. Leave with a practical blueprint, reference architectures, and operational guidance to build, deploy, and manage AI agents at scale.
+
+### 🏦 The scenario
+
+<p align="left">
+<img src="instructions/images/contoso-bank-logo-white-horizontal.png" alt="Contoso Bank" width="260"/>
+</p>
+
+Contoso Bank's transaction monitoring raises financial crime alerts every day, and most turn out to be false
+positives. Three agents help a human analyst work the queue: **triage** recommends what to do with an alert,
+**reviewer** checks that recommendation, and **evidence** researches what a pattern usually means without seeing who
+the customer is. **The agents recommend; a named analyst decides.** All data is synthetic.
+
+![Business solution: alerts flow through the triage and reviewer agents to a named analyst, who records the decision](img/business-solution.png)
+
+### 👥 Stakeholders
+
+Before the agents go live, five people at Contoso Bank have to sign off. Each lab answers one of their questions.
+
+| Lab | Stakeholder | Their question |
+| --- | ----------- | -------------- |
+| 0 - Setup | <img src="instructions/images/0-0-contoso-head-of-financial-crime-operations-banner.png" alt="Head of Financial Crime Operations" width="240"/><br/>**Head of Financial Crime Operations** | Can the agents just close these alerts? |
+| 1 - AgentOps | <img src="instructions/images/1-0-contoso-head-of-model-risk-banner.png" alt="Head of Model Risk Management" width="240"/><br/>**Head of Model Risk Management** | The model we validated is being retired. How do we know a change is still good enough? |
+| 2 - Security and trust | <img src="instructions/images/2-0-contoso-chief-information-security-officer-banner.png" alt="Chief Information Security Officer" width="240"/><br/>**Chief Information Security Officer** | A customer uploaded a letter telling the agent to mark their case low risk. What stops that? |
+| 3 - Governance | <img src="instructions/images/3-0-contoso-money-laundering-reporting-officer-banner.png" alt="Money Laundering Reporting Officer and Data Protection Officer" width="240"/><br/>**Money Laundering Reporting Officer and Data Protection Officer** | Who approved this, what does each agent see, and is a person really deciding? |
+| 4 - Solution optimization | <img src="instructions/images/4-0-contoso-finance-controller-banner.png" alt="Finance Controller" width="240"/><br/>**Finance Controller** | What does each alert cost, and who pays? |
+
+### 🏗️ Solution architecture
+
+Everything runs in the learner's own Azure resource group. Lab scripts reach the agents only through API Management,
+which checks the Entra ID token, applies Prompt Shields, routes between models and limits tokens per caller.
+
+![Technical solution: the lab VM calls Foundry prompt agents through API Management, with Prompt Shields, Application Insights, Azure Policy, a release gate and a hosted evidence agent backed by an AI Search knowledge base](img/technical-solution.png)
 
 ### 🚀 Getting started
 
 #### In a guided session
 
-If you're following along during a live session:
+If you're attending the live session at Microsoft Ignite:
 
-1. Step 1
-2. Step 2
-3. Open [`instructions/`](instructions/README.md) when this session includes
-   attendee step-by-step guidance
+1. Sign in to the lab VM that Skillable provides. Your Azure resource group is already deployed.
+2. Follow the guide in the Skillable lab window, starting with the
+   [introduction and agenda](instructions/introduction.md).
 
 #### On your own
 
-If you're learning at your own pace:
+If you're learning at your own pace, in your own Azure subscription:
 
-1. Clone this repository
-2. Set up your environment
-3. Follow the session guidance in [`instructions/`](instructions/README.md), or
-   use the linked docs-site entry point when this repository uses that pattern
+1. Clone this repository and install [uv](https://docs.astral.sh/uv/) and the
+   [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd).
+2. Deploy the lab landing zone into a resource group, as described in [infra/README.md](infra/README.md).
+3. Work through the [attendee instructions](instructions/README.md) in order, from Lab 0 to Lab 4.
 
 #### Console colors
 
@@ -92,15 +97,27 @@ Run the offline test suite with `uv run pytest`. GitHub Actions runs it on Linux
 
 By the end of this session, you will be able to:
 
-- Outcome 1
-- Outcome 2
-- Outcome 3
+- Gate each agent release on measured quality, with evaluations, traces and versioned evidence you can roll back to.
+- Red team your agents and block prompt injection at an AI gateway with Prompt Shields, then show what changed.
+- Govern and cost agents in production: approved use cases, data policies, human decisions, Azure Policy,
+  cost per alert, model routing and token limits per caller.
 
 ### 💻 Technologies used
 
-- Technology 1
-- Technology 2
-- Technology 3
+- [Microsoft Foundry](https://learn.microsoft.com/azure/ai-foundry/what-is-azure-ai-foundry) and
+  [Foundry Agent Service](https://learn.microsoft.com/azure/ai-foundry/agents/overview)
+- [Foundry Models](https://learn.microsoft.com/azure/ai-foundry/foundry-models/concepts/models-sold-directly-by-azure)
+  (gpt-5-mini, gpt-5-nano and [Microsoft Decision](https://learn.microsoft.com/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision))
+- [Evaluations in Microsoft Foundry](https://learn.microsoft.com/azure/ai-foundry/concepts/observability)
+- [Azure API Management AI gateway](https://learn.microsoft.com/azure/api-management/genai-gateway-capabilities)
+- [Prompt Shields in Azure AI Content Safety](https://learn.microsoft.com/azure/ai-services/content-safety/concepts/jailbreak-detection)
+- [Azure AI Search agentic retrieval](https://learn.microsoft.com/azure/search/agentic-retrieval-overview)
+- [Web IQ](https://learn.microsoft.com/web-iq/integrations/mcp)
+- [Application Insights](https://learn.microsoft.com/azure/azure-monitor/app/app-insights-overview)
+- [Azure Policy](https://learn.microsoft.com/azure/governance/policy/overview)
+- [Microsoft Entra ID](https://learn.microsoft.com/entra/fundamentals/whatis)
+- [Bicep](https://learn.microsoft.com/azure/azure-resource-manager/bicep/overview) and the
+  [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/overview)
 
 ### 📚 Continue your learning
 
@@ -114,8 +131,6 @@ Pick your next step based on your learning style:
 | **[Microsoft Foundry Community](https://aka.ms/MicrosoftFoundryDiscord-Ignite26)** | Connect with other learners and experts in our Discord community |
 
 ### 🌟 Microsoft Learn MCP Server
-
-<!-- Remove this section if the Microsoft Learn MCP Server is not relevant to the session. -->
 
 The Microsoft Learn MCP Server gives your AI agent direct access to Microsoft's official documentation — grounded, up-to-date answers about the topics in this session.
 
@@ -132,17 +147,17 @@ For more information, visit the [Learn MCP Server repo](https://aka.ms/learnmcp)
 
 ### 👥 Content owners
 
-<!-- TODO: Add yourself as a content owner
-1. Change the src in the image tag to {your github url}.png
-2. Change INSERT NAME HERE to your name
-3. Change the github url in the final href to your url. -->
-
 <table>
 <tr>
-    <td align="center"><a href="http://github.com/yourGitHubHandle">
-        <img src="https://github.com/yourGitHubHandle.png" width="100px;" alt="INSERT NAME HERE"/><br />
-        <sub><b>INSERT NAME HERE</b></sub></a><br />
-            <a href="https://github.com/yourGitHubHandle" title="talk">📢</a>
+    <td align="center"><a href="https://github.com/tbhamidipati">
+        <img src="https://github.com/tbhamidipati.png" width="100px;" alt="Tanuja Bhamidipati"/><br />
+        <sub><b>Tanuja Bhamidipati</b></sub></a><br />
+            <a href="https://github.com/tbhamidipati" title="talk">📢</a>
+    </td>
+    <td align="center"><a href="https://github.com/karpikpl">
+        <img src="https://github.com/karpikpl.png" width="100px;" alt="Piotr Karpala"/><br />
+        <sub><b>Piotr Karpala</b></sub></a><br />
+            <a href="https://github.com/karpikpl" title="talk">📢</a>
     </td>
 </tr></table>
 
