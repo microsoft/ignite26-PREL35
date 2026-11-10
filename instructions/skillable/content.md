@@ -425,6 +425,16 @@ uv run configure-evidence-agent
 
 If you're asked for a key, the command opens the Web IQ portal. 
 
+<details>
+<summary><strong>🔑 Lab credentials (click to expand when you need to sign in)</strong></summary>
+
+If you need to sign in to any Azure use the following credentials:
+
+- **Username**: +++@lab.CloudPortalCredential(User1).Username+++  
+- **Temporary Access Pass**: +++@lab.CloudPortalCredential(User1).AccessToken+++
+
+</details>
+
 > [+help] Click to expand Web IQ screenshots
 >
 > !IMAGE[0-3-webiq-resource.png](instructions361796/0-3-webiq-resource.png)
