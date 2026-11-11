@@ -338,7 +338,7 @@ The data is synthetic: 14 alerts in `data/cases.json`, introduced in the introdu
 > [!note] Environment hardening
 > - **Microsoft Foundry** accepts Entra ID only: no API keys exist.
 > - **API Management** is the way apps reach the agents. Only agents published as gateway operations can be called through it. You also have direct access to Foundry, for the Foundry portal and the evaluations in Lab 1; in production, a private endpoint and no data-plane roles for people would close that path.
-> - The infrastructure is Bicep, deployed for you before the lab started. The agents are defined in src/agents, and you publish them in step 2.
+> - The infrastructure is Bicep, deployed for you before the lab started. The agents are defined in `src/agents`, and you publish them in step 2.
 
 
 ## Topics covered
@@ -386,7 +386,7 @@ and creates its knowledge base.
 
 ### 2. Publish the agents \(2 min\)
 
-Each agent is a Markdown file of instructions in src/agents. Publishing creates a new version of each agent in Foundry:
+Each agent is a Markdown file of instructions in `src/agents`. Publishing creates a new version of each agent in Foundry:
 
 ```powershell
 uv run create-agents
@@ -829,7 +829,7 @@ Open `.github/workflows/release-gate.yml`. It runs the commands you ran: connect
 Make `gpt-5-nano` pass the quality gate by changing its instructions.
 
 - [] Open the `report.md` of the `gpt-5-nano` run from step 4 and find an alert whose recommendation differs from the expected one. If there isn't one, use `ALT-1006`: Daniel Reyes's name matches a sanctions list, but his date of birth doesn't, so the expected answer is `close_false_positive`.
-- [] In src/agents/triage.md, add one rule that would have led to the right answer. For `ALT-1006`, for example: a name match is a false positive when the date of birth or nationality differs.
+- [] In `src/agents/triage.md`, add one rule that would have led to the right answer. For `ALT-1006`, for example: a name match is a false positive when the date of birth or nationality differs.
 - [] Publish triage on `gpt-5-nano` and run the gate:
 
 ```powershell
