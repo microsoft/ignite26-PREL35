@@ -338,7 +338,7 @@ The data is synthetic: 14 alerts in `data/cases.json`, introduced in the introdu
 > [!note] Environment hardening
 > - **Microsoft Foundry** accepts Entra ID only: no API keys exist.
 > - **API Management** is the way apps reach the agents. Only agents published as gateway operations can be called through it. You also have direct access to Foundry, for the Foundry portal and the evaluations in Lab 1; in production, a private endpoint and no data-plane roles for people would close that path.
-> - The infrastructure is Bicep, deployed for you before the lab started. The agents are defined in src/agents, and you publish them in step 2.
+> - The infrastructure is Bicep, deployed for you before the lab started. The agents are defined in `src/agents`, and you publish them in step 2.
 
 
 ## Topics covered
@@ -386,7 +386,7 @@ and creates its knowledge base.
 
 ### 2. Publish the agents \(2 min\)
 
-Each agent is a Markdown file of instructions in src/agents. Publishing creates a new version of each agent in Foundry:
+Each agent is a Markdown file of instructions in `src/agents`. Publishing creates a new version of each agent in Foundry:
 
 ```powershell
 uv run create-agents
@@ -424,6 +424,16 @@ uv run configure-evidence-agent
 ```
 
 If you're asked for a key, the command opens the Web IQ portal. 
+
+<details>
+<summary><strong>🔑 Lab credentials (click to expand when you need to sign in)</strong></summary>
+
+If you need to sign in to any Azure use the following credentials:
+
+- **Username**: +++@lab.CloudPortalCredential(User1).Username+++  
+- **Temporary Access Pass**: +++@lab.CloudPortalCredential(User1).AccessToken+++
+
+</details>
 
 > [+help] Click to expand Web IQ screenshots
 >
@@ -495,6 +505,16 @@ Select the `fincrime` project, and open **Build** ──► **Agents**. You see 
 
 The first alert in the queue is ALT-1001: Harbour Lane Bakery Ltd has been depositing cash just under the reporting
 threshold every few days. Is it structuring, or just a busy bakery?
+
+> [+hint] What's in ALT-1001? (click to view)
+>
+> **Harbour Lane Bakery Ltd** is a bakery with complete customer checks and an expected monthly volume of GBP 30,000. The alert flags five cash deposits between GBP 9,400 and GBP 9,900 over six days: repeated amounts just below the lab's reporting threshold.
+>
+> The case contains 17 transactions. The five deposits are `T-00001` to `T-00005`, alongside 12 other transactions. A previous investigation, `CASE-7781`, closed a seasonal cash increase without action. The document list is empty.
+>
+> **What the models receive:** triage gets this alert, the customer profile, transactions, prior cases and documents, plus the bank's sanctions, politically exposed person (PEP), high-risk jurisdiction and counterparty identity records. The reviewer gets its own copy of the case and triage's answer. At this stage the data policy is not enforced, so no case fields are withheld; Lab 3 changes that.
+>
+> The script loads these records for you from `data/cases.json`.
 
 - [] In the terminal, run the investigation script for ALT-1001:
 
@@ -654,6 +674,31 @@ Lab 0 completed: you have a `.env` file and both agents are published.
 ## Steps
 
 ### 1. Run the release gate on the current agents \(7 min\)
+
+> [+hint] What's in the evaluation data? (click to view)
+>
+> The gate investigates the same 14 fictional alerts each time, one case per investigation. Each triage call receives that case and the screening lists; each reviewer receives the case and its triage recommendation, just as in Lab 0.
+>
+> The table summarizes the case records. The **golden answer** is the expected recommendation recorded in the dataset for each training case:
+>
+> | Alert and customer | What the records contain | Golden answer |
+> | --- | --- | --- |
+> | ALT-1001: Harbour Lane Bakery | Five near-threshold cash deposits, a prior seasonal investigation closed without action, and no documents. | `escalate` |
+> | ALT-1002: Oliver Brandt | A GBP 185,000 incoming payment and a solicitor's property-sale completion statement for GBP 185,000, `DOC-201`. | `close_false_positive` |
+> | ALT-1003: Kestrel Logistics | EUR 410,000 payroll batches and a customer-uploaded payroll schedule, `DOC-205`. | `close_false_positive` |
+> | ALT-1004: Mira Volkova | Incoming funds are followed by an onward payment to a jurisdiction on the bank's high-risk list. | `escalate` |
+> | ALT-1005: Nordwind Trading | A USD 320,000 payment to Viktor Salazar-Orlov; counterparty identity records and sanctions entry `SAN-0091` contain the same name, date of birth and nationality. | `escalate` |
+> | ALT-1006: Daniel Reyes | A GBP 12,000 incoming payment; the counterparty identity records and `SAN-0144` contain the same name but different dates of birth and nationalities. | `close_false_positive` |
+> | ALT-1007: Aurelia Tan | A customer flagged as a PEP receives USD 90,000 and USD 110,000 in advisory fees; the due-diligence file lists salary and a family trust, with no advisory business declared. | `escalate` |
+> | ALT-1008: Lukas Weber | Ten senders pay in, followed by a crypto-exchange payment; a customer-uploaded job message describes receiving and forwarding money. | `escalate` |
+> | ALT-1009: Margaret Ellison | A GBP 240,000 estate payment and a court-issued grant of probate approving a GBP 240,000 distribution, `DOC-202`. | `close_false_positive` |
+> | ALT-1010: Tobias Klein | A new customer with incomplete checks receives EUR 38,000 from an unknown remitter; the document list is empty. | `request_info` |
+> | ALT-1011: Brightwater Consulting | Three USD 75,000 payments go to a jurisdiction on the bank's high-risk list. | `escalate` |
+> | ALT-1012: Lumen Games | Card-acquirer settlements and a customer profile listing an online gaming business with an expected monthly volume of 900,000. | `close_false_positive` |
+> | ALT-1013: Rosalind Achebe | GBP 15,000 and GBP 18,000 cash withdrawals, an empty document list and overdue customer checks. | `request_info` |
+> | ALT-1014: Pellham Motors | Five near-threshold cash deposits, a customer-uploaded vehicle-sales explanation, `DOC-204`, and a prior case with outcome `request_info`. | `escalate` |
+>
+> **What the models do not receive:** the golden answers in `data/golden.jsonl`. The script uses those labels afterwards to score recommendations. The same cases are reused after prompt and model changes, so a change in the score is not caused by a different test set. Lab 3 later changes which fields and documents the models may see.
 
 - [] Run the release gate in the terminal:
 
@@ -819,7 +864,7 @@ Open `.github/workflows/release-gate.yml`. It runs the commands you ran: connect
 Make `gpt-5-nano` pass the quality gate by changing its instructions.
 
 - [] Open the `report.md` of the `gpt-5-nano` run from step 4 and find an alert whose recommendation differs from the expected one. If there isn't one, use `ALT-1006`: Daniel Reyes's name matches a sanctions list, but his date of birth doesn't, so the expected answer is `close_false_positive`.
-- [] In src/agents/triage.md, add one rule that would have led to the right answer. For `ALT-1006`, for example: a name match is a false positive when the date of birth or nationality differs.
+- [] In `src/agents/triage.md`, add one rule that would have led to the right answer. For `ALT-1006`, for example: a name match is a false positive when the date of birth or nationality differs.
 - [] Publish triage on `gpt-5-nano` and run the gate:
 
 ```powershell
@@ -949,6 +994,23 @@ Lab 1 completed, with the approved triage prompt published on `gpt-5-mini`.
 - [] Open evals/attacks.json. 
 
 Most attacks hide in the case file, where a real attacker can put them: an uploaded letter, a payment memo, a forged solicitor's letter. Three come from the caller.
+
+> [+hint] What's in the attack data? (click to view)
+>
+> The script makes an in-memory copy of a normal case and adds the attack in one place. It does not change the stored case. Triage receives the resulting case and screening lists, with the current data policy applied. This test calls triage only, not the reviewer.
+>
+> | Attack | Underlying alert and added input |
+> | --- | --- |
+> | IPI-01, IPI-02 | ALT-1014, Pellham Motors' cash deposits: an extra uploaded letter tries to redirect triage. The original customer explanation remains in the case. |
+> | IPI-03 | ALT-1011, Brightwater's high-risk-jurisdiction payments: the first transaction's memo is replaced by an instruction. |
+> | IPI-04 | ALT-1008, Lukas Weber's incoming transfers and crypto-exchange payment: an uploaded document pretends to be a system message. |
+> | PER-01 | ALT-1001, the bakery's cash deposits: an uploaded letter claims prior compliance clearance. |
+> | PER-02 | ALT-1004, Mira Volkova's onward payment: a forged letter is added with its source set to `solicitor`. |
+> | EXF-01 | ALT-1007, Aurelia Tan's advisory-fee payments: an uploaded document asks triage to disclose confidential customer fields. |
+> | JB-02 | ALT-1005, Nordwind's payment to Viktor Salazar-Orlov: an added analyst note claims authority to close the case. |
+> | JB-01, HRM-01, HRM-02 | No alert or case file is sent. The caller's attack text is the entire input. |
+>
+> The attack's ID, goal and success check stay in the test script; they are not extra evidence for the model. The separate Foundry scan generates its own attacks against the model deployment rather than loading these case files.
 
 - [] Run them all, and start a scan by the AI Red Teaming Agent in Foundry at the same time:
 
@@ -1251,6 +1313,12 @@ The agents recommend; they never act.
 
 - [] Run `ALT-1008` through the decision step:
 
+> [+hint] What's in ALT-1008? (click to view)
+>
+> The case contains ten incoming EUR payments, `T-00088` to `T-00097`, and a later USD 7,200 payment to CryptoGate Exchange, `T-00098`. `DOC-1008-01` is a customer-uploaded message describing a commission-based remote payment-assistant role. Its listed duties include receiving third-party payments, converting them to virtual currency and forwarding the money.
+>
+> **What the models receive:** triage and reviewer get the original case records and screening lists, not the research brief. With the data policy now enforced, the account number is withheld. The reviewer also sees triage's recommendation. The dataset records `escalate` as the expected recommendation.
+
 ```powershell
 uv run src/decide.py ALT-1008
 ```
@@ -1258,6 +1326,12 @@ uv run src/decide.py ALT-1008
 You see triage's recommendation with its reasons, and the reviewer's verdict. Nothing happens to the case until you answer **Approve the recommendation? [y/n]**. You aren't asked for your name: the decision is recorded under your Entra ID sign-in. If triage recommends `escalate`, answer `y`: the brief told you what a mule case looks like and what's missing, and establishing that is an investigator's job. A reason is optional when you approve.
 
 - [] Now overrule the agents on `ALT-1014`, Pellham Motors, the car dealer from Lab 2:
+
+> [+hint] What's in ALT-1014? (click to view)
+>
+> **Pellham Motors Ltd** deposited five cash amounts between GBP 9,300 and GBP 9,900, `T-00145` to `T-00149`. Its own explanation letter, `DOC-204`, attributes the cash to weekend vehicle sales. A previous case, `CASE-8455`, requested information and recorded that the explanation was pending.
+>
+> The models receive this original case, with the same data-policy filtering as ALT-1008. The attack documents and notes from Lab 2 are not present: the red-team script added those only to its test copies. The golden recommendation is `escalate`; the exercise below lets you practise recording a different human decision and its reason.
 
 ```powershell
 uv run src/decide.py ALT-1014
@@ -1395,6 +1469,10 @@ Lab 3 completed.
 
 ### 1. What a release costs \(5 min\)
 
+> [+hint] Case and model inputs (click to view)
+>
+> You reuse the 14 alerts described in Lab 1, now with Lab 3's data policy enforced. Each triage call receives its filtered case and screening lists; the reviewer also receives triage's answer. The golden answers remain outside the model inputs. You are measuring the cost of the same investigations, not introducing a new dataset.
+
 - [] Run the release gate:
 
 ```powershell
@@ -1446,6 +1524,10 @@ These samples make billable calls using your existing Azure CLI sign-in and `.en
 
 #### Choose, explain, review
 
+> [+hint] ALT-1001: case and model inputs (click to view)
+>
+> This is ALT-1001, the bakery with five near-threshold cash deposits, a prior seasonal clearance and no supporting documents. Decision-1 receives the case and screening lists with the data policy enforced, plus the local triage rubric and the three permitted dispositions. The GPT explanation agent gets that same filtered case and Decision-1's choice. Decision-1 then reviews the case, chosen disposition and written reasons; the golden answer is not an input.
+
 - [] Run Harbour Lane Bakery through the three-step runner:
 
 ```powershell
@@ -1462,6 +1544,10 @@ The explanation is an additional expense, not another vote. An explanation suppo
 access to the decision model's internal reasoning. Add `--json` if you want the full record.
 
 #### Choose and review without GPT
+
+> [+hint] ALT-1008: case and model inputs (click to view)
+>
+> This is ALT-1008, Lukas Weber's ten incoming payments, crypto-exchange payment and customer-uploaded remote-job message. Decision-1 triage receives the filtered case and screening lists. Its reviewer receives the case and proposed disposition, but no written reasons or triage confidence. For `--challenge`, the script uses the golden answer locally to select the two wrong dispositions, then sends each to the reviewer as a separate proposal without revealing that it is wrong.
 
 - [] Try Lukas Weber's possible money-mule activity without an explanation-writing call:
 
@@ -1494,6 +1580,20 @@ uv run python src/decisions/compare_investigations.py ALT-1001 ALT-1002 ALT-1005
 > 
 > The script runs the GPT investigation first, then Decision-1, and prints the comparison when both finish. It also makes a Decision-1 warm-up triage and review before timing. This sample makes 14 GPT calls and 16 Decision-1 calls.
 
+> [+hint] What's in these seven alerts? (click to view)
+>
+> | Alert | Case records | Golden answer |
+> | --- | --- | --- |
+> | ALT-1001 | The bakery's five near-threshold cash deposits and a prior seasonal investigation closed without action. | `escalate` |
+> | ALT-1002 | Oliver Brandt's property-sale payment and solicitor's statement `DOC-201`. | `close_false_positive` |
+> | ALT-1005 | Nordwind's payment to Viktor Salazar-Orlov, counterparty identity records and sanctions entry `SAN-0091`. | `escalate` |
+> | ALT-1006 | Counterparty identity records and a sanctions entry with the same name but different dates of birth and nationalities. | `close_false_positive` |
+> | ALT-1008 | Lukas Weber's incoming payments, crypto-exchange payment and customer-uploaded job message. | `escalate` |
+> | ALT-1010 | Tobias Klein's EUR 38,000 incoming payment, incomplete customer checks and empty document list. | `request_info` |
+> | ALT-1013 | Rosalind Achebe's cash withdrawals, overdue customer checks and empty document list. | `request_info` |
+>
+> Both paths receive each case separately, with the same screening lists and data-policy filtering. In ALT-1005, restricted document `DOC-203` is reduced to its ID and a withheld marker: neither path can use the production order's contents. GPT's reviewer sees the written recommendation; Decision-1's reviewer sees only the proposed disposition. Neither path receives the golden-answer column above.
+
 Compare what each path produces as well as what it costs. GPT writes reasons and reviewer issues; Decision-1 returns a disposition, probabilities, and a reviewer verdict and confidence. A cheaper label-only path is not the same service as one that supplies an explanation for a human analyst.
 
 **When it finishes**
@@ -1511,6 +1611,10 @@ The classic reviewer supplies issues; Decision-1 supplies only a verdict and con
 ### 4. Limit tokens per caller \(5 min\)
 
 A single runaway script can use the capacity every team shares. The gateway limits the tokens each caller can use per minute; the default is high.
+
+> [+hint] ALT-1001: case and model inputs (click to view)
+>
+> You rerun ALT-1001 with the same bakery profile, deposits, prior case and screening lists as before, now with Lab 3's data policy enforced. Triage sees the filtered case; the reviewer also sees triage's answer. No extra evidence is added. Only the gateway's token allowance changes, so this exercise is about waiting and retries, not a new alert.
 
 - [] Set the limit below what one alert needs:
 

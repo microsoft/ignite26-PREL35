@@ -281,6 +281,26 @@ class StartStepTests(unittest.TestCase):
         self.assertIn("policy remains unverified", text)
         self.assertTrue(all(item.status == "PLAN" for item in runner.outcomes))
 
+    def test_web_iq_step_accounts_for_browser_signin_without_collecting_lab_credentials(self):
+        runner = lab.Runner(self.root)
+        configure = next(step for step in runner.steps if "configure-evidence-agent" in step.args)
+        section = "\n".join(runner.guide.lines[configure.start - 1:configure.end])
+        self.assertIn("Lab credentials", section)
+        self.assertIn("@lab.CloudPortalCredential(User1).Username", section)
+        self.assertIn("@lab.CloudPortalCredential(User1).AccessToken", section)
+        self.assertEqual(configure.args, ("uv", "run", "configure-evidence-agent"))
+        output = io.StringIO()
+        forbidden = AssertionError("Plan attempted browser sign-in or live configuration")
+        with (contextlib.redirect_stdout(output),
+              patch.object(runner, "process", side_effect=forbidden),
+              patch("builtins.input", side_effect=forbidden),
+              patch.object(lab.urllib.request, "build_opener", side_effect=forbidden)):
+            self.assertEqual(runner.run(), 0)
+        text = " ".join(output.getvalue().split())
+        self.assertIn("expandable Lab credentials section or the Resources tab", text)
+        self.assertIn("do not enter sign-in credentials into this runner", text)
+        self.assertNotIn("@lab.CloudPortalCredential", text)
+
     def test_resume_in_gateway_exercise_reports_recovery_when_command_fails(self):
         number = self.number(lambda step: step.kind == "logged-investigation")
         runner = lab.Runner(self.root, start_step=number)

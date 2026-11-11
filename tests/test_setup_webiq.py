@@ -5,7 +5,7 @@ import os
 import tempfile
 import unittest
 import urllib.error
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, call, patch
 
@@ -193,13 +193,15 @@ class WebIqSetupTests(unittest.TestCase):
         with (
             patch.object(setup.sys.stdin, "isatty", return_value=True),
             patch.object(setup.webbrowser, "open", return_value=False) as browser,
-            patch.object(setup.getpass, "getpass", return_value=FIXTURE_KEY) as hidden,
+            patch.object(setup, "read_key", return_value=FIXTURE_KEY) as hidden,
             redirect_stdout(output),
         ):
             self.assertEqual(setup.capture_key(FIXTURE_ENV), FIXTURE_KEY)
         browser.assert_called_once_with(setup.PORTAL, new=2)
         hidden.assert_called_once()
         self.assertIn("Open the link", output.getvalue())
+        self.assertIn(f"Web IQ API key received: {FIXTURE_KEY[:4]}********", output.getvalue())
+        self.assertNotIn(FIXTURE_KEY[4:], output.getvalue())
         self.assertNotIn(FIXTURE_KEY, output.getvalue())
         with patch.object(setup.sys.stdin, "isatty", return_value=False), self.assertRaises(setup.SetupError):
             setup.capture_key(FIXTURE_ENV)
@@ -629,18 +631,191 @@ def webiq_main(tmp_path, monkeypatch):
     return path, configure
 
 
+@pytest.mark.parametrize("key,preview", [
+    ("A", "********"),
+    ("AB", "********"),
+    ("ABC", "********"),
+    ("ABCD", "********"),
+    ("ABCDx", "ABCD********"),
+    ("ABCDremaining-secret", "ABCD********"),
+])
+def test_hidden_prompt_shows_only_a_masked_key_confirmation(monkeypatch, capsys, key, preview):
+    monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(setup.webbrowser, "open", Mock(return_value=True))
+    hidden = Mock(return_value=key)
+    monkeypatch.setattr(setup, "read_key", hidden)
+    assert setup.capture_key(FIXTURE_ENV) == key
+    hidden.assert_called_once()
+    output = capsys.readouterr()
+    confirmation = next(line for line in output.out.splitlines() if line.startswith("Web IQ API key received:"))
+    assert confirmation == f"Web IQ API key received: {preview}"
+    assert key not in confirmation.removeprefix("Web IQ API key received: ")
+    assert not output.err
+
+
+@pytest.mark.parametrize("typed,expected", [
+    ("ABCDhidden-tail\n", "ABCDhidden-tail"),
+    ("ABCDhidden-tail\b\x7fXY\r", "ABCDhidden-taXY"),
+    ("WXYZdiscarded\x15ABCDhidden-tail\n", "ABCDhidden-tail"),
+    ("ABCD\x1b[Dhidden-tail\x1b[200~\x1b[201~\n", "ABCDhidden-tail"),
+])
+def test_live_key_preview_is_masked_before_enter_and_supports_editing(monkeypatch, typed, expected):
+    output = io.StringIO()
+    characters = iter(typed)
+
+    def read_character():
+        character = next(characters)
+        if character in ("\r", "\n"):
+            assert "ABCD********" in output.getvalue()
+            assert "hidden-tail" not in output.getvalue()
+            assert expected not in output.getvalue()
+        return character
+
+    @contextmanager
+    def reader():
+        yield read_character
+
+    monkeypatch.setattr(setup, "key_reader", reader)
+    with redirect_stderr(output):
+        assert setup.read_key("Key: ") == expected
+    assert output.getvalue().endswith("\n")
+
+
+@pytest.mark.parametrize("ending,exception", [
+    ("", EOFError), ("\x04", EOFError), ("\x1a", EOFError), ("\x03", KeyboardInterrupt),
+])
+def test_live_key_preview_cancellation_leaves_the_reader(monkeypatch, ending, exception):
+    output, restored = io.StringIO(), []
+    characters = iter(["A", None, ending])
+
+    @contextmanager
+    def reader():
+        try:
+            yield lambda: next(characters)
+        finally:
+            restored.append(True)
+
+    monkeypatch.setattr(setup, "key_reader", reader)
+    with redirect_stderr(output), pytest.raises(exception):
+        setup.read_key("Key: ")
+    assert restored == [True]
+    assert output.getvalue().endswith("\n")
+    assert "A" not in output.getvalue()
+
+
+def test_windows_key_reader_ignores_extended_keys_without_echo(monkeypatch):
+    console = Mock()
+    console.getwch.side_effect = ["\xe0", "K", "\x00", "H", "A"]
+    monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: True)
+    with patch.object(setup.sys, "platform", "win32"), patch.dict(setup.sys.modules, {"msvcrt": console}):
+        with setup.key_reader() as read_character:
+            characters = [read_character(), read_character(), read_character()]
+    assert characters == [None, None, "A"]
+    assert console.getwch.call_count == 5
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_posix_key_reader_disables_echo_and_restores_terminal_on_exit(monkeypatch, cancelled):
+    terminal = pytest.importorskip("termios")
+    original = [0, 0, 0, terminal.ECHO | terminal.ECHONL | terminal.ICANON, 0, 0, [0] * 32]
+    before = copy.deepcopy(original)
+    monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(setup.sys.stdin, "fileno", lambda: 42)
+    monkeypatch.setattr(terminal, "tcgetattr", Mock(return_value=original))
+    changed = Mock()
+    monkeypatch.setattr(terminal, "tcsetattr", changed)
+    with patch.object(setup.sys, "platform", "linux"):
+        try:
+            with setup.key_reader():
+                masked = changed.call_args.args[2]
+                assert masked[3] & (terminal.ECHO | terminal.ECHONL | terminal.ICANON) == 0
+                assert masked[6][terminal.VMIN] == 1
+                assert masked[6][terminal.VTIME] == 0
+                if cancelled:
+                    raise KeyboardInterrupt
+        except KeyboardInterrupt:
+            assert cancelled
+    assert original == before
+    assert changed.call_count == 2
+    assert changed.call_args == call(42, terminal.TCSADRAIN, original)
+
+
+def test_key_reader_refuses_unavailable_masking_without_plaintext_fallback(monkeypatch, capsys):
+    terminal = pytest.importorskip("termios")
+    monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(setup.sys.stdin, "fileno", Mock(side_effect=OSError("No terminal")))
+    changed = Mock()
+    monkeypatch.setattr(terminal, "tcsetattr", changed)
+    with patch.object(setup.sys, "platform", "linux"), pytest.raises(setup.SetupError, match="Masked input is unavailable"):
+        setup.read_key("Key: ")
+    changed.assert_not_called()
+    output = capsys.readouterr()
+    assert not output.out + output.err
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX pseudo-terminal integration")
+def test_pasted_key_is_masked_in_a_real_terminal_before_enter():
+    import pty
+    import select
+    import subprocess
+    import sys
+    import termios
+    import time
+
+    master, slave = pty.openpty()
+    original = termios.tcgetattr(slave)
+    child = None
+    output = b""
+    try:
+        child = subprocess.Popen(
+            [sys.executable, "-c",
+             "from scripts.setup_webiq import read_key; "
+             "key = read_key('Key: '); "
+             "print('accepted' if key == 'ABCDhidden-taiZ' else 'wrong')"],
+            stdin=slave, stdout=slave, stderr=slave, cwd=setup.ROOT,
+        )
+
+        def wait_for(text):
+            nonlocal output
+            deadline = time.monotonic() + 10
+            while text not in output:
+                remaining = deadline - time.monotonic()
+                assert remaining > 0, "Timed out waiting for masked terminal output"
+                readable, _, _ = select.select([master], [], [], remaining)
+                assert readable, "Timed out waiting for masked terminal output"
+                output += os.read(master, 4096)
+
+        wait_for(b"Key: ")
+        os.write(master, b"ABCDhidden-tail")
+        wait_for(b"ABCD********")
+        assert child.poll() is None
+        assert b"hidden-tail" not in output
+        os.write(master, b"\x7fZ\n")
+        wait_for(b"accepted")
+        assert child.wait(timeout=10) == 0
+        assert b"hidden-tail" not in output
+        assert termios.tcgetattr(slave) == original
+    finally:
+        if child is not None and child.poll() is None:
+            child.kill()
+            child.wait()
+        os.close(master)
+        os.close(slave)
+
+
 def test_hidden_prompt_retries_malformed_keys_without_echoing_them(monkeypatch, capsys):
     monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: True)
     browser = Mock()
     monkeypatch.setattr(setup.webbrowser, "open", browser)
     hidden = Mock(side_effect=["", "wrong key with spaces", "\x00private", FIXTURE_KEY])
-    monkeypatch.setattr(setup.getpass, "getpass", hidden)
+    monkeypatch.setattr(setup, "read_key", hidden)
     assert setup.capture_key(FIXTURE_ENV) == FIXTURE_KEY
     assert hidden.call_count == 4
     browser.assert_called_once()
     output = capsys.readouterr()
     assert output.err.count("Try again") == 3
-    assert "wrong key" not in output.err
+    assert "wrong key" not in output.out + output.err
+    assert output.out.count("Web IQ API key received:") == 1
     assert FIXTURE_KEY not in output.out + output.err
 
 
@@ -686,7 +861,7 @@ def test_ctrl_c_cancels_key_retry_without_saving_or_configuring(webiq_main, monk
     monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(setup.webbrowser, "open", Mock())
     hidden = Mock(side_effect=["bad key", "rejected-key", KeyboardInterrupt])
-    monkeypatch.setattr(setup.getpass, "getpass", hidden)
+    monkeypatch.setattr(setup, "read_key", hidden)
     monkeypatch.setattr(setup, "check_webiq_search", Mock(side_effect=setup.KeyValidationError("Key rejected.")))
     assert setup.main([]) == 1
     assert hidden.call_count == 3
