@@ -1,7 +1,7 @@
 """Guide an organizer through Web IQ key creation and configure both independent MCP integrations."""
 
 import argparse
-import getpass
+from contextlib import contextmanager
 import json
 import os
 import re
@@ -11,7 +11,6 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
-import warnings
 import webbrowser
 from pathlib import Path
 
@@ -103,6 +102,89 @@ def validate_key(key):
     return key
 
 
+def key_preview(key):
+    prefix = key[:4] if len(key) > 4 and all(33 <= ord(c) <= 126 for c in key[:4]) else ""
+    return prefix + "********" if key else ""
+
+
+@contextmanager
+def key_reader():
+    if not sys.stdin.isatty():
+        raise SetupError("Masked input is unavailable. Run setup in an interactive terminal.")
+    if sys.platform == "win32":
+        import msvcrt
+
+        def read_character():
+            character = msvcrt.getwch()
+            if character in ("\x00", "\xe0"):
+                msvcrt.getwch()
+                return None
+            return character
+
+        yield read_character
+        return
+
+    import termios
+
+    try:
+        descriptor = sys.stdin.fileno()
+        original = termios.tcgetattr(descriptor)
+        masked = original[:]
+        masked[6] = original[6][:]
+        masked[3] &= ~(termios.ECHO | termios.ECHONL | termios.ICANON)
+        masked[6][termios.VMIN] = 1
+        masked[6][termios.VTIME] = 0
+    except (OSError, ValueError, termios.error):
+        raise SetupError("Masked input is unavailable. Run setup in an interactive terminal.") from None
+    try:
+        termios.tcsetattr(descriptor, termios.TCSADRAIN, masked)
+        yield lambda: sys.stdin.read(1)
+    except (OSError, ValueError, termios.error):
+        raise SetupError("Masked input is unavailable. Run setup in an interactive terminal.") from None
+    finally:
+        termios.tcsetattr(descriptor, termios.TCSADRAIN, original)
+
+
+def read_key(prompt):
+    with key_reader() as read_character:
+        key, displayed, escape = "", "", ""
+        print(color(prompt, "cyan", stream=sys.stderr), end="", file=sys.stderr, flush=True)
+        try:
+            while True:
+                character = read_character()
+                if character is None:
+                    continue
+                if character in ("", "\x04", "\x1a"):
+                    raise EOFError
+                if character == "\x03":
+                    raise KeyboardInterrupt
+                if character in ("\r", "\n"):
+                    return key
+                if escape:
+                    if escape == "start":
+                        escape = "sequence" if character in "[O" else ""
+                    elif "@" <= character <= "~":
+                        escape = ""
+                    continue
+                if character == "\x1b":
+                    escape = "start"
+                    continue
+                if character in ("\b", "\x7f"):
+                    key = key[:-1]
+                elif character == "\x15":
+                    key = ""
+                else:
+                    key += character
+                preview = key_preview(key)
+                if preview != displayed:
+                    erase = "\b" * len(displayed) + " " * len(displayed) + "\b" * len(displayed)
+                    print(erase + color(preview, "cyan", stream=sys.stderr),
+                          end="", file=sys.stderr, flush=True)
+                    displayed = preview
+        finally:
+            print(file=sys.stderr, flush=True)
+
+
 def save_settings(path, updates):
     if path.is_symlink() or (path.exists() and not path.is_file()):
         raise SetupError("Refusing to overwrite a linked or non-regular .env file.")
@@ -145,16 +227,14 @@ def capture_key(settings):
         opened = False
     if not opened:
         print("A browser could not be opened automatically. Open the link above in your browser.")
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", getpass.GetPassWarning)
-        while True:
-            try:
-                return validate_key(getpass.getpass("Paste the Web IQ API key (hidden; Ctrl+C to cancel): "))
-            except getpass.GetPassWarning:
-                raise SetupError("Hidden input is unavailable. Run setup in an interactive terminal.") from None
-            except KeyValidationError as error:
-                print(color(f"{error} Try again, or press Ctrl+C to cancel.", "yellow", stream=sys.stderr),
-                      file=sys.stderr)
+    while True:
+        try:
+            key = validate_key(read_key("Paste Web IQ key (Enter to submit): "))
+            print(color(f"Web IQ API key received: {key_preview(key)}", "cyan"))
+            return key
+        except KeyValidationError as error:
+            print(color(f"{error} Try again, or press Ctrl+C to cancel.", "yellow", stream=sys.stderr),
+                  file=sys.stderr)
 
 
 def azure_request(credential, method, url, scope, body=None, *, allow_not_found=False, etag=None):

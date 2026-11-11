@@ -34,7 +34,7 @@ from walkthrough_console import Console
 
 ROOT = Path(__file__).resolve().parents[2]
 GUIDE = Path("instructions/skillable/content.md")
-SOURCE_SHA256 = "d425c6831e1ebc4cfb2acbd532c121a5dfaa2d2c779e74a136ff88b0a3ac7e67"
+SOURCE_SHA256 = "4cfe48bd757684aed619a515410896efc06ef1aa38baa0825282cf5b7f15e032"
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 PROMPT = Path("src/agents/triage.md")
 DATA_POLICY = Path("governance/data-policy.json")
