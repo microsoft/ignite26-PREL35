@@ -4,26 +4,26 @@
 
 ## Why this lab
 
-An agent that works in a demo is a long way from an agent a bank lets near real cases. Before it goes live, someone
-will ask: is it good enough, and how do you know? What happens when someone attacks it? Who approved it, and on what
-evidence? What does it cost, and who pays?
+Before a bank puts an agent into production, someone will ask whether it's good enough and how you know, what happens
+when it's attacked, who approved it and on what evidence, and what it costs.
 
-In this lab you build the path that answers those questions, one stage at a time, for the agents that help Contoso
-Bank investigate financial crime alerts. Each stage produces something the next one relies on.
+In this lab you answer those questions, one stage at a time, for the agents that help Contoso Bank investigate
+financial crime alerts.
 
-| Stage | Lab | Question it answers | What it produces |
-| ----- | --- | ------------------- | ---------------- |
-| Platform | 0 - Setup | Where do agents run, and how are they reached? | A landing zone: Foundry, a gateway, monitoring |
-| Quality | 1 - AgentOps | Is this version good enough to release? | A release gate and its Evidence Pack |
-| Security | 2 - Security and trust | What stops an attack, and what doesn't? | A red team, Prompt Shields at the gateway, and its Evidence Pack |
-| Governance | 3 - Governance | Who approved it, and does the evidence still hold? | An approved use case, a data policy, recorded human decisions |
-| Cost | 4 - Solution Optimization | What does it cost, and who pays? | Cost per alert, a cheaper option measured, cost by team |
+| Lab and stage | Question it answers | What it produces |
+| ------------- | ------------------- | ---------------- |
+| **0 - Setup**<br>Platform | Where do agents run, and how are they reached? | A landing zone: Foundry, a gateway, monitoring |
+| **1 - AgentOps**<br>Quality | Is this version good enough to release? | A release gate and its Evidence Pack |
+| **2 - Security and trust**<br>Security | What stops an attack, and what doesn't? | A red team, Prompt Shields at the gateway, and its Evidence Pack |
+| **3 - Governance**<br>Governance | Who approved it, and does the evidence still hold? | An approved use case, a data policy, recorded human analyst decisions |
+| **4 - Solution Optimization**<br>Cost | What does it cost, and who pays? | Cost per alert, a cheaper option measured, cost by team |
 
 ## The use case
 
+![Contoso bank logo white horizontal](images/contoso-bank-logo-white-horizontal.png)
+
 **Contoso Bank** is a retail and commercial bank operating in several countries. Its transaction monitoring system
-raises alerts every day: activity that might be money laundering, sanctions evasion or fraud. A financial crime
-human analyst investigates each one, most turn out to be false positives, and the queue keeps growing.
+raises alerts every day for activity that might be money laundering, sanctions evasion or fraud. Someone on the financial crime team investigates each alert, most turn out to be false positives, and the queue keeps growing.
 
 This morning the queue holds 14 alerts. You meet these four again in the labs:
 
@@ -34,16 +34,17 @@ This morning the queue holds 14 alerts. You meet these four again in the labs:
 | ALT-1005 | Nordwind Trading Ltd | A payment to a counterparty on a sanctions list |
 | ALT-1008 | Lukas Weber | Dozens of small payments in, forwarded to a crypto exchange within hours |
 
-Three agents help the human analyst:
+Three agents help with the investigation:
 
 | Agent | What it does |
 | ----- | ------------ |
 | **Triage** | Reads the case file and recommends what to do with the alert, citing the evidence |
 | **Evidence** | Researches what a pattern usually means, from the bank's typology notes and official public sources, without ever seeing who the customer is |
-| **Reviewer** | Checks the triage recommendation before a person sees it, and disagrees if the evidence doesn't support it |
+| **Reviewer** | Checks the triage recommendation before a human analyst sees it, and disagrees if the evidence doesn't support it |
 
-**The agents recommend. A named human analyst decides.** No agent closes a case or files a report. That rule holds in
-every lab. The data is synthetic.
+> [!NOTE]
+> **The agents recommend. A named human analyst decides.** No agent closes a case or files a report. That rule holds in
+> every lab. The data is synthetic.
 
 ### Who's asking
 
@@ -51,26 +52,15 @@ Each lab starts with a question from someone at Contoso Bank who has to sign off
 
 | Lab | Asked by | Their question |
 | --- | -------- | -------------- |
-| 0 | Head of Financial Crime Operations | Can the agents just close these alerts? |
+| 0 | Head of Financial Crime Operations | Can the agents close the case? |
 | 1 | Model Risk Management | The model we validated is being retired. How do we know a change is still good enough? |
 | 2 | Chief Information Security Officer | A customer uploaded a letter telling the agent to mark their case low risk. What stops that? |
-| 3 | Money Laundering Reporting Officer and Data Protection Officer | Who approved this, what does each agent see, and is a person really deciding? |
+| 3 | Money Laundering Reporting Officer and Data Protection Officer | Who approved this, what does each agent see, and is a human analyst really deciding? |
 | 4 | Finance Controller | What does each alert cost, and who pays? |
 
 ## What you work with
 
-```text
-your scripts  ──►  API Management (gateway)  ──►  Foundry project  ──►  gpt-5-mini, gpt-5-nano
-                   identity, limits,              triage, reviewer
-                   Prompt Shields, routing,       agents
-                   cost metrics                        │
-                                                       ▼
-                                          Application Insights: traces, token metrics
-
-azd ai agent invoke  ──►  evidence agent (hosted in Foundry)  ──►  AI Search knowledge base
-                                                                  typology notes + Web IQ
-                                                                  (approved topics only)
-```
+![Contoso bank lab architecture](images/contoso-bank-lab-architecture.png)
 
 Everything is deployed in your own resource group before you start. You work from a terminal on the lab VM, in the
 repository folder, and in the Azure and Foundry portals.
@@ -87,19 +77,19 @@ repository folder, and in the Azure and Foundry portals.
 | 1:35 | **Lab 2 - Security and trust** | 40 min |
 | 2:15 | Theory: governing AI at scale | 15 min |
 | 2:30 | **Lab 3 - Governance** | 40 min |
-| 3:10 | Theory: cost, capacity and FinOps for AI | 10 min |
+| 3:10 | Theory: solution optimization | 10 min |
 | 3:20 | **Lab 4 - Solution Optimization** | 40 min |
 | 4:00 | End |  |
 
 Each lab builds on the one before, so work through them in order.
 
-## How the labs works
+## How the labs work
 
 - **Each lab starts the same way:** what it covers, the topics it covers hands-on, and the topics to consider when you move to production. The steps follow, each with a time guide.
 - **Commands** are PowerShell, run from the repository folder. Copy them as they are.
-- **Answers vary between runs.** The agents are language models: the same alert can get different wording, and now and then a different recommendation. The guides say "usually" where that matters, and measuring that variation is part of the point.
+- **Answers vary between runs.** The agents are language models, so the same alert can get different wording, and now and then a different recommendation. The guides say "usually" where that matters, and measuring that variation is part of the point.
 - **Nothing you do affects anyone else.** Your resource group, agents and gateway are yours alone, and are deleted when the lab ends.
-- **If a step fails,** read the error first: most failures name what's missing, such as a sign-in or a setting that hasn't applied yet (gateway changes take about a minute). Then ask a proctor.
+- **If a step fails,** read the error first. Most failures name what's missing, such as a sign-in or a setting that hasn't applied yet (gateway changes take about a minute). Then ask a proctor.
 
 ## Click next to continue
 
