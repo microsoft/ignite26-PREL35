@@ -47,6 +47,36 @@
             },
             {
               "allOf": [
+                { "field": "type", "equals": "Microsoft.CognitiveServices/accounts/deployments" },
+                { "field": "Microsoft.CognitiveServices/accounts/deployments/sku.name", "equals": "Standard" },
+                { "field": "Microsoft.CognitiveServices/accounts/deployments/sku.capacity", "lessOrEquals": 10 },
+                { "field": "Microsoft.CognitiveServices/accounts/deployments/model.name", "equals": "text-embedding-3-small" }
+              ]
+            },
+            {
+              "allOf": [
+                { "field": "type", "equals": "Microsoft.CognitiveServices/accounts/deployments" },
+                { "field": "Microsoft.CognitiveServices/accounts/deployments/sku.name", "equals": "DataZoneStandard" },
+                { "field": "Microsoft.CognitiveServices/accounts/deployments/sku.capacity", "lessOrEquals": 30 },
+                { "field": "Microsoft.CognitiveServices/accounts/deployments/model.name", "equals": "Microsoft-Decision-1" }
+              ]
+            },
+            {
+              "allOf": [
+                { "field": "type", "equals": "Microsoft.Search/searchServices" },
+                { "field": "name", "like": "search-*" },
+                { "field": "Microsoft.Search/searchServices/sku.name", "equals": "basic" }
+              ]
+            },
+            {
+              "allOf": [
+                { "field": "type", "equals": "Microsoft.WebIQ/accounts" },
+                { "field": "name", "like": "webiq-*" },
+                { "field": "kind", "equals": "WebIQ.Grounding" }
+              ]
+            },
+            {
+              "allOf": [
                 { "field": "type", "equals": "Microsoft.ApiManagement/service" },
                 { "field": "name", "like": "apim-*" },
                 { "field": "Microsoft.ApiManagement/service/sku.name", "equals": "BasicV2" },
@@ -61,7 +91,15 @@
       {
         "allOf": [
           { "field": "location", "exists": true },
-          { "field": "location", "notIn": ["[resourceGroup().location]", "global"] }
+          { "field": "location", "notIn": ["[resourceGroup().location]", "global"] },
+          {
+            "not": {
+              "allOf": [
+                { "field": "type", "equals": "Microsoft.Search/searchServices" },
+                { "field": "location", "equals": "eastus" }
+              ]
+            }
+          }
         ]
       }
     ]
