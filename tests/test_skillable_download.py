@@ -73,6 +73,33 @@ def test_existing_checkout_is_never_overwritten(download):
     assert not request.exists()
 
 
+@pytest.mark.parametrize("behavior", ["success", "throw", "write-error", "exit", "missing"])
+def test_optional_vm_hook_runs_from_downloaded_repo_without_failing_checkout(download, behavior):
+    run, target, archive, _ = download
+    if behavior != "missing":
+        failure = {
+            "success": "",
+            "throw": "throw 'Fixture hook failure'",
+            "write-error": "Write-Error 'Fixture hook failure'",
+            "exit": "exit 19",
+        }[behavior]
+        with zipfile.ZipFile(archive, "a") as zip_file:
+            zip_file.writestr(
+                "microsoft-ignite26-PREL35-fixture/infra/skillable/lifecycle_setup_vm.ps1",
+                "if (-not (Test-Path -LiteralPath './README.md')) { throw 'Wrong working directory' }\n"
+                "Set-Content -LiteralPath './hook-ran.txt' -Value 'Hook ran after checkout'\n"
+                + failure,
+            )
+    result = run()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (target / "README.md").is_file()
+    assert (target / "hook-ran.txt").exists() is (behavior != "missing")
+    assert ("Optional VM setup skipped or failed" in result.stdout) is (behavior != "success")
+    assert "Wrong working directory" not in result.stdout + result.stderr
+    assert "Run uv run setup-lab as LabUser" in result.stdout
+    assert not list(target.parent.glob("ignite26-PREL35-download-*"))
+
+
 def test_source_download_does_not_require_a_writable_git_profile(download):
     run, target, _, _ = download
     config = target.parent / "missing-profile" / "gitconfig"
