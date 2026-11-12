@@ -94,6 +94,26 @@ try {
         [IO.Directory]::Move($source, $TargetPath)
     }
     Write-Host "Lab sources ready at $TargetPath."
+    $setupScript = Join-Path $TargetPath 'infra/skillable/lifecycle_setup_vm.ps1'
+    try {
+        if (-not (Test-Path -LiteralPath $setupScript -PathType Leaf)) {
+            throw "VM setup hook not found: $setupScript"
+        }
+        $global:LASTEXITCODE = 0
+        Push-Location -LiteralPath $TargetPath
+        try {
+            & $setupScript
+            if ($LASTEXITCODE -ne 0) {
+                throw "VM setup hook returned exit code $LASTEXITCODE."
+            }
+        } finally {
+            Pop-Location
+        }
+    } catch {
+        Write-Warning "Optional VM setup skipped or failed: $($_.Exception.Message)"
+    } finally {
+        $global:LASTEXITCODE = 0
+    }
     Write-Host 'Run uv run setup-lab as LabUser, following the lab instructions, to initialize Git and prepare the lab.'
 } finally {
     Remove-Item -LiteralPath $temporary -Recurse -Force

@@ -55,7 +55,40 @@ This addresses administrator-owned folders without writing the trust exception u
 
 There is no separate Git initialization command. The e2e runner follows the guide's existing
 `setup-lab --resource-group ...` step and checks Git only after that setup completes.
-The download action itself does not deploy Azure resources or install dependencies.
+The download action currently does not deploy Azure resources or install dependencies.
+
+## Post-clone VM hook
+
+The download action automatically looks for `infra/skillable/lifecycle_setup_vm.ps1` under
+`$TargetPath` after the sources are in place, then runs it with the repository as its working
+directory. Run the VM action as **LabUser**. A missing hook, PowerShell error or nonzero hook
+exit code produces a warning without failing the download. Download/extraction failures still fail.
+
+If you use a different action to clone the repo, run this as a separate VM action after cloning
+(set `$TargetPath` to that checkout):
+
+```powershell
+$TargetPath = 'C:\Users\LabUser\Desktop\ignite26-PREL35'
+$ErrorActionPreference = 'Stop'
+try {
+    & (Join-Path $TargetPath 'infra/skillable/lifecycle_setup_vm.ps1')
+} catch {
+    Write-Warning "Optional VM setup skipped or failed: $($_.Exception.Message)"
+}
+exit 0
+```
+
+The standalone wrapper also exits successfully if the hook is missing or fails; it does not
+change the checkout action's error handling.
+
+[lifecycle_setup_vm.ps1](lifecycle_setup_vm.ps1) runs
+[lifecycle_pin_terminal.ps1](lifecycle_pin_terminal.ps1) to create a Terminal desktop shortcut
+and configure taskbar/Start pins, then [lifecycle_clear_recycle_bin.ps1](lifecycle_clear_recycle_bin.ps1)
+to empty LabUser's Recycle Bin. Each step warns on failure and the next step still runs.
+Terminal pinning refreshes Explorer without signing out; run in LabUser's interactive desktop session.
+Use `-WhatIf` on the setup hook to preview both steps without changes.
+Add future VM setup steps to the hook rather than copying them into the lifecycle action.
+The VM must download or clone a ref containing those changes to use them.
 
 ## Resource template
 
