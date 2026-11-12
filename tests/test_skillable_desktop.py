@@ -188,14 +188,19 @@ function Remove-Item {
     if ($env:FAIL_EXPORT_CLEANUP -eq '1') { throw 'Fixture export cleanup failure' }
     Microsoft.PowerShell.Management\Remove-Item -LiteralPath $LiteralPath -Force:$Force
 }
-if ($env:WINGET_PRESENT -ne '0') {
-    function winget {
-        param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
-        $Arguments | ConvertTo-Json | Set-Content -LiteralPath $env:UPGRADE_LOG -Encoding UTF8
-        if ($env:WINGET_STDERR -eq '1') { Write-Error 'Fixture winget diagnostic' }
-        Write-Output 'Fixture winget result'
-        $global:LASTEXITCODE = [long]$env:WINGET_EXIT_CODE
-    }
+function Get-Command {
+    [CmdletBinding()]
+    param([string]$Name)
+    if ($Name -eq 'winget' -and $env:WINGET_PRESENT -eq '0') { return }
+    Microsoft.PowerShell.Core\Get-Command @PSBoundParameters
+}
+function winget {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    if ($env:WINGET_PRESENT -eq '0') { throw 'Unexpected call to unavailable winget' }
+    $Arguments | ConvertTo-Json | Set-Content -LiteralPath $env:UPGRADE_LOG -Encoding UTF8
+    if ($env:WINGET_STDERR -eq '1') { Write-Error 'Fixture winget diagnostic' }
+    Write-Output 'Fixture winget result'
+    $global:LASTEXITCODE = [long]$env:WINGET_EXIT_CODE
 }
 
 $arguments = @{}
