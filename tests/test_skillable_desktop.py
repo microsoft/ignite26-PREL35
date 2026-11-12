@@ -92,7 +92,10 @@ function New-Object {
         $shell | Add-Member -MemberType ScriptMethod -Name CreateShortcut -Value {
             param($path)
             $shortcut = [pscustomobject]@{
-                Path = $path; TargetPath = ''; Arguments = ''; Description = ''
+                Path = $path; TargetPath = ''; Arguments = ''; Description = ''; IconLocation = ''
+            }
+            if (Microsoft.PowerShell.Management\Test-Path -LiteralPath $path) {
+                $shortcut = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
             }
             $shortcut | Add-Member -MemberType ScriptMethod -Name Save -Value {
                 if ($env:FAIL_SHORTCUT -eq '1') { throw 'Fixture shortcut failure' }
@@ -127,6 +130,13 @@ function Get-StartApps {
         [pscustomobject]@{ AppID = 'Microsoft.WindowsTerminal_8wekyb3d8bbwe!App' }
     }
 }
+function Get-AppxPackage {
+    param($Name)
+    if ($Name -ne 'Microsoft.WindowsTerminal') { throw 'Unexpected package lookup' }
+    if ($env:TERMINAL_PACKAGE_PRESENT -ne '0') {
+        [pscustomobject]@{ InstallLocation = $env:TERMINAL_PACKAGE_PATH }
+    }
+}
 function Get-ItemProperty {
     param($LiteralPath)
     if ($LiteralPath -eq 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion') {
@@ -137,9 +147,12 @@ function Get-ItemProperty {
     throw 'Unexpected registry read'
 }
 function Test-Path {
-    param($LiteralPath)
+    param($LiteralPath, $PathType)
     if ($LiteralPath.StartsWith('HKLM:')) { return $env:MACHINE_POLICY -ne '{}' }
     if ($LiteralPath.StartsWith('HKCU:')) { return $env:USER_POLICY -ne '{}' }
+    if ($PathType) {
+        return Microsoft.PowerShell.Management\Test-Path -LiteralPath $LiteralPath -PathType $PathType
+    }
     Microsoft.PowerShell.Management\Test-Path -LiteralPath $LiteralPath
 }
 function New-Item {
@@ -175,6 +188,20 @@ function Remove-Item {
     if ($env:FAIL_EXPORT_CLEANUP -eq '1') { throw 'Fixture export cleanup failure' }
     Microsoft.PowerShell.Management\Remove-Item -LiteralPath $LiteralPath -Force:$Force
 }
+function Get-Command {
+    [CmdletBinding()]
+    param([string]$Name)
+    if ($Name -eq 'winget' -and $env:WINGET_PRESENT -eq '0') { return }
+    Microsoft.PowerShell.Core\Get-Command @PSBoundParameters
+}
+function winget {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    if ($env:WINGET_PRESENT -eq '0') { throw 'Unexpected call to unavailable winget' }
+    $Arguments | ConvertTo-Json | Set-Content -LiteralPath $env:UPGRADE_LOG -Encoding UTF8
+    if ($env:WINGET_STDERR -eq '1') { Write-Error 'Fixture winget diagnostic' }
+    Write-Output 'Fixture winget result'
+    $global:LASTEXITCODE = [long]$env:WINGET_EXIT_CODE
+}
 
 $arguments = @{}
 if ($env:PREVIEW -eq '1') { $arguments.WhatIf = $true }
@@ -183,9 +210,13 @@ if ($env:TASKBAR_ONLY -eq '1') { $arguments.TaskbarOnly = $true }
 """, encoding="utf-8")
     desktop_path = tmp_path / "redirected desktop"
     desktop_path.mkdir()
+    package_path = tmp_path / "Terminal package"
+    package_path.mkdir()
+    (package_path / "WindowsTerminal.exe").touch()
     environment = dict(
         os.environ, TEST_OS="Windows_NT", TEST_USER="LabUser",
         TEST_DESKTOP=str(desktop_path), FAIL_SHORTCUT="0",
+        TERMINAL_PACKAGE_PATH=str(package_path), TERMINAL_PACKAGE_PRESENT="1",
         TEST_LOCALAPPDATA=str(tmp_path / "local"), ITEM_COUNT="3",
         WINDOWS_BUILD="26100", WINDOWS_REVISION="4770", TERMINAL_PRESENT="1",
         MACHINE_POLICY="{}", USER_POLICY="{}",
@@ -198,6 +229,8 @@ if ($env:TASKBAR_ONLY -eq '1') { $arguments.TaskbarOnly = $true }
         SHELL_PROCESS_NAME="explorer", SHELL_SESSION_OFFSET="0", AUTO_RESTART="0",
         FAIL_SHELL_WAIT="0", FAIL_SHELL_START="0", SHELL_NEVER_READY="0",
         STOP_LOG=str(tmp_path / "stop.txt"), START_LOG=str(tmp_path / "start.txt"),
+        UPGRADE_LOG=str(tmp_path / "upgrade.json"), WINGET_PRESENT="1",
+        WINGET_EXIT_CODE="0", WINGET_STDERR="0",
     )
 
     def run(script="pin_terminal", **extra):
@@ -257,17 +290,31 @@ def test_terminal_shortcut_launches_registered_app_from_redirected_desktop(deskt
     )
     assert Path(shortcut["TargetPath"]) == root / "Windows/explorer.exe"
     assert shortcut["Arguments"] == f"shell:AppsFolder\\{TERMINAL}"
+    assert shortcut["IconLocation"] == f"{root / 'Terminal package/WindowsTerminal.exe'},0"
     assert "desktop shortcut created" in result.stdout
 
 
-def test_existing_terminal_desktop_shortcut_is_preserved(desktop):
+def test_existing_terminal_desktop_shortcut_icon_is_fixed_without_changing_launch_settings(desktop):
     run, root = desktop
     shortcut = root / "redirected desktop/Windows Terminal.lnk"
-    shortcut.write_text("Existing customized shortcut")
-    result = run(FAIL_SHORTCUT="1")
+    original = {
+        "Path": str(shortcut), "TargetPath": "custom-terminal.exe", "Arguments": "--custom",
+        "Description": "Customized shortcut", "IconLocation": "explorer.exe,0",
+    }
+    shortcut.write_text(json.dumps(original))
+    result = run()
     assert result.returncode == 0, result.stdout + result.stderr
-    assert shortcut.read_text() == "Existing customized shortcut"
-    assert "Existing desktop shortcut preserved" in result.stdout
+    updated = json.loads(shortcut.read_text(encoding="utf-8-sig"))
+    assert updated == original | {"IconLocation": f"{root / 'Terminal package/WindowsTerminal.exe'},0"}
+    assert "launch settings preserved" in result.stdout
+
+
+def test_unavailable_terminal_icon_warns_without_preventing_shortcut_creation(desktop):
+    run, root = desktop
+    result = run(TERMINAL_PACKAGE_PRESENT="0")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Terminal shortcut icon was not updated" in result.stdout
+    assert (root / "redirected desktop/Windows Terminal.lnk").exists()
 
 
 def test_terminal_shortcut_save_failure_is_reported(desktop):
@@ -291,6 +338,7 @@ def test_vm_setup_runs_both_steps_and_warns_without_failing(desktop, extra, term
     assert (root / "redirected desktop/Windows Terminal.lnk").exists() is terminal_succeeds
     assert (root / "stop.txt").exists() is terminal_succeeds
     assert (root / "clear.txt").exists() is cleanup_succeeds
+    assert (root / "upgrade.json").exists()
     assert ("Optional VM setup step" in result.stdout) is not (terminal_succeeds and cleanup_succeeds)
 
 
@@ -303,6 +351,47 @@ def test_vm_setup_preview_does_not_change_desktop_or_empty_recycle_bin(desktop):
     assert not (root / "local").exists()
     assert not (root / "clear.txt").exists()
     assert not (root / "stop.txt").exists()
+    assert not (root / "upgrade.json").exists()
+
+
+@pytest.mark.parametrize("exit_code,message", [
+    ("0", "upgrade completed"),
+    ("-1978335189", "already up to date"),
+    ("2316632107", "already up to date"),
+])
+def test_azd_upgrade_is_noninteractive_and_accepts_already_current(desktop, exit_code, message):
+    run, root = desktop
+    result = run("upgrade_azd", WINGET_EXIT_CODE=exit_code, WINGET_STDERR="1")
+    assert result.returncode == 0, result.stdout + result.stderr
+    arguments = json.loads((root / "upgrade.json").read_text(encoding="utf-8-sig"))
+    assert arguments[:6] == ["upgrade", "--id", "Microsoft.Azd", "--exact", "--source", "winget"]
+    assert "--silent" in arguments
+    assert "--disable-interactivity" in arguments
+    assert "--accept-package-agreements" in arguments
+    assert "--accept-source-agreements" in arguments
+    assert message in result.stdout
+
+
+@pytest.mark.parametrize("extra,message", [
+    ({"WINGET_EXIT_CODE": "5"}, "upgrade failed with winget exit code 5"),
+    ({"WINGET_PRESENT": "0"}, "winget is not available"),
+])
+def test_azd_upgrade_failures_are_explicit(desktop, extra, message):
+    run, _ = desktop
+    result = run("upgrade_azd", **extra)
+    assert result.returncode != 0
+    assert message in result.stderr
+    assert "upgrade completed" not in result.stdout
+
+
+def test_vm_setup_upgrade_failure_warns_without_failing_other_steps(desktop):
+    run, root = desktop
+    result = run("setup_vm", WINGET_EXIT_CODE="5")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "lifecycle_upgrade_azd.ps1" in result.stdout
+    assert "upgrade failed with winget exit code 5" in result.stdout
+    assert (root / "redirected desktop/Windows Terminal.lnk").exists()
+    assert (root / "clear.txt").exists()
 
 
 @pytest.mark.parametrize("terminal_already_pinned,user_policy", [
@@ -361,6 +450,7 @@ def test_taskbar_only_still_refuses_conflicting_taskbar_policy(desktop):
     assert "would be overwritten" in result.stderr
     assert not (root / "policy.jsonl").exists()
     assert not (root / "local").exists()
+    assert (root / "redirected desktop/Windows Terminal.lnk").exists()
 
 
 def test_taskbar_only_preview_does_not_export_start_or_change_settings(desktop):
@@ -394,10 +484,27 @@ def test_shell_refresh_targets_only_the_desktop_explorer_and_keeps_session_signe
 def test_missing_or_unrelated_shell_is_never_stopped(desktop, extra, message):
     run, root = desktop
     result = run(**extra)
-    assert result.returncode != 0
-    assert message in result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert message in result.stdout
+    assert "Explorer refresh skipped" in result.stdout
+    assert "pin appearance is unverified" in result.stdout
+    assert (root / "redirected desktop/Windows Terminal.lnk").exists()
     assert not (root / "stop.txt").exists()
-    assert not (root / "policy.jsonl").exists()
+    assert not (root / "start.txt").exists()
+    assert (root / "policy.jsonl").exists()
+    assert "Explorer refreshed" not in result.stdout
+
+
+def test_noninteractive_vm_setup_creates_shortcut_and_cleans_recycle_bin(desktop):
+    run, root = desktop
+    result = run("setup_vm", DESKTOP_AVAILABLE="0", FAIL_EXPORT="1")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (root / "redirected desktop/Windows Terminal.lnk").exists()
+    assert (root / "policy.jsonl").exists()
+    assert (root / "clear.txt").exists()
+    assert not (root / "stop.txt").exists()
+    assert "Explorer refresh skipped" in result.stdout
+    assert "Start pinning was not confirmed" in result.stdout
 
 
 @pytest.mark.parametrize("extra,message", [

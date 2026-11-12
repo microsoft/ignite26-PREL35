@@ -4,7 +4,7 @@
 param()
 
 $ErrorActionPreference = 'Stop'
-foreach ($step in @('lifecycle_pin_terminal.ps1', 'lifecycle_clear_recycle_bin.ps1')) {
+foreach ($step in @('lifecycle_pin_terminal.ps1', 'lifecycle_clear_recycle_bin.ps1', 'lifecycle_upgrade_azd.ps1')) {
     try {
         & (Join-Path $PSScriptRoot $step) -WhatIf:$WhatIfPreference
     } catch {
