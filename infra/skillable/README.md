@@ -84,8 +84,14 @@ change the checkout action's error handling.
 [lifecycle_setup_vm.ps1](lifecycle_setup_vm.ps1) runs
 [lifecycle_pin_terminal.ps1](lifecycle_pin_terminal.ps1) to create a Terminal desktop shortcut
 and configure taskbar/Start pins, then [lifecycle_clear_recycle_bin.ps1](lifecycle_clear_recycle_bin.ps1)
-to empty LabUser's Recycle Bin. Each step warns on failure and the next step still runs.
-Terminal pinning refreshes Explorer without signing out; run in LabUser's interactive desktop session.
+to empty LabUser's Recycle Bin, and finally [lifecycle_upgrade_azd.ps1](lifecycle_upgrade_azd.ps1)
+to update Azure Developer CLI using `winget`. Each step warns on failure and the next step still runs.
+The upgrade is noninteractive and requires Windows App Installer (`winget`) and permission to
+upgrade the installed package. An already-current version is a successful no-op.
+Desktop shortcut creation does not require an interactive Explorer session and still runs if a
+pinning policy conflict prevents layout changes. Terminal pinning refreshes Explorer without
+signing out when the current session has a desktop; otherwise it saves the layouts and warns
+that pin appearance is unverified. Check the pins in LabUser's next desktop session.
 Use `-WhatIf` on the setup hook to preview both steps without changes.
 Add future VM setup steps to the hook rather than copying them into the lifecycle action.
 The VM must download or clone a ref containing those changes to use them.

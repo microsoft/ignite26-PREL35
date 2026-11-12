@@ -1,10 +1,12 @@
 <#
 Run as LabUser in a Windows VM lifecycle action, using Windows PowerShell.
-Creates a Windows Terminal desktop shortcut if one does not already exist.
+Creates a Windows Terminal desktop shortcut independently of pinning and Explorer availability.
+Sets the Terminal icon on new and existing shortcuts, preserving existing launch settings.
 Configures the taskbar first, then attempts Start pinning without making Start failures fatal.
 Start pinning requires 24H2 with KB5062660 (26100.4770) or later; otherwise it warns and skips Start.
 Use -TaskbarOnly to leave Start unchanged without attempting it.
-Refreshes the current desktop's Explorer shell without signing LabUser out.
+Refreshes the current desktop's Explorer shell when available, without signing LabUser out.
+Noninteractive runs save the layouts and warn that pin appearance remains unverified.
 The desktop/taskbar briefly disappear and File Explorer windows may close.
 Use -WhatIf to preview without creating shortcuts, writing layouts/policies, or restarting Explorer.
 #>
@@ -33,6 +35,41 @@ if (-not (Get-StartApps | Where-Object { $_.AppID -eq $terminalId })) {
     throw 'Windows Terminal is not registered for LabUser. Install it before running this lifecycle action.'
 }
 
+if ($PSCmdlet.ShouldProcess('LabUser Desktop', 'Create or update Windows Terminal shortcut icon, preserving existing launch settings')) {
+    $shortcutShell = New-Object -ComObject WScript.Shell
+    $desktop = [string]$shortcutShell.SpecialFolders.Item('Desktop')
+    if ([string]::IsNullOrWhiteSpace($desktop)) {
+        throw 'The Windows shell could not locate LabUser''s Desktop.'
+    }
+    $shortcutPath = Join-Path $desktop 'Windows Terminal.lnk'
+    $existingShortcut = Test-Path -LiteralPath $shortcutPath
+    $shortcut = $shortcutShell.CreateShortcut($shortcutPath)
+    if (-not $existingShortcut) {
+        $shortcut.TargetPath = Join-Path $env:WINDIR 'explorer.exe'
+        $shortcut.Arguments = "shell:AppsFolder\$terminalId"
+        $shortcut.Description = 'Open Windows Terminal'
+    }
+    try {
+        $package = Get-AppxPackage -Name Microsoft.WindowsTerminal | Select-Object -First 1
+        if (-not $package -or [string]::IsNullOrWhiteSpace($package.InstallLocation)) {
+            throw 'Windows Terminal package location is unavailable for LabUser.'
+        }
+        $iconPath = Join-Path $package.InstallLocation 'WindowsTerminal.exe'
+        if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
+            throw "Windows Terminal icon executable not found: $iconPath"
+        }
+        $shortcut.IconLocation = "$iconPath,0"
+    } catch {
+        Write-Warning "Terminal shortcut icon was not updated: $($_.Exception.Message)" -WarningAction Continue
+    }
+    $shortcut.Save()
+    if ($existingShortcut) {
+        Write-Host "Existing desktop shortcut updated; launch settings preserved: $shortcutPath"
+    } else {
+        Write-Host "Windows Terminal desktop shortcut created: $shortcutPath"
+    }
+}
+
 $directory = Join-Path $env:LOCALAPPDATA 'PREL35\Shell'
 $startFile = Join-Path $directory 'StartLayout.json'
 $taskbarFile = Join-Path $directory 'TaskbarLayout.xml'
@@ -54,7 +91,7 @@ if (Test-Path -LiteralPath $policy) {
     }
 }
 $target = if ($TaskbarOnly) { 'LabUser taskbar (Start unchanged)' } else { 'LabUser Start menu and taskbar' }
-if (-not $PSCmdlet.ShouldProcess($target, 'Create a Terminal desktop shortcut, configure pins and refresh Explorer, preserving existing pins')) {
+if (-not $PSCmdlet.ShouldProcess($target, 'Configure Windows Terminal pins and refresh Explorer when available, preserving existing pins')) {
     return
 }
 
@@ -82,25 +119,6 @@ function Get-LearnerShellProcess {
     }
     return $process
 }
-$null = Get-LearnerShellProcess
-
-$shortcutShell = New-Object -ComObject WScript.Shell
-$desktop = [string]$shortcutShell.SpecialFolders.Item('Desktop')
-if ([string]::IsNullOrWhiteSpace($desktop)) {
-    throw 'The Windows shell could not locate LabUser''s Desktop.'
-}
-$shortcutPath = Join-Path $desktop 'Windows Terminal.lnk'
-if (Test-Path -LiteralPath $shortcutPath) {
-    Write-Host "Existing desktop shortcut preserved: $shortcutPath"
-} else {
-    $shortcut = $shortcutShell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath = Join-Path $env:WINDIR 'explorer.exe'
-    $shortcut.Arguments = "shell:AppsFolder\$terminalId"
-    $shortcut.Description = 'Open Windows Terminal'
-    $shortcut.Save()
-    Write-Host "Windows Terminal desktop shortcut created: $shortcutPath"
-}
-
 $taskbarXml = @'
 <?xml version="1.0" encoding="utf-8"?>
 <LayoutModificationTemplate
@@ -175,7 +193,12 @@ if ($TaskbarOnly) {
         }
     }
 }
-$explorer = Get-LearnerShellProcess
+try {
+    $explorer = Get-LearnerShellProcess
+} catch {
+    Write-Warning "Explorer refresh skipped: $($_.Exception.Message) Terminal layouts remain configured; pin appearance is unverified. Check them in LabUser's next desktop session." -WarningAction Continue
+    return
+}
 Write-Host "Refreshing Windows Explorer (PID $($explorer.Id)); LabUser remains signed in."
 Stop-Process -Id $explorer.Id -Force -ErrorAction Stop
 try {
