@@ -301,6 +301,43 @@ class StartStepTests(unittest.TestCase):
         self.assertIn("do not enter sign-in credentials into this runner", text)
         self.assertNotIn("@lab.CloudPortalCredential", text)
 
+    def test_conditional_foundry_recovery_is_source_mapped_and_remains_manual(self):
+        runner = lab.Runner(self.root)
+        recovery = next(step for step in runner.steps if step.expect == "conditional-review")
+        source = "\n".join(runner.guide.lines[recovery.start - 1:recovery.end])
+        self.assertIn("Fix Task adherence showing N/A with a JSON-input error", source)
+        self.assertIn('"text": "Return your response as valid JSON.\\n\\n{{item.query}}"', source)
+        self.assertIn("uv run src/evaluate.py --foundry", source)
+        self.assertEqual(recovery.kind, "manual")
+        self.assertTrue(runner.guide.matches("uv run src/evaluate.py --foundry", recovery))
+        with self.assertRaisesRegex(lab.WalkthroughError, "Unmapped command blocks"):
+            runner.guide.check_coverage([step for step in runner.steps if step != recovery])
+        for execute in (False, True):
+            with self.subTest(execute=execute):
+                runner = lab.Runner(self.root)
+                runner.steps = [recovery]
+                output = io.StringIO()
+                forbidden = AssertionError("Conditional recovery attempted an automatic edit or rerun")
+                with (contextlib.redirect_stdout(output),
+                      patch.object(runner, "preflight"),
+                      patch.object(runner, "process", side_effect=forbidden),
+                      patch.object(lab.subprocess, "run", side_effect=forbidden),
+                      patch.object(lab.subprocess, "Popen", side_effect=forbidden),
+                      patch("builtins.input", side_effect=forbidden),
+                      patch.object(Path, "write_bytes", side_effect=forbidden),
+                      patch.object(Path, "write_text", side_effect=forbidden)):
+                    self.assertEqual(runner.run(execute=execute), 0)
+                text = output.getvalue()
+                self.assertIn("    > uv run src/evaluate.py --foundry", text)
+                self.assertIn("Conditional rerun - manual only", text)
+                self.assertIn("already includes the guide's JSON hint", " ".join(text.split()))
+                self.assertIn("new billable Foundry evaluation", " ".join(text.split()))
+                self.assertEqual(runner.outcomes[0].status, "REVIEW NEEDED" if execute else "PLAN")
+                if execute:
+                    self.assertIn("1 manual review item(s) remain unverified", " ".join(text.split()))
+                    report = text.split("Walkthrough report")[-1]
+                    self.assertIn(f"{lab.GUIDE}:{recovery.start}-{recovery.end}", report)
+
     def test_resume_in_gateway_exercise_reports_recovery_when_command_fails(self):
         number = self.number(lambda step: step.kind == "logged-investigation")
         runner = lab.Runner(self.root, start_step=number)
