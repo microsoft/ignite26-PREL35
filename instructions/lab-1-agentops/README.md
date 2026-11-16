@@ -216,16 +216,6 @@ Then open the **Foundry portal** `https://ai.azure.com`, select the `fincrime` p
 
 ![Foundry: the Release gate evaluation run, with triage as its Agent ID](../images/1-6-release-gate-run.png)
 
-> [!TIP]
-> If **Task adherence** is `N/A` and the rows show HTTP 400 with
-> `Response input messages must contain the word 'json'`, the target agent failed before the AI judge could score it.
-> In `src/evaluate.py`, the `foundry_evaluation` input-message template must include
-> `Return your response as valid JSON.\n\n{{item.query}}`, not just `{{item.query}}`.
-> This direct Foundry path does not use the JSON hint added by `investigate.ask` for gateway calls.
-> Keep the case data and evaluator mapping unchanged. No agent prompt or model change is needed.
-> Save the correction and rerun `uv run src/evaluate.py --foundry`, then open the run with the new timestamp.
-> Previous failed runs keep their original results.
-
 ### 7. The same gate in a pipeline \(3 min\)
 
 Open [`.github/workflows/release-gate.yml`](../../.github/workflows/release-gate.yml). It runs the commands you ran: connect, publish the agents from the commit, run the gate, and keep the Evidence Pack. A failing gate fails the job, so the change can't be merged or released.
