@@ -75,7 +75,7 @@ class RunnerChecks(unittest.TestCase):
             self.assertEqual(self.runner.run(), 0)
         for phase in ("Lab 0", "Lab 1", "Lab 2", "Lab 3", "Lab 4"):
             self.assertIn(phase, output.getvalue())
-        self.assertIn("46 command/query blocks mapped", output.getvalue())
+        self.assertIn("47 command/query blocks mapped", output.getvalue())
         self.assertIn("Kusto", output.getvalue())
 
     def test_source_drift_blocks_runner_creation(self):

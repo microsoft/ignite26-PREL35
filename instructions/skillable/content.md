@@ -644,7 +644,7 @@ The gate checks four things:
 
 ## Topics
 
-> [hint] Consider when moving to production
+> [!hint] Consider when moving to production
 >
 > - **Maturity model and lifecycle:** where your organization sits today and what the next stage requires.
 > - **CI/CD for prompts and agents:** wire the release gate you ran into a pipeline such as GitHub Actions, so it runs on every push. The pipeline needs its own Azure identity (a service principal), which is outside a lab's permissions, so this lab walks through it rather than doing it hands-on.
@@ -702,7 +702,7 @@ You look at that in step 6.
 
 You should see `Release gate: PASS` and a score for each metric.
 
-Open the Evidence Pack folder it names, and open `report.md`. It shows each metric against its threshold, and the outcome for each alert. Often all 14 are right. When one is wrong it's usually `ALT-1006`, where triage asks for more information instead of closing, and the gate still passes because 13 of 14 is above the **85%** that the accuracy owner requires.
+Open the `evidence` folder, find current run, and open `report.md`. It shows each metric against its threshold, and the outcome for each alert. Often all 14 are right. When one is wrong it's usually `ALT-1006`, where triage asks for more information instead of closing, and the gate still passes because 13 of 14 is above the **85%** that the accuracy owner requires.
 
 > [!hint] Your scores can differ slightly from run to run. That's why the thresholds leave room on accuracy, and none on
 > missed escalations.
@@ -731,11 +731,15 @@ You see `Release gate: FAIL`.
 
 > In the terminal, type `code .` to open VS Code and find the reports in the `evidence` folder.
 
-- `citation_validity` is 0: the short prompt no longer asks for evidence, so no recommendation can be traced.
-- `escalation_recall` is below 100%: it tells the agent that most alerts are false positives, so some suspicious cases are no longer escalated.
+With a shorter prompt, the agent response is less predictable. The model is not following instructions and will try do to "best effort" solution. Evaluation results will differ between runs.
+
+- `citation_validity` may be 0: the short prompt no longer asks for evidence, so no recommendation can be traced.
+- `escalation_recall` may be bellow 100%: it tells the agent that most alerts are false positives, so some suspicious cases are no longer escalated.
 - Token use is lower, as promised, but the two failures above block the release.
 
 The command ended with exit code 1 (check with `$LASTEXITCODE`). In a pipeline, that stops the release.
+
+> [!hint] Shorter prompt uses less tokens but does not provide reliable results.
 
 ### 3. Roll back and pass the gate \(5 min\)
 
@@ -801,7 +805,7 @@ Approvers review this pack before sign-off, and auditors can read it later. You 
 
 ### 6. See the versions in the traces and in Foundry \(6 min\)
 
-Every agent call was traced. In the **Azure portal** +++@lab.CloudPortal.Url+++, open the Application Insights resource (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) in your resource group and select **Logs**.
+Every agent call was traced. In the **Azure portal** +++@lab.CloudPortal.Url+++, open the Application Insights resource (`@lab.CloudResourceTemplate(PREL35Ignite).Outputs[APPLICATIONINSIGHTS_NAME]`) in your resource group and select **Monitoring > Logs**.
 
 > [!hint] You may need to disable the "Agent" experience and switch from "Simple mode" to "KQL mode".
 
@@ -831,6 +835,22 @@ Traces take a few minutes to arrive. If your latest versions are missing, run th
 Then open the **Foundry portal** `https://ai.azure.com`, select the `fincrime` project, and open **Evaluations**.
 - [] Open the run named **Release gate** with the date and time of step 1; its **Agent ID** is `triage`. The **Task adherence** column shows the AI judge's verdict for each alert, and **Task adherence.reason** its reasoning. If the run still shows as running, come back to it at the end of the lab.
 
+> [+Hint] Fix Task adherence showing N/A with a JSON-input error
+>
+> If the run's rows show HTTP 400 with `Response input messages must contain the word 'json'`, open `src/evaluate.py` in VS Code. Press **Ctrl+G**, enter `148`, and press **Enter**. On that line, the `"template"` under `"input_messages"` in `foundry_evaluation`, replace `"text": "{{item.query}}"` with:
+>
+> ```python
+> "text": "Return your response as valid JSON.\n\n{{item.query}}"
+> ```
+>
+> Keep `\n\n` inside the string as shown, leaving the rest of the template unchanged. Save the file; no agent republishing is needed. In PowerShell, from the repository directory, rerun:
+>
+> ```powershell
+> uv run src/evaluate.py --foundry
+> ```
+>
+> This reruns all 14 alerts and starts a new Foundry evaluation, with additional model-call cost. Allow a few minutes, then open the **Release gate** run with the new timestamp and check that the JSON-input error is gone and **Task adherence** has scored results. Previous failed runs will not change; the fix does not guarantee a passing score.
+
 !IMAGE[1-6-release-gate-run.png](instructions361796/1-6-release-gate-run.png)
 
 ### 7. The same gate in a pipeline \(3 min\)
@@ -839,14 +859,14 @@ Open `.github/workflows/release-gate.yml`. It runs the commands you ran: connect
 
 ### 8. Check your understanding \(1 min\)
 
-> [+help] Why isn't one successful agent response enough to approve a release? (click to expand for answer)
+> [+help] Why isn't local testing with successful agent response enough to approve a production release? (click to expand for answer)
 > - *The same alert can get a different answer on the next run. The release gate runs all 14 golden alerts and checks the scores against thresholds before a change ships.*
 
 > [+help] What does a reviewer agent add to a triage agent's recommendation? (click to expand for answer)
 > - *A second check before a human analyst sees the recommendation. It reads the cited evidence and disagrees when the evidence doesn't support the recommendation. A human analyst still makes the final decision.*
 
 > [+help] Why should a prompt change go through evaluation just as a model change does? (click to expand for answer)
-> - *A prompt change can change behavior as much as a model change. In step 2, the shorter prompt used fewer tokens but stopped citing evidence and missed escalations, so the gate blocked it.*
+> - *A prompt change can dramatically change behavior as much as a model change. In AI Development, prompts are as important as code. In step 2, the shorter prompt used fewer tokens but stopped citing evidence and missed escalations, so the gate blocked it.*
 
 ### Bonus challenge
 
@@ -909,11 +929,11 @@ In this lab you attack the triage agent, see which controls stop which attacks, 
   <tbody>
     <tr>
       <td style="padding:14px 16px; vertical-align:top; overflow-wrap:anywhere; border-bottom:1px solid rgba(128,128,128,0.3);"><strong>Attacks</strong></td>
-      <td style="padding:14px 16px; vertical-align:top; overflow-wrap:anywhere; border-bottom:1px solid rgba(128,128,128,0.3);">evals/attacks.json: 11 financial-crime attacks, each with the outcome the attacker wants</td>
+      <td style="padding:14px 16px; vertical-align:top; overflow-wrap:anywhere; border-bottom:1px solid rgba(128,128,128,0.3);"><code style="overflow-wrap:anywhere;">evals/attacks.json</code>: 11 financial-crime attacks, each with the outcome the attacker wants</td>
     </tr>
     <tr>
       <td style="padding:14px 16px; vertical-align:top; overflow-wrap:anywhere; border-bottom:1px solid rgba(128,128,128,0.3);"><strong>Red team</strong></td>
-      <td style="padding:14px 16px; vertical-align:top; overflow-wrap:anywhere; border-bottom:1px solid rgba(128,128,128,0.3);">src/redteam.py: sends every attack through the gateway and judges the answer</td>
+      <td style="padding:14px 16px; vertical-align:top; overflow-wrap:anywhere; border-bottom:1px solid rgba(128,128,128,0.3);"><code style="overflow-wrap:anywhere;">src/redteam.py</code>: sends every attack through the gateway and judges the answer</td>
     </tr>
     <tr>
       <td style="padding:14px 16px; vertical-align:top; overflow-wrap:anywhere; border-bottom:1px solid rgba(128,128,128,0.3);"><strong>AI Red Teaming Agent</strong></td>
@@ -966,11 +986,11 @@ Each attack ends one of three ways:
 > [!hint] Consider when moving to production
 >
 > - **Custom guardrails:** stricter thresholds, blocklists, and detection of injected instructions in documents, set per model deployment.
-> - **Scheduled red teaming:** run the AI Red Teaming Agent against the agent itself, on a schedule after release, with attacks derived from what the agent must never do.
+> - **Scheduled red teaming:** run the AI Red Teaming Agent against your agent on a schedule after release, with attacks derived from what the agent must never do.
 > - **Identity and delegated access (On-Behalf-Of):** let the agent call tools as the signed-in user, with that person's permissions.
 > - **Defender for AI:** threat protection and alerts for AI workloads, enabled per subscription.
 > - **AI-SPM (AI Security Posture Management):** discover AI assets and attack paths across the estate.
-> - **Observability Hub:** a single security view across agents, models and their telemetry.
+> - **Foundry Observability:** a single security view across agents, models and their telemetry.
 
 ## Prerequisites
 
@@ -1410,7 +1430,7 @@ explanation, a limit on what any caller can consume, and the bill split by the t
   <tbody>
     <tr>
       <td style="padding:14px 16px; vertical-align:top; overflow-wrap:anywhere; border-bottom:1px solid rgba(128,128,128,0.3);"><strong>Prices</strong></td>
-      <td style="padding:14px 16px; vertical-align:top; overflow-wrap:anywhere; border-bottom:1px solid rgba(128,128,128,0.3);">evals/prices.json: the price per million tokens of each model, including cached input</td>
+      <td style="padding:14px 16px; vertical-align:top; overflow-wrap:anywhere; border-bottom:1px solid rgba(128,128,128,0.3);"><code style="overflow-wrap:anywhere;">evals/prices.json</code>: the price per million tokens of each model, including cached input</td>
     </tr>
     <tr>
       <td style="padding:14px 16px; vertical-align:top; overflow-wrap:anywhere; border-bottom:1px solid rgba(128,128,128,0.3);"><strong>Model routing</strong></td>
