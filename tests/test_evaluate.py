@@ -40,6 +40,37 @@ def bad_request(code):
     )
 
 
+@pytest.mark.parametrize("existing_evaluation", [True, False])
+def test_foundry_target_input_includes_json_hint_and_preserves_case(evaluation, existing_evaluation):
+    project = Mock()
+    client = project.get_openai_client.return_value
+    record = Mock()
+    record.name = "Triage task adherence"
+    record.id = "fixture-eval"
+    client.evals.list.return_value = [record] if existing_evaluation else []
+    client.evals.create.return_value = record
+    evaluation.env["MODEL_DEPLOYMENT"] = "fixture-model"
+    case = '{"alert": {"id": "ALT-1001"}, "documents": []}'
+    evaluation.case_file.return_value = case
+
+    evaluation.foundry_evaluation(project, [{"alert_id": "ALT-1001"}])
+
+    request = client.evals.runs.create.call_args.kwargs
+    source = request["data_source"]
+    query = source["source"]["content"][0]["item"]["query"]
+    message = source["input_messages"]["template"][0]
+    rendered = message["content"]["text"].replace("{{item.query}}", query)
+    assert request["eval_id"] == record.id
+    assert message["role"] == "user"
+    assert "json" in rendered.lower()
+    assert rendered.endswith(case)
+    assert query == case
+    if existing_evaluation:
+        client.evals.create.assert_not_called()
+    else:
+        client.evals.create.assert_called_once()
+
+
 def test_prompt_shields_block_is_a_failed_golden_result_not_an_exception(evaluation):
     evaluation.investigate.side_effect = bad_request("prompt_attack_detected")
     result = evaluation.run_one({"alert_id": "ALT-1008", "expected_disposition": "escalate"})

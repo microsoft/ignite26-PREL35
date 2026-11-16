@@ -145,7 +145,8 @@ def foundry_evaluation(project: AIProjectClient, golden: list) -> dict:
             "source": {"type": "file_content", "content": content},
             "input_messages": {
                 "type": "template",
-                "template": [{"type": "message", "role": "user", "content": {"type": "input_text", "text": "{{item.query}}"}}],
+                # Direct Foundry calls need the JSON hint that investigate.ask adds for gateway calls.
+                "template": [{"type": "message", "role": "user", "content": {"type": "input_text", "text": "Return your response as valid JSON.\n\n{{item.query}}"}}],
             },
             "target": {"type": "azure_ai_agent", "name": "triage"},
         },
