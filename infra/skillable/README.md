@@ -34,13 +34,10 @@ Use [lifecycle_github_repo_download.ps1](lifecycle_github_repo_download.ps1) in 
 Windows VM PowerShell lifecycle action. GitHub already supplies the source ZIP; no packaging
 pipeline is needed.
 
-The script downloads `microsoft/ignite26-PREL35` at `main` into
-`C:\Users\LabUser\Desktop\ignite26-PREL35`. In the copy pasted into the VM lifecycle action,
-replace `PASTE_YOUR_PAT_HERE` in the `GitHubToken` parameter with the read-only Contents token.
-When running the file directly, pass `-GitHubToken` or supply an action-scoped `GITHUB_TOKEN` environment variable.
-Do not hardcode the token, persist it in the VM's user/system environment, or save it in the image.
-Use `Ref` to select another branch, tag, or a pinned commit, and `TargetPath` for another destination
-that does not exist or is an empty folder.
+The script downloads the public `microsoft/ignite26-PREL35` repository at `main` into
+`C:\Users\LabUser\Desktop\ignite26-PREL35` without GitHub credentials. Unauthenticated GitHub API
+rate limits apply. Use `Ref` to select another branch, tag, or a pinned commit, and `TargetPath`
+for another destination that does not exist or is an empty folder.
 
 GitHub source ZIPs contain no `.git` history. The lifecycle action downloads sources only and does
 not run Git or write the lifecycle account's global Git configuration. An existing empty directory

@@ -25,15 +25,15 @@ $ErrorActionPreference = 'Stop'
 function Invoke-WebRequest {
     param($Uri, $Headers, $OutFile, [switch]$UseBasicParsing)
     if ($env:FAIL_DOWNLOAD -eq '1') { throw 'Fixture download error' }
-    if ($Headers.Authorization -ne 'Bearer fixture-token') { throw 'Missing authorization' }
+    if ($Headers.ContainsKey('Authorization')) { throw 'Unexpected authorization' }
     [IO.File]::WriteAllText($env:REQUEST_LOG, $Uri)
     Copy-Item -LiteralPath $env:SOURCE_ZIP -Destination $OutFile
 }
-& $env:DOWNLOAD_SCRIPT -TargetPath $env:LAB_TARGET -Ref 'release/2026' -GitHubToken $env:TEST_TOKEN
+& $env:DOWNLOAD_SCRIPT -TargetPath $env:LAB_TARGET -Ref 'release/2026'
 """, encoding="utf-8")
     target = tmp_path / "ignite26-PREL35"
     environment = dict(os.environ, SOURCE_ZIP=str(archive), REQUEST_LOG=str(tmp_path / "request.txt"),
-                       DOWNLOAD_SCRIPT=str(SCRIPT), LAB_TARGET=str(target), TEST_TOKEN="fixture-token",
+                       DOWNLOAD_SCRIPT=str(SCRIPT), LAB_TARGET=str(target),
                        GIT_CONFIG_GLOBAL=str(tmp_path / "global.gitconfig"), GIT_CONFIG_NOSYSTEM="1")
 
     def run(**extra):
@@ -123,14 +123,15 @@ def test_failed_download_preserves_existing_empty_directory(download):
     assert not list(target.parent.glob("ignite26-PREL35-download-*"))
 
 
-def test_unedited_placeholder_can_use_action_scoped_environment_token(download):
+def test_source_download_does_not_send_environment_token(download):
     run, target, _, _ = download
-    result = run(TEST_TOKEN="PASTE_YOUR_PAT_HERE", GITHUB_TOKEN="fixture-token")
+    result = run(GITHUB_TOKEN="fixture-token")
     assert result.returncode == 0, result.stdout + result.stderr
     assert (target / "README.md").is_file()
+    assert "fixture-token" not in result.stdout + result.stderr
 
 
-@pytest.mark.parametrize("failure", ["download", "wrong-source", "local-state", "missing-token", "placeholder"])
+@pytest.mark.parametrize("failure", ["download", "wrong-source", "local-state"])
 def test_failed_setup_does_not_install_partial_checkout_and_cleans_staging(download, failure):
     run, target, archive, _ = download
     extra = {}
@@ -142,10 +143,6 @@ def test_failed_setup_does_not_install_partial_checkout_and_cleans_staging(downl
     elif failure == "local-state":
         with zipfile.ZipFile(archive, "a") as zip_file:
             zip_file.writestr("microsoft-ignite26-PREL35-fixture/.env", "Fixture forbidden state")
-    elif failure == "missing-token":
-        extra["TEST_TOKEN"] = ""
-    else:
-        extra.update(TEST_TOKEN="PASTE_YOUR_PAT_HERE", GITHUB_TOKEN="")
     result = run(**extra)
     assert result.returncode != 0
     assert not target.exists()
