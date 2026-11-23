@@ -1,7 +1,7 @@
 <#
-Updates Azure Developer CLI with Windows Package Manager, without interactive prompts.
-Run as the VM user with winget available; the installed package must be upgradeable by that user.
-Use -WhatIf to preview without running winget.
+Updates Azure Developer CLI with Windows Package Manager and updates its extensions without prompts.
+Run as the VM user with winget and azd available; the installed package must be upgradeable by that user.
+Use -WhatIf to preview without running either command.
 Appends run context and upgrade output to LOCALAPPDATA\PREL35\azd-upgrade.log.
 #>
 #requires -Version 5.1
@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') {
     throw 'Azure Developer CLI upgrade requires Windows.'
 }
-if (-not $PSCmdlet.ShouldProcess('Azure Developer CLI (Microsoft.Azd)', 'Upgrade with winget')) {
+if (-not $PSCmdlet.ShouldProcess('Azure Developer CLI (Microsoft.Azd) and its extensions', 'Upgrade with winget and azd')) {
     return
 }
 if ([string]::IsNullOrWhiteSpace($LogPath)) {
@@ -59,6 +59,28 @@ try {
     } else {
         Write-Host 'Azure Developer CLI upgrade completed.'
     }
+
+    $azd = Get-Command azd -ErrorAction SilentlyContinue
+    if (-not $azd) {
+        throw 'azd is not available for this VM user. Ensure Azure Developer CLI is on PATH before updating extensions.'
+    }
+    Write-Host "azd command: $($azd.Source)"
+    Write-Host 'Updating Azure Developer CLI extensions.'
+    try {
+        $ErrorActionPreference = 'Continue'
+        $PSNativeCommandUseErrorActionPreference = $false
+        $output = @(& azd extension update --all --no-prompt 2>&1)
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = 'Stop'
+        $global:LASTEXITCODE = 0
+    }
+    $output | ForEach-Object { Write-Host $_ }
+    Write-Host "azd extension update exit code: $exitCode"
+    if ($exitCode -ne 0) {
+        throw "Azure Developer CLI extension update failed with exit code $exitCode."
+    }
+    Write-Host 'Azure Developer CLI extension update completed.'
 } catch {
     Write-Host "Upgrade error: $($_.Exception.Message)"
     throw

@@ -81,10 +81,11 @@ change the checkout action's error handling.
 [lifecycle_pin_terminal.ps1](lifecycle_pin_terminal.ps1) to create a Terminal desktop shortcut
 and configure taskbar/Start pins, then [lifecycle_clear_recycle_bin.ps1](lifecycle_clear_recycle_bin.ps1)
 to empty LabUser's Recycle Bin, and finally [lifecycle_upgrade_azd.ps1](lifecycle_upgrade_azd.ps1)
-to update Azure Developer CLI using `winget`. Each step warns on failure and the next step still runs.
+to update Azure Developer CLI using `winget`, then run `azd extension update --all --no-prompt`.
+Each step warns on failure and the next step still runs.
 The upgrade is noninteractive and requires Windows App Installer (`winget`) and permission to
 upgrade the installed package. An already-current version is a successful no-op.
-The upgrade appends its run context, winget output, exit code and errors to
+The upgrade appends its run context, winget and extension update output, exit codes and errors to
 `$env:LOCALAPPDATA\PREL35\azd-upgrade.log` (override with `-LogPath` when running the script directly).
 Check this file as LabUser after a lifecycle run that did not upgrade azd; a successful manual
 run alone does not establish why the lifecycle run failed. A logging failure warns but does not
