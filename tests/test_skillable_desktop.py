@@ -370,6 +370,11 @@ def test_azd_upgrade_is_noninteractive_and_accepts_already_current(desktop, exit
     assert "--accept-package-agreements" in arguments
     assert "--accept-source-agreements" in arguments
     assert message in result.stdout
+    log = (root / "local/PREL35/azd-upgrade.log").read_text(encoding="utf-8-sig")
+    assert "user=LabUser" in log
+    assert "Fixture winget result" in log
+    assert f"winget exit code: {exit_code}" in log
+    assert message in log
 
 
 @pytest.mark.parametrize("extra,message", [
@@ -377,11 +382,13 @@ def test_azd_upgrade_is_noninteractive_and_accepts_already_current(desktop, exit
     ({"WINGET_PRESENT": "0"}, "winget is not available"),
 ])
 def test_azd_upgrade_failures_are_explicit(desktop, extra, message):
-    run, _ = desktop
+    run, root = desktop
     result = run("upgrade_azd", **extra)
     assert result.returncode != 0
     assert message in result.stderr
     assert "upgrade completed" not in result.stdout
+    log = (root / "local/PREL35/azd-upgrade.log").read_text(encoding="utf-8-sig")
+    assert message in log
 
 
 def test_vm_setup_upgrade_failure_warns_without_failing_other_steps(desktop):
