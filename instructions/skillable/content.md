@@ -1359,7 +1359,7 @@ Don't publish anything now. If anyone publishes a new triage version later, inta
 
 ### 6. See Azure Policy deny a model \(6 min\)
 
-Intake governs a use case. Azure Policy governs the platform underneath it, for every team. In the **Azure portal** +++@lab.CloudPortal.Url+++, open your resource group, select **Policies**, and open **Only approved AI models can be deployed**. It uses the built-in policy *Foundry model deployments should only use approved models*, with the effect **Deny** and four approved models: `gpt-5-mini` and `gpt-5-nano` for the agents, `text-embedding-3-small` for the Search knowledge base, and `decision-1`, a preview decision model.
+Intake governs a use case. Azure Policy governs the platform underneath it, for every team. In the **Azure portal** +++@lab.CloudPortal.Url+++, open your resource group, select **Policies**, and open **Only approved AI models can be deployed**. It uses the built-in policy *Foundry model deployments should only use approved models*, with the effect **Deny** and four approved models: `gpt-5-mini` and `gpt-5-nano` for the agents, `text-embedding-3-small` for the Search knowledge base, and `Microsoft-Decision-1.1`, deployed as `decision-1`.
 
 !IMAGE[3-6-policy-wide.png](instructions361796/3-6-policy-wide.png)
 
@@ -1438,7 +1438,7 @@ explanation, a limit on what any caller can consume, and the bill split by the t
     </tr>
     <tr>
       <td style="padding:14px 16px; vertical-align:top; overflow-wrap:anywhere; border-bottom:1px solid rgba(128,128,128,0.3);"><strong>Decision model</strong></td>
-      <td style="padding:14px 16px; vertical-align:top; overflow-wrap:anywhere; border-bottom:1px solid rgba(128,128,128,0.3);"><code style="overflow-wrap:anywhere;">decision-1</code> (preview): a typed recommendation and probabilities, with GPT used only when an explanation is needed</td>
+      <td style="padding:14px 16px; vertical-align:top; overflow-wrap:anywhere; border-bottom:1px solid rgba(128,128,128,0.3);"><code style="overflow-wrap:anywhere;">decision-1</code>: a typed recommendation and probabilities, with GPT used only when an explanation is needed</td>
     </tr>
     <tr>
       <td style="padding:14px 16px; vertical-align:top; overflow-wrap:anywhere; border-bottom:1px solid rgba(128,128,128,0.3);"><strong>Token limit</strong></td>
@@ -1516,7 +1516,7 @@ uv run set-gateway model-routing off
 
 ### 3. Try a decision model \(10 min\)
 
-A language model such as GPT writes its answer as text. A **decision model** picks from a fixed set of options using criteria you give it. Here, `decision-1` (preview) picks `escalate`, `close_false_positive` or `request_info` from the case evidence, and returns the choice with a probability for each option. It writes no explanation, so you pay for GPT only when a human analyst needs to read the reasons.
+A language model such as GPT writes its answer as text. A **decision model** picks from a fixed set of options using criteria you give it. Here, `decision-1` picks `escalate`, `close_false_positive` or `request_info` from the case evidence, and returns the choice with a probability for each option. It writes no explanation, so you pay for GPT only when a human analyst needs to read the reasons.
 
 `decision-1` is already deployed in your Foundry resource. Its rubric is in `src/decisions/prompts/decision1.md`. The agent that writes its explanations, `triage-systemone`, was published in Lab 0. These scripts make billable calls with your Azure CLI sign-in.
 

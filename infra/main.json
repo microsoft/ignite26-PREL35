@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "15742593396247976527"
+      "templateHash": "1916443741158260522"
     }
   },
   "parameters": {
@@ -85,12 +85,12 @@
           "sku": "Standard"
         },
         {
-          "name": "Microsoft-Decision-1",
+          "name": "Microsoft-Decision-1.1",
           "deploymentName": "decision-1",
           "format": "Microsoft",
           "registry": "azureml-msr",
           "version": "1",
-          "capacity": 10,
+          "capacity": 50,
           "sku": "DataZoneStandard"
         }
       ],

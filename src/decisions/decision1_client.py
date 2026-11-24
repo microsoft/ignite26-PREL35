@@ -55,7 +55,9 @@ class DecisionClient:
                     raise
                 # Rate limiting is bursty; jittered backoff lets a parallel batch drain.
                 time.sleep(min(0.25 * 2 ** attempt, 4) * (0.5 + random.random()))
-        if not isinstance(payload, dict) or payload.get("model") != "microsoft-decision-1":
+        if not isinstance(payload, dict) or payload.get("model") not in (
+            "microsoft-decision-1", "microsoft-decision-1.1",
+        ):
             raise ValueError("Unexpected decision model.")
         return payload
 

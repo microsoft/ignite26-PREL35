@@ -8,13 +8,12 @@ subscription-level `LOD Reader` and `LOD Contributor` learners; neither grants r
 |---|---|
 | **Resource template** on the resource group | [infra/main.bicep](../main.bicep), compiled to ARM JSON (below). No parameters needed |
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, after the template deploys, blocking | [assign-learner.ps1](assign-learner.ps1): grants scoped Foundry, project, Search and Web IQ access |
-| **Life cycle action** (optional): Execute Script in Cloud Platform, PowerShell, after the template deploys, blocking | [bump-decision-capacity.ps1](bump-decision-capacity.ps1): raises `decision-1` capacity to 30 requests per minute |
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, on Tearing Down, blocking, before resource deletion | [remove-setup-roles.ps1](remove-setup-roles.ps1): removes only role assignments created by the matching setup; leaves pre-existing permissions unchanged |
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, on Tearing Down, blocking | [teardown.ps1](teardown.ps1): deletes and purges the Foundry account, which Skillable requires for `Microsoft.CognitiveServices/accounts` |
-| **Access control policy** | [acp-v5.json](acp-v5.json) |
+| **Access control policy** | [acp-v6.json](acp-v6.json) |
 | **Instructions** | [instructions/skillable/content.md](../../instructions/skillable/content.md), linked from GitHub |
 | **Lab VM** | Azure CLI, Git, PowerShell, [uv](https://docs.astral.sh/uv/), the source download below, and then `uv sync` in the lab directory |
-| **Subscription** | Access to `gpt-5-mini` and `gpt-5-nano` (`GlobalStandard`), `text-embedding-3-small` (`Standard`) and `Microsoft-Decision-1` (`DataZoneStandard`, preview), plus the `Microsoft.Search` and `Microsoft.WebIQ` resource providers. Without model access the template fails with `SpecialFeatureOrQuotaIdRequired`; ask Skillable to enable all four models |
+| **Subscription** | Access to `gpt-5-mini` and `gpt-5-nano` (`GlobalStandard`), `text-embedding-3-small` (`Standard`) and `Microsoft-Decision-1.1` (`DataZoneStandard`), plus the `Microsoft.Search` and `Microsoft.WebIQ` resource providers. Without model access the template fails with `SpecialFeatureOrQuotaIdRequired`; ask Skillable to enable all four models |
 
 Organizer provisioning with `azd` on Windows still needs PowerShell 7 for the `postprovision` hook in
 [azure.yaml](../../azure.yaml). Learner setup uses Python through uv, and `azd deploy` does not run that hook.
@@ -124,7 +123,7 @@ Linking needs a GitHub account that is a full admin of the repository.
 
 ## Access control policy
 
-[acp-v5.json](acp-v5.json) denies every resource type, name, SKU and location the lab doesn't deploy, following the
+[acp-v6.json](acp-v6.json) denies every resource type, name, SKU and location the lab doesn't deploy, following the
 restrictions Skillable requires for each resource type. It allows:
 
 | Resource | Limit |
@@ -132,7 +131,7 @@ restrictions Skillable requires for each resource type. It allows:
 | Foundry account (`Microsoft.CognitiveServices/accounts`) | name `aif-*`, kind `AIServices`, SKU `S0` |
 | Model deployments: `gpt-5-mini`, `gpt-5-nano` | `GlobalStandard`, up to 60K tokens per minute each |
 | Model deployment: `text-embedding-3-small` | `Standard`, up to 10K tokens per minute, for the Search knowledge base |
-| Model deployment: `decision-1` (model `Microsoft-Decision-1`) | `DataZoneStandard`, capacity up to 30, which [bump-decision-capacity.ps1](bump-decision-capacity.ps1) sets |
+| Model deployment: `decision-1` (model `Microsoft-Decision-1.1`) | `DataZoneStandard`, capacity up to 50 |
 | Foundry project and its connections | Application Insights, Search, and the Web IQ and knowledge-base connections the learner creates |
 | Azure AI Search (`Microsoft.Search/searchServices`) | name `search-*`, SKU `basic` |
 | Web IQ (`Microsoft.WebIQ/accounts`, preview) | name `webiq-*`, kind `WebIQ.Grounding` |
@@ -147,7 +146,7 @@ Every resource must be in the learner's resource group. Locations: the resource 
 the alert rule, action group and Web IQ. Search is also allowed in `eastus`, the template's default
 `investigatorSearchLocation`, which can differ from the resource group's region.
 
-When a lab adds a resource, change the policy and save it in Studio as a **new name** (`acp-v5`, …): Skillable
+When a lab adds a resource, change the policy and save it in Studio as a **new name** (`acp-v6`, …): Skillable
 caches policies by name, so an edit under the same name may not apply. Then retest the whole lab end to end with
 the new policy before asking to publish.
 

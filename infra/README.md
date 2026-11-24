@@ -189,8 +189,8 @@ The `models` list in `main.bicep` deploys and approves all four models, includin
 `text-embedding-3-small` version 1 (Standard, capacity 10). The two GPT decision models retain GlobalStandard.
 Embeddings use 1,536 dimensions.
 
-`Microsoft-Decision-1` version 1 is deployed as `decision-1` (DataZoneStandard, capacity 10).
-This preview model uses the Microsoft format and the `azureml-msr` registry for its policy allowlist entry.
+`Microsoft-Decision-1.1` version 1 is deployed as `decision-1` (DataZoneStandard, capacity 50).
+This model uses the Microsoft format and the `azureml-msr` registry for its policy allowlist entry.
 It accepts typed decision questions at `/providers/microsoft/v1/systemone`; it does not replace the agents'
 default GPT deployment or support free-form text generation.
 

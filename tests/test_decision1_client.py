@@ -89,3 +89,24 @@ def test_rate_limited_calls_back_off_then_succeed_but_other_errors_do_not_retry(
         with pytest.raises(urllib.error.HTTPError):
             client._post({})
     assert opener.call_count == 1
+
+
+@pytest.mark.parametrize("model", ["microsoft-decision-1", "microsoft-decision-1.1"])
+def test_decision_client_accepts_supported_response_models(model):
+    client = DecisionClient("https://fixture", "decision-1", "Rubric", "not-a-real-token")
+    response = type("Response", (), {
+        "__enter__": lambda s: s, "__exit__": lambda s, *a: None,
+        "read": lambda s: ('{"model": "' + model + '"}').encode(),
+    })()
+    with patch("urllib.request.urlopen", return_value=response):
+        assert client._post({})["model"] == model
+
+
+def test_decision_client_rejects_unexpected_response_models():
+    client = DecisionClient("https://fixture", "decision-1", "Rubric", "not-a-real-token")
+    response = type("Response", (), {
+        "__enter__": lambda s: s, "__exit__": lambda s, *a: None,
+        "read": lambda s: b'{"model": "unrelated-model"}',
+    })()
+    with patch("urllib.request.urlopen", return_value=response), pytest.raises(ValueError, match="Unexpected decision model"):
+        client._post({})

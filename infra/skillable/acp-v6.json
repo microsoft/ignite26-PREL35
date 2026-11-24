@@ -57,8 +57,8 @@
               "allOf": [
                 { "field": "type", "equals": "Microsoft.CognitiveServices/accounts/deployments" },
                 { "field": "Microsoft.CognitiveServices/accounts/deployments/sku.name", "equals": "DataZoneStandard" },
-                { "field": "Microsoft.CognitiveServices/accounts/deployments/sku.capacity", "lessOrEquals": 30 },
-                { "field": "Microsoft.CognitiveServices/accounts/deployments/model.name", "equals": "Microsoft-Decision-1" }
+                { "field": "Microsoft.CognitiveServices/accounts/deployments/sku.capacity", "lessOrEquals": 50 },
+                { "field": "Microsoft.CognitiveServices/accounts/deployments/model.name", "equals": "Microsoft-Decision-1.1" }
               ]
             },
             {

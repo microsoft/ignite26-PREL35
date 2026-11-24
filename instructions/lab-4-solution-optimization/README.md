@@ -23,7 +23,7 @@ explanation, a limit on what any caller can consume, and the bill split by the t
 | ----- | ---------- |
 | **Prices** | [evals/prices.json](../../evals/prices.json): the price per million tokens of each model, including cached input |
 | **Model routing** | A gateway switch that sends low-risk alerts to `triage-lite`: the triage instructions on `gpt-5-nano` |
-| **Decision model** | `decision-1` (preview): a typed recommendation and probabilities, with GPT used only when an explanation is needed |
+| **Decision model** | `decision-1`: a typed recommendation and probabilities, with GPT used only when an explanation is needed |
 | **Token limit** | A gateway policy that caps the tokens each caller can use per minute |
 | **Cost attribution** | The gateway records the tokens of every call by cost center, caller and agent, in Application Insights |
 
@@ -95,7 +95,7 @@ uv run set-gateway model-routing off
 
 ### 3. Try a decision model \(10 min\)
 
-A language model such as GPT writes its answer as text. A **decision model** picks from a fixed set of options using criteria you give it. Here, `decision-1` (preview) picks `escalate`, `close_false_positive` or `request_info` from the case evidence, and returns the choice with a probability for each option. It writes no explanation, so you pay for GPT only when a human analyst needs to read the reasons.
+A language model such as GPT writes its answer as text. A **decision model** picks from a fixed set of options using criteria you give it. Here, `decision-1` picks `escalate`, `close_false_positive` or `request_info` from the case evidence, and returns the choice with a probability for each option. It writes no explanation, so you pay for GPT only when a human analyst needs to read the reasons.
 
 `decision-1` is already deployed in your Foundry resource. Its rubric is in `src/decisions/prompts/decision1.md`. The agent that writes its explanations, `triage-systemone`, was published in Lab 0. These scripts make billable calls with your Azure CLI sign-in.
 

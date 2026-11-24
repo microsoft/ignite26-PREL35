@@ -279,6 +279,7 @@ class StartStepTests(unittest.TestCase):
         self.assertIn("Web IQ calls are billable", text)
         self.assertIn("AuthorizationFailed demonstrates role-based refusal instead", text)
         self.assertIn("policy remains unverified", text)
+        self.assertIn("Microsoft-Decision-1.1", text)
         self.assertTrue(all(item.status == "PLAN" for item in runner.outcomes))
 
     def test_web_iq_step_accounts_for_browser_signin_without_collecting_lab_credentials(self):
