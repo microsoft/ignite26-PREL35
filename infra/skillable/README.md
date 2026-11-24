@@ -8,13 +8,12 @@ subscription-level `LOD Reader` and `LOD Contributor` learners; neither grants r
 |---|---|
 | **Resource template** on the resource group | [infra/main.bicep](../main.bicep), compiled to ARM JSON (below). No parameters needed |
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, after the template deploys, blocking | [assign-learner.ps1](assign-learner.ps1): grants scoped Foundry, project, Search and Web IQ access |
-| **Life cycle action** (optional): Execute Script in Cloud Platform, PowerShell, after the template deploys, blocking | [bump-decision-capacity.ps1](bump-decision-capacity.ps1): raises `decision-1` capacity to 30 requests per minute |
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, on Tearing Down, blocking, before resource deletion | [remove-setup-roles.ps1](remove-setup-roles.ps1): removes only role assignments created by the matching setup; leaves pre-existing permissions unchanged |
 | **Life cycle action**: Execute Script in Cloud Platform, PowerShell, on Tearing Down, blocking | [teardown.ps1](teardown.ps1): deletes and purges the Foundry account, which Skillable requires for `Microsoft.CognitiveServices/accounts` |
-| **Access control policy** | [acp-v5.json](acp-v5.json) |
+| **Access control policy** | [acp-v6.json](acp-v6.json) |
 | **Instructions** | [instructions/skillable/content.md](../../instructions/skillable/content.md), linked from GitHub |
 | **Lab VM** | Azure CLI, Git, PowerShell, [uv](https://docs.astral.sh/uv/), the source download below, and then `uv sync` in the lab directory |
-| **Subscription** | Access to `gpt-5-mini` and `gpt-5-nano` (`GlobalStandard`), `text-embedding-3-small` (`Standard`) and `Microsoft-Decision-1` (`DataZoneStandard`, preview), plus the `Microsoft.Search` and `Microsoft.WebIQ` resource providers. Without model access the template fails with `SpecialFeatureOrQuotaIdRequired`; ask Skillable to enable all four models |
+| **Subscription** | Access to `gpt-5-mini` and `gpt-5-nano` (`GlobalStandard`), `text-embedding-3-small` (`Standard`) and `Microsoft-Decision-1.1` (`DataZoneStandard`), plus the `Microsoft.Search` and `Microsoft.WebIQ` resource providers. Without model access the template fails with `SpecialFeatureOrQuotaIdRequired`; ask Skillable to enable all four models |
 
 Organizer provisioning with `azd` on Windows still needs PowerShell 7 for the `postprovision` hook in
 [azure.yaml](../../azure.yaml). Learner setup uses Python through uv, and `azd deploy` does not run that hook.
@@ -34,13 +33,10 @@ Use [lifecycle_github_repo_download.ps1](lifecycle_github_repo_download.ps1) in 
 Windows VM PowerShell lifecycle action. GitHub already supplies the source ZIP; no packaging
 pipeline is needed.
 
-The script downloads `microsoft/ignite26-PREL35` at `main` into
-`C:\Users\LabUser\Desktop\ignite26-PREL35`. In the copy pasted into the VM lifecycle action,
-replace `PASTE_YOUR_PAT_HERE` in the `GitHubToken` parameter with the read-only Contents token.
-When running the file directly, pass `-GitHubToken` or supply an action-scoped `GITHUB_TOKEN` environment variable.
-Do not hardcode the token, persist it in the VM's user/system environment, or save it in the image.
-Use `Ref` to select another branch, tag, or a pinned commit, and `TargetPath` for another destination
-that does not exist or is an empty folder.
+The script downloads the public `microsoft/ignite26-PREL35` repository at `main` into
+`C:\Users\LabUser\Desktop\ignite26-PREL35` without GitHub credentials. Unauthenticated GitHub API
+rate limits apply. Use `Ref` to select another branch, tag, or a pinned commit, and `TargetPath`
+for another destination that does not exist or is an empty folder.
 
 GitHub source ZIPs contain no `.git` history. The lifecycle action downloads sources only and does
 not run Git or write the lifecycle account's global Git configuration. An existing empty directory
@@ -84,9 +80,15 @@ change the checkout action's error handling.
 [lifecycle_pin_terminal.ps1](lifecycle_pin_terminal.ps1) to create a Terminal desktop shortcut
 and configure taskbar/Start pins, then [lifecycle_clear_recycle_bin.ps1](lifecycle_clear_recycle_bin.ps1)
 to empty LabUser's Recycle Bin, and finally [lifecycle_upgrade_azd.ps1](lifecycle_upgrade_azd.ps1)
-to update Azure Developer CLI using `winget`. Each step warns on failure and the next step still runs.
+to update Azure Developer CLI using `winget`, then run `azd extension update --all --no-prompt`.
+Each step warns on failure and the next step still runs.
 The upgrade is noninteractive and requires Windows App Installer (`winget`) and permission to
 upgrade the installed package. An already-current version is a successful no-op.
+The upgrade appends its run context, winget and extension update output, exit codes and errors to
+`$env:LOCALAPPDATA\PREL35\azd-upgrade.log` (override with `-LogPath` when running the script directly).
+Check this file as LabUser after a lifecycle run that did not upgrade azd; a successful manual
+run alone does not establish why the lifecycle run failed. A logging failure warns but does not
+prevent the upgrade.
 Desktop shortcut creation does not require an interactive Explorer session and still runs if a
 pinning policy conflict prevents layout changes. Terminal pinning refreshes Explorer without
 signing out when the current session has a desktop; otherwise it saves the layouts and warns
@@ -121,7 +123,7 @@ Linking needs a GitHub account that is a full admin of the repository.
 
 ## Access control policy
 
-[acp-v5.json](acp-v5.json) denies every resource type, name, SKU and location the lab doesn't deploy, following the
+[acp-v6.json](acp-v6.json) denies every resource type, name, SKU and location the lab doesn't deploy, following the
 restrictions Skillable requires for each resource type. It allows:
 
 | Resource | Limit |
@@ -129,7 +131,7 @@ restrictions Skillable requires for each resource type. It allows:
 | Foundry account (`Microsoft.CognitiveServices/accounts`) | name `aif-*`, kind `AIServices`, SKU `S0` |
 | Model deployments: `gpt-5-mini`, `gpt-5-nano` | `GlobalStandard`, up to 60K tokens per minute each |
 | Model deployment: `text-embedding-3-small` | `Standard`, up to 10K tokens per minute, for the Search knowledge base |
-| Model deployment: `decision-1` (model `Microsoft-Decision-1`) | `DataZoneStandard`, capacity up to 30, which [bump-decision-capacity.ps1](bump-decision-capacity.ps1) sets |
+| Model deployment: `decision-1` (model `Microsoft-Decision-1.1`) | `DataZoneStandard`, capacity up to 50 |
 | Foundry project and its connections | Application Insights, Search, and the Web IQ and knowledge-base connections the learner creates |
 | Azure AI Search (`Microsoft.Search/searchServices`) | name `search-*`, SKU `basic` |
 | Web IQ (`Microsoft.WebIQ/accounts`, preview) | name `webiq-*`, kind `WebIQ.Grounding` |
@@ -144,7 +146,7 @@ Every resource must be in the learner's resource group. Locations: the resource 
 the alert rule, action group and Web IQ. Search is also allowed in `eastus`, the template's default
 `investigatorSearchLocation`, which can differ from the resource group's region.
 
-When a lab adds a resource, change the policy and save it in Studio as a **new name** (`acp-v5`, …): Skillable
+When a lab adds a resource, change the policy and save it in Studio as a **new name** (`acp-v6`, …): Skillable
 caches policies by name, so an edit under the same name may not apply. Then retest the whole lab end to end with
 the new policy before asking to publish.
 

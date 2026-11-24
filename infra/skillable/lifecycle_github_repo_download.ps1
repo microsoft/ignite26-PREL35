@@ -1,30 +1,10 @@
-<#
-Run on the Windows VM. Create a tightly scoped fine-grained GitHub PAT:
-1. Open https://github.com/settings/personal-access-tokens/new
-   (Settings > Developer settings > Personal access tokens > Fine-grained tokens).
-2. Name it "PREL35 VM source download" and choose a short expiration covering the lab runs.
-3. Set Resource owner to microsoft. Under Repository access, choose Only select repositories
-   and select ignite26-PREL35 only.
-4. Under Repository permissions, grant Contents: Read-only. Metadata: Read-only is automatic.
-   Do not grant write, Actions, Workflows, organization, or account permissions.
-5. Generate the token. If organization approval is required, wait for approval before using it.
-   If microsoft is unavailable as an owner, check organization membership/token policy;
-   do not substitute a broadly scoped classic PAT.
-6. In the copy pasted into Skillable's VM lifecycle action, replace PASTE_YOUR_PAT_HERE
-   in the GitHubToken parameter below with the token. Do not put the real token in this repository.
-   When running the file directly, you can instead pass -GitHubToken or supply GITHUB_TOKEN.
-   Never commit it, log it, persist it in the VM's user/system environment, or save it in the image.
-   Rotate it before expiry or revoke it when no longer needed.
-Docs: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
-#>
+<# Run on the Windows VM to download the public repository without GitHub credentials. #>
 [CmdletBinding()]
 param(
     [string]$TargetPath = 'C:\Users\LabUser\Desktop\ignite26-PREL35',
-    [ValidateNotNullOrEmpty()][string]$Ref = 'main',
-    [string]$GitHubToken = 'PASTE_YOUR_PAT_HERE'
+    [ValidateNotNullOrEmpty()][string]$Ref = 'main'
 )
 $ErrorActionPreference = 'Stop'
-if ($GitHubToken -eq 'PASTE_YOUR_PAT_HERE') { $GitHubToken = $env:GITHUB_TOKEN }
 $TargetPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($TargetPath)
 function Assert-LabDestination {
     if (Test-Path -LiteralPath $TargetPath) {
@@ -37,9 +17,6 @@ function Assert-LabDestination {
     }
 }
 Assert-LabDestination
-if ([string]::IsNullOrWhiteSpace($GitHubToken)) {
-    throw 'Replace PASTE_YOUR_PAT_HERE in the Skillable action copy, or supply -GitHubToken / GITHUB_TOKEN with read-only Contents access to microsoft/ignite26-PREL35.'
-}
 $parent = Split-Path $TargetPath -Parent
 [IO.Directory]::CreateDirectory($parent) | Out-Null
 $temporary = Join-Path $parent ("ignite26-PREL35-download-" + [guid]::NewGuid().ToString('N'))
@@ -48,7 +25,6 @@ $temporary = Join-Path $parent ("ignite26-PREL35-download-" + [guid]::NewGuid().
 try {
     $zip = Join-Path $temporary 'repo.zip'
     $headers = @{
-        Authorization = "Bearer $GitHubToken"
         Accept = 'application/vnd.github+json'
         'X-GitHub-Api-Version' = '2022-11-28'
     }
@@ -57,10 +33,7 @@ try {
     try {
         Invoke-WebRequest -Uri $zipUrl -Headers $headers -OutFile $zip -UseBasicParsing
     } catch {
-        throw 'GitHub download failed. Check connectivity, the ref, and repository access for the supplied token.'
-    } finally {
-        $headers.Clear()
-        $GitHubToken = $null
+        throw 'GitHub download failed. Check connectivity, the ref, repository visibility, and GitHub API rate limits.'
     }
 
     $extracted = Join-Path $temporary 'extracted'

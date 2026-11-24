@@ -192,6 +192,7 @@ function Get-Command {
     [CmdletBinding()]
     param([string]$Name)
     if ($Name -eq 'winget' -and $env:WINGET_PRESENT -eq '0') { return }
+    if ($Name -eq 'azd' -and $env:AZD_PRESENT -eq '0') { return }
     Microsoft.PowerShell.Core\Get-Command @PSBoundParameters
 }
 function winget {
@@ -201,6 +202,14 @@ function winget {
     if ($env:WINGET_STDERR -eq '1') { Write-Error 'Fixture winget diagnostic' }
     Write-Output 'Fixture winget result'
     $global:LASTEXITCODE = [long]$env:WINGET_EXIT_CODE
+}
+function azd {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    if ($env:AZD_PRESENT -eq '0') { throw 'Unexpected call to unavailable azd' }
+    $Arguments | ConvertTo-Json | Set-Content -LiteralPath $env:EXTENSION_LOG -Encoding UTF8
+    if ($env:AZD_STDERR -eq '1') { Write-Error 'Fixture azd diagnostic' }
+    Write-Output 'Fixture extension update result'
+    $global:LASTEXITCODE = [long]$env:AZD_EXIT_CODE
 }
 
 $arguments = @{}
@@ -231,6 +240,8 @@ if ($env:TASKBAR_ONLY -eq '1') { $arguments.TaskbarOnly = $true }
         STOP_LOG=str(tmp_path / "stop.txt"), START_LOG=str(tmp_path / "start.txt"),
         UPGRADE_LOG=str(tmp_path / "upgrade.json"), WINGET_PRESENT="1",
         WINGET_EXIT_CODE="0", WINGET_STDERR="0",
+        EXTENSION_LOG=str(tmp_path / "extension.json"), AZD_PRESENT="1",
+        AZD_EXIT_CODE="0", AZD_STDERR="0",
     )
 
     def run(script="pin_terminal", **extra):
@@ -352,6 +363,7 @@ def test_vm_setup_preview_does_not_change_desktop_or_empty_recycle_bin(desktop):
     assert not (root / "clear.txt").exists()
     assert not (root / "stop.txt").exists()
     assert not (root / "upgrade.json").exists()
+    assert not (root / "extension.json").exists()
 
 
 @pytest.mark.parametrize("exit_code,message", [
@@ -361,7 +373,7 @@ def test_vm_setup_preview_does_not_change_desktop_or_empty_recycle_bin(desktop):
 ])
 def test_azd_upgrade_is_noninteractive_and_accepts_already_current(desktop, exit_code, message):
     run, root = desktop
-    result = run("upgrade_azd", WINGET_EXIT_CODE=exit_code, WINGET_STDERR="1")
+    result = run("upgrade_azd", WINGET_EXIT_CODE=exit_code, WINGET_STDERR="1", AZD_STDERR="1")
     assert result.returncode == 0, result.stdout + result.stderr
     arguments = json.loads((root / "upgrade.json").read_text(encoding="utf-8-sig"))
     assert arguments[:6] == ["upgrade", "--id", "Microsoft.Azd", "--exact", "--source", "winget"]
@@ -369,7 +381,17 @@ def test_azd_upgrade_is_noninteractive_and_accepts_already_current(desktop, exit
     assert "--disable-interactivity" in arguments
     assert "--accept-package-agreements" in arguments
     assert "--accept-source-agreements" in arguments
+    assert json.loads((root / "extension.json").read_text(encoding="utf-8-sig")) == [
+        "extension", "update", "--all", "--no-prompt"
+    ]
     assert message in result.stdout
+    log = (root / "local/PREL35/azd-upgrade.log").read_text(encoding="utf-8-sig")
+    assert "user=LabUser" in log
+    assert "Fixture winget result" in log
+    assert f"winget exit code: {exit_code}" in log
+    assert message in log
+    assert "Fixture extension update result" in log
+    assert "azd extension update exit code: 0" in log
 
 
 @pytest.mark.parametrize("extra,message", [
@@ -377,11 +399,26 @@ def test_azd_upgrade_is_noninteractive_and_accepts_already_current(desktop, exit
     ({"WINGET_PRESENT": "0"}, "winget is not available"),
 ])
 def test_azd_upgrade_failures_are_explicit(desktop, extra, message):
-    run, _ = desktop
+    run, root = desktop
     result = run("upgrade_azd", **extra)
     assert result.returncode != 0
     assert message in result.stderr
     assert "upgrade completed" not in result.stdout
+    log = (root / "local/PREL35/azd-upgrade.log").read_text(encoding="utf-8-sig")
+    assert message in log
+    assert not (root / "extension.json").exists()
+
+
+@pytest.mark.parametrize("extra,message", [
+    ({"AZD_EXIT_CODE": "7"}, "extension update failed with exit code 7"),
+    ({"AZD_PRESENT": "0"}, "azd is not available"),
+])
+def test_azd_extension_update_failures_are_explicit(desktop, extra, message):
+    run, root = desktop
+    result = run("upgrade_azd", **extra)
+    assert result.returncode != 0
+    assert message in result.stderr
+    assert message in (root / "local/PREL35/azd-upgrade.log").read_text(encoding="utf-8-sig")
 
 
 def test_vm_setup_upgrade_failure_warns_without_failing_other_steps(desktop):

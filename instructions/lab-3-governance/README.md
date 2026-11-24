@@ -158,7 +158,7 @@ Don't publish anything now. If anyone publishes a new triage version later, inta
 
 ### 6. See Azure Policy deny a model \(6 min\)
 
-Intake governs a use case. Azure Policy governs the platform underneath it, for every team. In the **Azure portal** `<azure-portal-url>`, open your resource group, select **Policies**, and open **Only approved AI models can be deployed**. It uses the built-in policy *Foundry model deployments should only use approved models*, with the effect **Deny** and four approved models: `gpt-5-mini` and `gpt-5-nano` for the agents, `text-embedding-3-small` for the Search knowledge base, and `decision-1`, a preview decision model.
+Intake governs a use case. Azure Policy governs the platform underneath it, for every team. In the **Azure portal** `<azure-portal-url>`, open your resource group, select **Policies**, and open **Only approved AI models can be deployed**. It uses the built-in policy *Foundry model deployments should only use approved models*, with the effect **Deny** and four approved models: `gpt-5-mini` and `gpt-5-nano` for the agents, `text-embedding-3-small` for the Search knowledge base, and `Microsoft-Decision-1.1`, deployed as `decision-1`.
 
 ![Azure Policy: the Only approved AI models can be deployed assignment](../images/3-6-policy-wide.png)
 

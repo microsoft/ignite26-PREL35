@@ -34,7 +34,7 @@ from walkthrough_console import Console
 
 ROOT = Path(__file__).resolve().parents[2]
 GUIDE = Path("instructions/skillable/content.md")
-SOURCE_SHA256 = "ed9f91b8b0a0d9de66100a17459e5895c18313565415a1396ed3ca5a71a1da7e"
+SOURCE_SHA256 = "aca90c54033fbc809462eb34ef7f3f1ce621c66220245533fb6ff0eaf859e1a6"
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 PROMPT = Path("src/agents/triage.md")
 DATA_POLICY = Path("governance/data-policy.json")
@@ -249,7 +249,8 @@ def build_steps():
                "evidence/decisions.jsonl. Verify actor, reasons, timestamps and published versions."),
         uv(1352, 1354, "Request use-case approval again", "src/intake.py", "UC-001", expect="intake-approve"),
         manual(1360, 1366, "Inspect Azure Policy",
-               "Inspect approved-ai-models in the portal and read its approved list without changing it."),
+               "Inspect approved-ai-models in the portal and read its approved list, including "
+               "Microsoft-Decision-1.1, without changing it."),
         Step(1368, 1381, "Test the unapproved model deployment", args=(
             "az", "cognitiveservices", "account", "deployment", "create",
             "-g", "{resource_group}", "-n", "{FOUNDRY_NAME}", "--deployment-name", "unapproved",

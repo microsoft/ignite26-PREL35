@@ -30,7 +30,7 @@ param models array = [
   { name: 'gpt-5-mini', version: '2025-08-07', capacity: 60, sku: 'GlobalStandard' }
   { name: 'gpt-5-nano', version: '2025-08-07', capacity: 30, sku: 'GlobalStandard' } // Lab 1: the replacement in the model swap
   { name: 'text-embedding-3-small', version: '1', capacity: 10, sku: 'Standard' }
-  { name: 'Microsoft-Decision-1', deploymentName: 'decision-1', format: 'Microsoft', registry: 'azureml-msr', version: '1', capacity: 10, sku: 'DataZoneStandard' }
+  { name: 'Microsoft-Decision-1.1', deploymentName: 'decision-1', format: 'Microsoft', registry: 'azureml-msr', version: '1', capacity: 50, sku: 'DataZoneStandard' }
 ]
 
 var token = toLower(uniqueString(resourceGroup().id))

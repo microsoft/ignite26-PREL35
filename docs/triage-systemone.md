@@ -69,8 +69,6 @@ Prompt tuning uses the local file without deployment.
 Decision-1 has no native array-of-requests endpoint. The calls run with bounded concurrency,
 and the client backs off when the deployment's requests-per-minute limit answers 429.
 
-Live capability checks against the existing Decision-1 deployment found:
-
 | Model request | Result |
 | --- | --- |
 | One JSON object as `state`, one choice question | Accepted |
@@ -93,9 +91,9 @@ These commands make billable calls against the lab deployment. Use the
 root `.env` and a CLI login in the lab tenant. No GPT, reviewer, provisioning or new
 role assignment is involved.
 
-The lab template deploys `decision-1` with a capacity of 30, which is also its requests-per-minute
-limit. That covers a full 14-case evaluation and a 14-alert investigation; larger runs (`--challenge`,
-`--repeat`) make the client back off after HTTP 429 and mark calls it cannot complete as unavailable.
+The lab template deploys `decision-1` with capacity 50. Larger runs (`--challenge`, `--repeat`)
+may encounter HTTP 429; the client backs off and
+marks calls it cannot complete as unavailable.
 
 ```bash
 # All 14 golden cases, independent calls. Add --repeat 3 to see run-to-run variation.
@@ -170,7 +168,7 @@ output token is not priced); `gpt-5-mini` uses `evals/prices.json` and includes
 reasoning tokens. Use `--scale 10` for a larger batch and `--effort` to change
 GPT reasoning. Evidence is written under ignored `evidence/decision1-comparison/`.
 
-A measured run on the 14 golden cases (median of three):
+A measured run with the Microsoft Decision model on the 14 golden cases (median of three):
 
 | Model | Wall time | Tokens per case | Cost per case | Accuracy |
 | --- | --- | --- | --- | --- |
@@ -190,7 +188,7 @@ policy-enforced case files, and prints a side-by-side table. Evidence goes to `e
 uv run python src/decisions/compare_investigations.py --workers 4
 ```
 
-One run on the 14 golden alerts:
+One run with the Microsoft Decision model on the 14 golden alerts:
 
 | | Classic (GPT) | Decision-1 |
 |---|---|---|
